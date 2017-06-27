@@ -59,6 +59,40 @@ with tf.Session() as sess:
 	print(sess.run(f))
 	
 
+def bond_decomposition(bond, m, session = None):
+	"""
+	:param bond:
+	:param m:
+	:return:
+	"""
+	rate_of_change = 5.0
+	bond_placeholder = tf.placeholder(tf.float32, shape=[None, None, None, None])
+	delta_bond = tf.placeholder(tf.float32, shape=[None, None, None, None])
+	bond_change = tf.mul(delta_bond, rate_of_change)
+	bond_prime_op = tf.add(bond_placeholder, bond_change)
+	if session is None:
+		with tf.Session() as sess:
+			sess.run(tf.global_variables_initializer())
+			bond_prime = sess.run(bond_prime_op, {bond_placeholder: bond})
+	else:
+		sess.run(tf.global_variables_initializer())
+		bond_prime = sess.run(bond_prime_op, {bond_placeholder: bond})
+	s, a_prime_j, v = tf.svd(bond_prime)
+	filtered_s = highest_values(s, m)
+	a_prime_j1 = filtered_s * v
+	return (a_prime_j, a_prime_j1)
+
+
+def highest_values(matrix, m):
+	array_np = np.array(matrix)
+	flattened = np.ravel(array_np)
+	highest_vals = np.unique(np.sort(array_np.flatten())[-m:])
+	output = np.zeros(array_np.shape)
+	for val in highest_vals:
+		masked_array = ma.masked_where(array_np != val, array_np)
+		filled = masked_array.filled(0.0)
+		output += filled
+	return (output)
 
 
 
