@@ -1,12 +1,6 @@
 import tensorflow as tf 
 import numpy as np
 
-'''
-TODO: 
-1. Make sure that input_size is big enough for the calculation to be meaningful
-2. Change "Variable" to placeholder for phi and delta 
-3. Rewrite phi to read in different input 
-'''
 
 class MPS(object):
 
@@ -55,6 +49,16 @@ class MPS(object):
 		with tf.Session() as sess:
 			sess.run(tf.global_variables_initializer())
 			print(sess.run(self.nodes, {self.phi: phi, self.delta: delta}))
+
+
+	# Test function 
+	def test(self, phi, delta):
+		f = tf.einsum('lmnik,tmnik->tl', self.bond, self.C)
+		with tf.Session() as sess:
+			sess.run(tf.global_variables_initializer())
+			print(sess.run(f, {self.phi: phi, self.delta: delta}))
+			writer = tf.summary.FileWriter("output", sess.graph)
+			writer.close()
 
 
 
@@ -139,24 +143,22 @@ class MPS(object):
 if __name__ == '__main__':
 
 	# Model parameters
-	input_size = 1 
+	input_size = 10
 	d_feature = 2 
 	d_matrix = 5
 	d_output = 3 
-	rate_of_change = 5.0
+	rate_of_change = 0.2 
 	batch_size = 2
 
 	# Make up input and output 
-	phi = [[[1, 0], [0, 1]]]
+	phi = np.random.normal(size=(input_size, batch_size, d_feature))
 	delta = [[1, 0, 0], [0, 1, 0]]
 
 	# Initialise the model 
 	network = MPS(d_matrix, d_feature, d_output, batch_size, input_size, 
 					rate_of_change=rate_of_change)
 	network.prepare()
-	network.update()
-	network.batch_train(phi, delta)
-
+	network.test(phi, delta)
 
 
 
