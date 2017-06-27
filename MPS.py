@@ -1,6 +1,9 @@
 import tensorflow as tf 
 import numpy as np
 
+'''
+1. Store the C matrix computation cumulatively
+'''
 
 class MPS(object):
 
