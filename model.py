@@ -30,15 +30,32 @@ def make_nodes(d_matrix, d_feature, d_output):
 
 
 def bond_decomposition(bond, m):
-	"""
-	:param bond:
-	:param m:
-	:return:
-	"""
-	s, a_prime_j, v = tf.svd(bond)
-	filtered_s = highest_values(s, m)
-	a_prime_j1 = tf.matmul(filtered_s, v)
-	return (a_prime_j, a_prime_j1)
+    """
+    :param bond:
+    :param m:
+    :return:
+    """
+    bond_reshaped = tf.transpose(bond, perm = [3, 1, 2, 0, 4])
+    bond_flattened = tf.reshape(bond_reshaped, [10, 30])
+    s, u, v = tf.svd(bond_flattened)
+    #filtered_s = s[:,-1]
+    filtered_s = s
+    s_size = tf.Variable(tf.size(filtered_s))
+    s_im = tf.reshape(tf.diag(filtered_s), [s_size, s_size, 1])
+    v_im = tf.reshape(v, [s_size, 30, 1])
+    u_im = tf.reshape(u, [10, s_size, 1])
+    s_im_cropped = tf.image.resize_image_with_crop_or_pad(s_im, m, m)
+    v_im_cropped = tf.image.resize_image_with_crop_or_pad(v_im, m, 30)
+    u_im_cropped = tf.image.resize_image_with_crop_or_pad(u_im, 10, m)
+    s_mat = tf.reshape(s_im_cropped, [m, m])
+    v_mat = tf.reshape(v_im_cropped, [m, 30])
+
+    a_prime_j_mixed = tf.reshape(u_im_cropped, [5, 2, m])
+    sv = tf.matmul(s_mat, v_mat)
+    a_prime_j1_mixed = tf.reshape(sv, [m, 2, 3, 5])
+    a_prime_j = tf.transpose(a_prime_j_mixed, perm = [1, 0, 2])
+    a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm = [3, 1, 0, 2])
+    return (a_prime_j, a_prime_j1)
 
 
 def highest_values(matrix, m):
