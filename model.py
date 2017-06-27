@@ -54,9 +54,10 @@ def highest_values(matrix, m):
 # 		output += filled
 # 	return (output)
 
-def update_bond(bond, delta, C): 
+def bond_prime(bond, delta, C, rate_of_change): 
 	f = tf.einsum('lmnik,tmnik->tl', bond, C)
-	delta_bond = rate_of_change * tf.einsum('tl,tmnik->lmnik', delta - f, C)
+	gradient = tf.einsum('tl,tmnik->lmnik', delta - f, C)
+	delta_bond = rate_of_change * gradient 
 	return bond + delta_bond
 
 
@@ -66,14 +67,14 @@ def update_nodes(bond, index, nodes):
 	nodes[index] = a_prime_j
 	nodes[index+1] = a_prime_j1
 
-def move_one_step(bond, c, index, nodes):
+def move_one_step(bond, C, index, nodes):
 	a_inverse_j = tf.matrix_inverse(nodes[index])
-	a_inverse_j1 = tf.matrix_inverse(nodes[index+1])
+	a_inverse_j2 = tf.matrix_inverse(nodes[index+2])
 
 	bond = tf.einsum('lmnik,mij,okh->lnojh', bond, a_inverse_j, nodes[i+2])
-	c = .. 
+	C = tf.einsum('tmnik,mij,okh->tnojh', C, nodes[i], a_inverse_j2)
 
-	return bond, c 
+	return bond, C 
 
 
 if __name__ == '__main__':
@@ -115,11 +116,11 @@ if __name__ == '__main__':
 	# Loop through and update 
 	for i in range(1, input_size-3):
 
-		bond = update_bond(bond, delta, C)
+		bond = bond_prime(bond, delta, C, rate_of_change)
 		update_nodes(bond, i, nodes)
-		bond, c = move_one_step(bond, c, i, nodes)
+		bond, C = move_one_step(bond, C, i, nodes)
 
-	bond = update_bond(bond, delta, C)
+	bond = bond_prime(bond, delta, C)
 	update_nodes(bond, input_size-3, nodes)
 
 
@@ -132,40 +133,6 @@ if __name__ == '__main__':
 
 	
 
-def bond_decomposition(bond, m, session = None):
-	"""
-	:param bond:
-	:param m:
-	:return:
-	"""
-	rate_of_change = 5.0
-	bond_placeholder = tf.placeholder(tf.float32, shape=[None, None, None, None])
-	delta_bond = tf.placeholder(tf.float32, shape=[None, None, None, None])
-	bond_change = tf.mul(delta_bond, rate_of_change)
-	bond_prime_op = tf.add(bond_placeholder, bond_change)
-	if session is None:
-		with tf.Session() as sess:
-			sess.run(tf.global_variables_initializer())
-			bond_prime = sess.run(bond_prime_op, {bond_placeholder: bond})
-	else:
-		sess.run(tf.global_variables_initializer())
-		bond_prime = sess.run(bond_prime_op, {bond_placeholder: bond})
-	s, a_prime_j, v = tf.svd(bond_prime)
-	filtered_s = highest_values(s, m)
-	a_prime_j1 = filtered_s * v
-	return (a_prime_j, a_prime_j1)
-
-
-def highest_values(matrix, m):
-	array_np = np.array(matrix)
-	flattened = np.ravel(array_np)
-	highest_vals = np.unique(np.sort(array_np.flatten())[-m:])
-	output = np.zeros(array_np.shape)
-	for val in highest_vals:
-		masked_array = ma.masked_where(array_np != val, array_np)
-		filled = masked_array.filled(0.0)
-		output += filled
-	return (output)
 
 
 
