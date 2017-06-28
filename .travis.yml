@@ -1,7 +1,7 @@
 language: python
 python:
   - "3.5"
-script: python tests/trmps_tests.py
+script: python -m unittest tests/trmps_tests.py
 branches:
   only:
     - master
