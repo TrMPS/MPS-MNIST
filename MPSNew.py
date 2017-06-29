@@ -2,7 +2,6 @@ import tensorflow as tf
 import numpy as np
 from collections import namedtuple
 
-Wrapper1 = namedtuple('Wrapper2', ['counter', 'nodes', 'phi'])
 Wrapper2 = namedtuple('Wrapper2', ['counter', 'nodes', 'phi' , 'delta', 'C_1', 'C_2', 'rate'])
 
 class MPS(object):
@@ -29,6 +28,7 @@ class MPS(object):
             self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
         # Last node
         self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix]))
+        print(len(self.nodes))
 
     def _make_random_normal(self, shape, mean=0, stddev=1):
         return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
@@ -41,6 +41,8 @@ class MPS(object):
         """
 
 def _node_at(index, nodes):
+    #for node in nodes:
+    #    print(node.shape)
     null_result = tf.constant(0.0)
     input_size = len(nodes)
     end_nodes, second_node, middle_nodes = _split(nodes)
@@ -49,19 +51,16 @@ def _node_at(index, nodes):
     result = tf.cond(tf.equal(index,input_size - 1), lambda: second_node, lambda: result)
     result =  tf.cond(tf.equal(index,0), lambda: end_nodes[0], lambda: result)
     result = tf.cond(tf.equal(result, null_result), lambda: middle_nodes[index - 2], lambda: result)
+    result = tf.cond(tf.equal(result, result), lambda: result, lambda: result)
     return result
 
 def _split(nodes):
     end_nodes = []
-    for node in nodes:
-        print(node.shape)
     middle_nodes =[]
     second_node = []
     length = len(nodes)
-    print(length)
     for index, element in enumerate(nodes):
-        if index == 0 or index >= length -2:
-            print("HI")
+        if index == 0 or index >= length -1:
             end_nodes.append(element)
         elif index == 1:
             second_node = element
@@ -70,6 +69,17 @@ def _split(nodes):
     end_nodes = tf.stack(end_nodes)
     middle_nodes = tf.stack(middle_nodes)
     return (end_nodes, second_node, middle_nodes)
+
+def _split_node_at(index, nodes):
+    null_result = tf.constant(0.0)
+    end_nodes, second_node, middle_nodes = nodes
+    index = tf.cond(index < 0, lambda: tf.add(input_size, index), lambda: index)
+    result = tf.cond(index >= input_size - 2, lambda: end_nodes[index - (input_size - 1)], lambda: null_result)
+    result = tf.cond(tf.equal(index, input_size - 1), lambda: second_node, lambda: result)
+    result = tf.cond(tf.equal(index, 0), lambda: end_nodes[0], lambda: result)
+    result = tf.cond(tf.equal(result, null_result), lambda: middle_nodes[index - 2], lambda: result)
+    result = tf.cond(tf.equal(result, result), lambda: result, lambda: result)
+    return result
 
 class MPSOptimizer(object):
     def __init__(self, MPSNetwork, m, loss_func, rate_of_change = None):
@@ -80,32 +90,18 @@ class MPSOptimizer(object):
             self.rate_of_change = rate_of_change
         self.m = m
         self.loss_func = loss_func
-        self._phi = tf.placeholder(tf.float32, shape=[input_size, None, d_feature])
-        self._delta = tf.placeholder(tf.float32, shape=[None, d_output])
+        self._phi = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
+        self._delta = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
         self._setup_training_graph()
 
-    def _setup_optimization(self):
-        phi = self._phi
-        nodes = self.MPS.nodes
-        self.C_1 = tf.einsum('ni,tn->ti', nodes[0], phi[0])
-        print(nodes[0].shape, phi[0].shape)
-        print(nodes[-1].shape, phi[-1].shape)
-        C_2_1 = tf.einsum('mi,tm->ti', nodes[-1], phi[-1])
-        nodes.append(C_2_1)
-        input = Wrapper1(0, nodes, phi)
-        cond = lambda i: tf.less(i.counter, self.MPS.input_size - 5)
-        _, _, self.C_2 = tf.while_loop(_multiply, cond, loop_vars = [input])
-        C_2_end = tf.einsum('tij,mj,tm->ti', C_2, MPS.nodes[3], phi[3])
-        self.C_2.append(C_2_end)
-
     def _setup_training_graph(self):
-        counter = 0
+        counter = 0.0
         phi = self._phi
         delta = self._delta
-        wrapped = Wrapper2(counter, self._phi, self.MPS.nodes, self._delta, self.C1, self.C2, self.rate_of_change)
+        wrapped = Wrapper2(counter, self.MPS.nodes, self._phi, self._delta, self.C1, self.C2, self.rate_of_change)
         cond = lambda i: tf.less(i.counter, self.MPS.input_size - 2)
-        self.result = tf.while_loop(_multiply, cond, loop_vars = [wrapped])
+        self.result = tf.while_loop(_multiply, cond, loop_vars = wrapped)
 
     def train(self, phi, delta):
         self._phi = phi
@@ -118,22 +114,36 @@ class MPSOptimizer(object):
             writer.close()
         self.MPS.nodes = end_results.nodes
 
-def _multiply(input):
-    counter = input.counter
-    nodes = input.nodes
-    phi = input.phi
-    print(type(nodes))
-    loc1 = -1 - counter
-    loc2= -2 - counter
-    nodes = input.nodes
-    node1 = _node_at(loc1, nodes)
+    def _setup_optimization(self):
+        phi = self._phi
+        nodes = self.MPS.nodes
+        print(len(nodes))
+        self.C_1 = tf.einsum('ni,tn->ti', nodes[0], phi[0])
+        C_2_1 = tf.einsum('mi,tm->ti', nodes[-1], phi[-1])
+        C_2 = tf.stack([C_2_1, C_2_1])
+        cond = lambda counter,b,c,d,e: tf.less(counter, self.MPS.input_size - 3)
+        shape = []
+        for _ in nodes:
+            shape.append(tf.TensorShape(None))
+        _, _, _, _, self.C_2 = tf.while_loop(cond = cond, body = _find_C_2, loop_vars = [0.0, nodes, phi, C_2_1, C_2],
+                                          shape_invariants = [tf.TensorShape([]), shape,
+                                                              tf.TensorShape([self.MPS.input_size, None, self.MPS.d_feature]),
+                                                              tf.TensorShape([None, None]), tf.TensorShape(None)])
+        print("\n\n\n\n\n\n partyyyyyy")
+
+def _find_C_2(counter, nodes, phi, prev_C2, results):
+    loc2= tf.cast(-2 - counter, tf.int32)
     node2 = _node_at(loc2, nodes)
+    node2.set_shape([phi[loc2].shape[1], None, None])
+    processed_node2 = tf.einsum('abc,da->bcd', node2, phi[loc2])
     updated_counter = counter + 1
-    print(node1.shape)
-    multiply = tf.einsum('tij,mjk,tm->tik',
-                         node1, node2, phi[loc2])
-    assigned = tf.assign(multiply, input.nodes[loc1])
-    return Wrapper1(updated_counter, assigned, input.phi)
+    C_2 = tf.einsum('acb,cb->ab',
+                         processed_node2, prev_C2)
+    results = tf.concat([results,C_2], 0)
+    wrapped = [updated_counter, nodes, phi, C_2, results]
+    print("\n\n\n\n\n\n\n")
+    print(wrapped)
+    return wrapped
 
 def _update(input):
     counter = input.counter
@@ -203,5 +213,3 @@ if __name__ == '__main__':
     network = MPS(d_matrix, d_feature, d_output, input_size)
     optimizer = MPSOptimizer(network, m, None, rate_of_change=rate_of_change)
     optimizer.train(phi,delta)
-
-
