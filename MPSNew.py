@@ -85,11 +85,11 @@ class MPSOptimizer(object):
 
 
     def train(self, phi, delta):
-        self._phi = phi
-        self._delta = delta
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            end_results = sess.run(self.result,self.middle_nodes, {self.phi: phi, self.delta: delta})
+            print(self._phi)
+            print(self._delta)
+            end_results = sess.run(self.middle_nodes, {self._phi: phi, self._delta: delta})
             writer = tf.summary.FileWriter("output", sess.graph)
             writer.close()
         #self.MPS.nodes = end_results[-1]
@@ -173,7 +173,7 @@ def _bond_decomposition(bond, m):
     s, u, v = tf.svd(bond_flattened)
     # filtered_s = s[:,-1]
     filtered_s = s
-    s_size = tf.Variable(tf.size(filtered_s))
+    s_size = tf.size(filtered_s)
     s_im = tf.reshape(tf.diag(filtered_s), [s_size, s_size, 1])
     v_im = tf.reshape(v, [s_size, 30, 1])
     u_im = tf.reshape(u, [10, s_size, 1])
