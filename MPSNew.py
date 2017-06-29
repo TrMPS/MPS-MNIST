@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 from collections import namedtuple
 
+#TODO: REALLY needs some documentation
 
 class MPS(object):
     def __init__(self, d_matrix, d_feature, d_output, input_size):
@@ -20,15 +21,13 @@ class MPS(object):
         self.nodes = []
         # First node
         self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix]))
-        self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
-        # The Third node with output leg attached
+        # The Second node with output leg attached
         self.nodes.append(self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
         # The rest of the matrix nodes
-        for i in range(self.input_size - 3):
+        for i in range(self.input_size - 2):
             self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
         # Last node
         self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix]))
-        print(len(self.nodes))
 
     def _make_random_normal(self, shape, mean=0, stddev=1):
         return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
@@ -45,10 +44,10 @@ def _node_at(index, nodes):
     #    print(node.shape)
     null_result = tf.constant(0.0)
     input_size = len(nodes)
-    end_nodes, third_node, middle_nodes = _split(nodes)
+    end_nodes, second_node, middle_nodes = _split(nodes)
     index = tf.cond(index < 0, lambda: tf.add(input_size, index), lambda: index)
     result = tf.cond(tf.equal(index,input_size - 1), lambda: end_nodes[index], lambda: null_result)
-    result = tf.cond(tf.equal(index,2), lambda: third_node, lambda: result)
+    result = tf.cond(tf.equal(index,1), lambda: second_node, lambda: result)
     result =  tf.cond(tf.equal(index,0), lambda: end_nodes[0], lambda: result)
     result = tf.cond(tf.equal(result, null_result), lambda: middle_nodes[index - 2], lambda: result)
     result = tf.cond(tf.equal(result, result), lambda: result, lambda: result)
@@ -57,18 +56,18 @@ def _node_at(index, nodes):
 def _split(nodes):
     end_nodes = []
     middle_nodes =[]
-    third_node = []
+    second_node = []
     length = len(nodes)
     for index, element in enumerate(nodes):
         if index == 0 or index >= length -1:
             end_nodes.append(element)
-        elif index == 2:
-            third_node = element
+        elif index == 1:
+            second_node = element
         else:
             middle_nodes.append(element)
     end_nodes = tf.stack(end_nodes)
     middle_nodes = tf.stack(middle_nodes)
-    return (end_nodes, third_node, middle_nodes)
+    return (end_nodes, second_node, middle_nodes)
 
 class MPSOptimizer(object):
     def __init__(self, MPSNetwork, m, loss_func, rate_of_change = None):
@@ -88,18 +87,16 @@ class MPSOptimizer(object):
     def train(self, phi, delta):
         self._phi = phi
         self._delta = delta
-        assign = tf.assign(self.counter, 0)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            end_results = sess.run(self.result, {self.phi: phi, self.delta: delta})
+            end_results = sess.run(self.result,self.middle_nodes, {self.phi: phi, self.delta: delta})
             writer = tf.summary.FileWriter("output", sess.graph)
             writer.close()
-        self.MPS.nodes = end_results[-1]
+        #self.MPS.nodes = end_results[-1]
 
     def _setup_optimization(self):
         phi = self._phi
         nodes = self.MPS.nodes
-        print(len(nodes))
         self.C_1 = tf.einsum('ni,tn->ti', nodes[0], phi[0])
         C_2_1 = tf.einsum('mi,tm->ti', nodes[-1], phi[-1])
         C_2 = tf.stack([C_2_1, C_2_1])
@@ -117,36 +114,39 @@ class MPSOptimizer(object):
        phi = self._phi
        delta = self._delta
        updated_nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size = True, infer_shape = False)
-       wrapped = [counter, self.MPS.nodes, self._phi, self._delta, self.C_1, self.C_2, self.rate_of_change, updated_nodes, self.MPS.nodes[1]]
-       print(self.MPS.nodes[1].shape)
+       wrapped = [counter, self.MPS.nodes, self._phi,
+                  self._delta, self.C_1, self.C_2,
+                  self.rate_of_change, updated_nodes, self.MPS.nodes[1]]
        cond = lambda counter, b, c, d, e, f, g, h, i: tf.less(counter, self.MPS.input_size - 2)
-       print(wrapped)
-       self.result = tf.while_loop(cond= cond, body = _update, loop_vars=wrapped)
-       self.middle_nodes = self.result[-1].stack()
+       shape = []
+       for _ in self.MPS.nodes:
+           shape.append(tf.TensorShape(None))
+       self.result = tf.while_loop(cond= cond, body = _update, loop_vars=wrapped,
+                                   shape_invariants = [tf.TensorShape([]), shape, tf.TensorShape([self.MPS.input_size, None, self.MPS.d_feature]),
+                                                       self._delta.shape, tf.TensorShape([None,None]), self.C_2.shape,
+                                                       tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
+       self.middle_nodes = self.result[-2].stack()
 
 def _update(counter, nodes, phi, delta, C_1, C_2, rate, updated_nodes, previous_node):
     n1 = previous_node
     n2 = _node_at(counter+2, nodes)
-    n1.set_shape([None, None, None])
-    n2.set_shape([None, None, None, None])
-    bond = tf.einsum('abc,bdel->acedl',n1, n2)
-    bond = tf.einsum('acedl->lcead',bond)
+    n1.set_shape([None, None, None, None])
+    n2.set_shape([None, None, None])
+    bond = tf.einsum('abcd,ecg->abedg',n1, n2)
     RHS = C_2[counter]
     RHS.set_shape([None,None])
     C = tf.einsum('ti,tk,tm,tn->tmnik', C_1, RHS, phi[counter], phi[counter+1])
     f = tf.einsum('lmnik,tmnik->tl', bond, C)
     # TODO: Change to delta  - f squared?
     gradient = tf.einsum('tl,tmnik->lmnik', delta - f, C)
-    gradient = tf.einsum('abcde->adebc', gradient)
     delta_bond = tf.scalar_mul(rate, gradient)
     updated_bond = tf.add(bond, delta_bond)
     aj, aj1 = _bond_decomposition(updated_bond, m)
     updated_nodes.write(-1, n1)
     updated_counter = tf.add(counter, 1)
     P = tf.einsum('flr,bf->lrb', aj, phi[counter])
-    C_1 = tf.einsum('lrb,bl->rb', P, C_1)
-    wrapped = [updated_counter, nodes, phi, delta, C_1, C_2, rate, updated_nodes, n2]
-    print(wrapped)
+    C_1 = tf.einsum('lrb,bl->br', P, C_1)
+    wrapped = [updated_counter, nodes, phi, delta, C_1, C_2, rate, updated_nodes, aj1]
     return wrapped
 
 
