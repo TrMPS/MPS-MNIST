@@ -42,15 +42,17 @@ class MPS(object):
 def _node_at(index, nodes):
     #for node in nodes:
     #    print(node.shape)
+    return _split_node_at(index, _split(nodes))
+
+def _split_node_at(index, node_tuple):
+    end_nodes, second_node, middle_nodes, length = node_tuple
     null_result = tf.constant(0.0)
-    input_size = len(nodes)
-    end_nodes, second_node, middle_nodes = _split(nodes)
+    input_size = length
     index = tf.cond(index < 0, lambda: tf.add(input_size, index), lambda: index)
-    result = tf.cond(tf.equal(index,input_size - 1), lambda: end_nodes[index], lambda: null_result)
-    result = tf.cond(tf.equal(index,1), lambda: second_node, lambda: result)
-    result =  tf.cond(tf.equal(index,0), lambda: end_nodes[0], lambda: result)
+    result = tf.cond(tf.equal(index, input_size - 1), lambda: end_nodes[index], lambda: null_result)
+    result = tf.cond(tf.equal(index, 1), lambda: second_node, lambda: result)
+    result = tf.cond(tf.equal(index, 0), lambda: end_nodes[0], lambda: result)
     result = tf.cond(tf.equal(result, null_result), lambda: middle_nodes[index - 2], lambda: result)
-    result = tf.cond(tf.equal(result, result), lambda: result, lambda: result)
     return result
 
 def _split(nodes):
@@ -67,7 +69,7 @@ def _split(nodes):
             middle_nodes.append(element)
     end_nodes = tf.stack(end_nodes)
     middle_nodes = tf.stack(middle_nodes)
-    return (end_nodes, second_node, middle_nodes)
+    return (end_nodes, second_node, middle_nodes, length)
 
 class MPSOptimizer(object):
     def __init__(self, MPSNetwork, m, loss_func, rate_of_change = None):
@@ -119,10 +121,10 @@ class MPSOptimizer(object):
        self.middle_nodes = self.results[-2].stack()
 
 def _generate_update_func(nodes, phi, delta, rate):
-
+    nodes = _split(nodes)
     def _update(counter, C_1, C_2, updated_nodes, previous_node):
         n1 = previous_node
-        n2 = _node_at(counter+2, nodes)
+        n2 = _split_node_at(counter+2, nodes)
         n1.set_shape([None, None, None, None])
         n2.set_shape([None, None, None])
         bond = tf.einsum('abcd,ecg->abedg',n1, n2)
@@ -145,9 +147,10 @@ def _generate_update_func(nodes, phi, delta, rate):
     return _update
 
 def _generate_C_2_finder(nodes, phi):
+    nodes = _split(nodes)
     def _find_C_2(counter, prev_C2, results):
         loc2= tf.cast(-2 - counter, tf.int32)
-        node2 = _node_at(loc2, nodes)
+        node2 = _split_node_at(loc2, nodes)
         node2.set_shape([phi[loc2].shape[1], None, None])
         processed_node2 = tf.einsum('abc,da->bcd', node2, phi[loc2])
         updated_counter = counter + 1
