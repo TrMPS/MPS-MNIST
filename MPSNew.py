@@ -18,16 +18,17 @@ class MPS(object):
 
     def _setup_nodes(self):
 
-        self.nodes = []
+        self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
+                                    clear_after_read= False, infer_shape= False)
         # First node
-        self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix]))
         # The Second node with output leg attached
-        self.nodes.append(self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
         # The rest of the matrix nodes
         for i in range(self.input_size - 2):
-            self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
+            self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
         # Last node
-        self.nodes.append(self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix]))
 
     def _make_random_normal(self, shape, mean=0, stddev=1):
         return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
@@ -97,8 +98,12 @@ class MPSOptimizer(object):
     def _setup_optimization(self):
         phi = self._phi
         nodes = self.MPS.nodes
-        self.C_1 = tf.einsum('ni,tn->ti', nodes[0], phi[0])
-        C_2_1 = tf.einsum('mi,tm->ti', nodes[-1], phi[-1])
+        n1 = nodes.read(0)
+        n1.set_shape([None,None])
+        nlast = nodes.read(-1)
+        nlast.set_shape([None,None])
+        self.C_1 = tf.einsum('ni,tn->ti', n1, phi[0])
+        C_2_1 = tf.einsum('mi,tm->ti', nlast, phi[-1])
         C_2 = tf.stack([C_2_1, C_2_1])
         cond = lambda counter,b,c: tf.less(counter, self.MPS.input_size - 3)
         C2_finder = _generate_C_2_finder(nodes,phi)
@@ -111,20 +116,22 @@ class MPSOptimizer(object):
        phi = self._phi
        delta = self._delta
        updated_nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size = True, infer_shape = False)
+       updated_nodes = updated_nodes.write(-1, self.MPS.nodes.read(0))
        update_func = _generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
+       n1 = self.MPS.nodes.read(1)
+       n1.set_shape([None, None, None, None])
        wrapped = [counter, self.C_1, self.C_2,
-                 updated_nodes, self.MPS.nodes[1]]
+                 updated_nodes, n1]
        cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 2)
        self.results = tf.while_loop(cond= cond, body = update_func, loop_vars=wrapped,
                                    shape_invariants = [tf.TensorShape([]),  tf.TensorShape([None,None]), self.C_2.shape,
                                                         tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
-       self.middle_nodes = self.results[-2].stack()
 
 def _generate_update_func(nodes, phi, delta, rate):
-    nodes = _split(nodes)
+    #nodes = _split(nodes)
     def _update(counter, C_1, C_2, updated_nodes, previous_node):
         n1 = previous_node
-        n2 = _split_node_at(counter+2, nodes)
+        n2 = nodes.read(counter+2)
         n1.set_shape([None, None, None, None])
         n2.set_shape([None, None, None])
         bond = tf.einsum('abcd,ecg->abedg',n1, n2)
@@ -147,10 +154,10 @@ def _generate_update_func(nodes, phi, delta, rate):
     return _update
 
 def _generate_C_2_finder(nodes, phi):
-    nodes = _split(nodes)
+    #nodes = _split(nodes)
     def _find_C_2(counter, prev_C2, results):
         loc2= tf.cast(-2 - counter, tf.int32)
-        node2 = _split_node_at(loc2, nodes)
+        node2 = nodes.read(loc2)
         node2.set_shape([phi[loc2].shape[1], None, None])
         processed_node2 = tf.einsum('abc,da->bcd', node2, phi[loc2])
         updated_counter = counter + 1
