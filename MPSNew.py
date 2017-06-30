@@ -21,14 +21,15 @@ class MPS(object):
         self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
                                     clear_after_read= False, infer_shape= False)
         # First node
-        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix]))
         # The Second node with output leg attached
-        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+        self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
         # The rest of the matrix nodes
+
         for i in range(self.input_size - 2):
-            self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
+            self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
         # Last node
-        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = self.nodes.write(self.input_size - 1, self._make_random_normal([self.d_feature, self.d_matrix]))
 
     def _make_random_normal(self, shape, mean=0, stddev=1):
         return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
