@@ -60,8 +60,8 @@ class MPSOptimizer(object):
     def train(self, phi, delta):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            #end_results = sess.run(self.C1, {self._phi: phi, self._delta: delta})
-            #print(end_results)
+            end_results = sess.run(self.C1, {self._phi: phi, self._delta: delta})
+            print(end_results)
             writer = tf.summary.FileWriter("output", sess.graph)
             writer.close()
         #self.MPS.nodes = end_results[-1]
@@ -72,13 +72,13 @@ class MPSOptimizer(object):
 
         n1 = nodes.read(0)
         n1.set_shape([None,None])
-        nlast = nodes.read(-1)
+        nlast = nodes.read(nodes.size() - 1)
         nlast.set_shape([None,None])
 
         C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
         self.C1 = tf.einsum('ni,tn->ti', n1, phi[0])
         C2 = tf.einsum('mi,tm->ti', nlast, phi[-1])
-        C2s = C2s.write(self.MPS.input_size-3, C2)
+        C2s = C2s.write(self.MPS.input_size-4, C2)
         cond = lambda counter,b,c: tf.less(counter, self.MPS.input_size-4)
         # C2_finder = self._generate_C2_finder(nodes,phi)
         _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[0, C2, C2s], 
@@ -89,7 +89,6 @@ class MPSOptimizer(object):
        counter = 0
        updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
        updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
-       updated_nodes = updated_nodes.write(-1, self.MPS.nodes.read(-1))
        update_func = self._generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
        n1 = self.MPS.nodes.read(1)
        n1.set_shape([None, None, None, None])
@@ -109,7 +108,7 @@ class MPSOptimizer(object):
         contracted_node2 = tf.einsum('mij,tm->tij', node2, self._phi[loc2]) # CHECK einsum
         updated_counter = counter + 1
         new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
-        C2s = C2s.write(self.MPS.input_size-4-counter, new_C2)
+        C2s = C2s.write(self.MPS.input_size-5-counter, new_C2)
         return [updated_counter, new_C2, C2s]
         
 
@@ -178,12 +177,12 @@ class MPSOptimizer(object):
 
 if __name__ == '__main__':
     # Model parameters
-    input_size = 10
-    d_feature = 2
+    input_size = 2
+    d_feature = 5
     d_matrix = 5
     d_output = 3
     rate_of_change = 0.2
-    batch_size = 2
+    batch_size = 10
     m = 5
 
     # Make up input and output
