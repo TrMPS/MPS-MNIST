@@ -21,17 +21,17 @@ class MPS(object):
         self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
                                     clear_after_read= False, infer_shape= False)
         # First node
-        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix]))
         # The Second node with output leg attached
-        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+        self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
         # The rest of the matrix nodes
-        for i in range(self.input_size - 2):
-            self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
+        for i in range(self.input_size - 3):
+            self.nodes = self.nodes.write(i + 2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
         # Last node
-        self.nodes = self.nodes.write(-1, self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = self.nodes.write(self.input_size - 1, self._make_random_normal([self.d_feature, self.d_matrix]))
 
     def _make_random_normal(self, shape, mean=0, stddev=1):
-        return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
+        return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev), name = "MPSNodes")
 
     def predict(self, input):
         """
@@ -85,7 +85,7 @@ class MPSOptimizer(object):
        delta = self._delta
        updated_nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size = True, infer_shape = False,
                                       clear_after_read= False)
-       updated_nodes = updated_nodes.write(-1, self.MPS.nodes.read(0))
+       updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
        update_func = _generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
        n1 = self.MPS.nodes.read(1)
        n1.set_shape([None, None, None, None])
@@ -100,7 +100,7 @@ class MPSOptimizer(object):
        print(type(close))
        print(type(self.updated_nodes))
        self.MPS.nodes = self.updated_nodes
-       self.nodes_for_showing = self.updated_nodes.read(1)
+       self.nodes_for_showing = self.updated_nodes.read(0)
 
 def _generate_update_func(nodes, phi, delta, rate):
     #nodes = _split(nodes)
@@ -119,7 +119,7 @@ def _generate_update_func(nodes, phi, delta, rate):
         delta_bond = tf.scalar_mul(rate, gradient)
         updated_bond = tf.add(bond, delta_bond)
         aj, aj1 = _bond_decomposition(updated_bond, m)
-        updated_nodes.write(-1, n1)
+        updated_nodes.write(counter + 1, n1)
         updated_counter = tf.add(counter, 1)
         P = tf.einsum('flr,bf->lrb', aj, phi[counter])
         C_1 = tf.einsum('lrb,bl->br', P, C_1)
