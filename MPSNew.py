@@ -40,38 +40,6 @@ class MPS(object):
         :return:
         """
 
-def _node_at(index, nodes):
-    #for node in nodes:
-    #    print(node.shape)
-    return _split_node_at(index, _split(nodes))
-
-def _split_node_at(index, node_tuple):
-    end_nodes, second_node, middle_nodes, length = node_tuple
-    null_result = tf.constant(0.0)
-    input_size = length
-    index = tf.cond(index < 0, lambda: tf.add(input_size, index), lambda: index)
-    result = tf.case({tf.equal(index, 0): lambda:end_nodes[0],
-                      tf.equal(index, input_size - 1): lambda: end_nodes[-1],
-                     tf.equal(index, 1): lambda: second_node},
-                     default = lambda: middle_nodes[index - 2], exclusive = True)
-    return result
-
-def _split(nodes):
-    end_nodes = []
-    middle_nodes =[]
-    second_node = []
-    length = len(nodes)
-    for index, element in enumerate(nodes):
-        if index == 0 or index >= length -1:
-            end_nodes.append(element)
-        elif index == 1:
-            second_node = element
-        else:
-            middle_nodes.append(element)
-    end_nodes = tf.stack(end_nodes)
-    middle_nodes = tf.stack(middle_nodes)
-    return (end_nodes, second_node, middle_nodes, length)
-
 class MPSOptimizer(object):
     def __init__(self, MPSNetwork, m, loss_func, rate_of_change = None):
         self.MPS = MPSNetwork
@@ -90,7 +58,7 @@ class MPSOptimizer(object):
     def train(self, phi, delta):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            #end_results = sess.run(self.results, {self._phi: phi, self._delta: delta})
+            end_results = sess.run(self.nodes_for_showing, {self._phi: phi, self._delta: delta})
             writer = tf.summary.FileWriter("output", sess.graph)
             writer.close()
         #self.MPS.nodes = end_results[-1]
@@ -115,7 +83,8 @@ class MPSOptimizer(object):
        counter = 0
        phi = self._phi
        delta = self._delta
-       updated_nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size = True, infer_shape = False)
+       updated_nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size = True, infer_shape = False,
+                                      clear_after_read= False)
        updated_nodes = updated_nodes.write(-1, self.MPS.nodes.read(0))
        update_func = _generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
        n1 = self.MPS.nodes.read(1)
@@ -123,9 +92,15 @@ class MPSOptimizer(object):
        wrapped = [counter, self.C_1, self.C_2,
                  updated_nodes, n1]
        cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 2)
-       self.results = tf.while_loop(cond= cond, body = update_func, loop_vars=wrapped,
+       _, _, _, updated_nodes, _ = tf.while_loop(cond= cond, body = update_func, loop_vars=wrapped,
                                    shape_invariants = [tf.TensorShape([]),  tf.TensorShape([None,None]), self.C_2.shape,
                                                         tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
+       self.updated_nodes = updated_nodes
+       close = self.MPS.nodes.close()
+       print(type(close))
+       print(type(self.updated_nodes))
+       self.MPS.nodes = self.updated_nodes
+       self.nodes_for_showing = self.updated_nodes.read(1)
 
 def _generate_update_func(nodes, phi, delta, rate):
     #nodes = _split(nodes)
