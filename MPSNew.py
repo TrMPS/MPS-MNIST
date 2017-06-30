@@ -95,7 +95,7 @@ class MPSOptimizer(object):
        wrapped = [counter, self.C1, self.C2s,
                  updated_nodes, n1]
        cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 2)
-       self.results = tf.while_loop(cond= cond, body = update_func, loop_vars=wrapped,
+       _, self.C1, self.C2s, self.updated_nodes, _ = tf.while_loop(cond= cond, body = update_func, loop_vars=wrapped,
                                    shape_invariants = [tf.TensorShape([]),  tf.TensorShape([None,None]), tf.TensorShape(None),
                                                         tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
 
