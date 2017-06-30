@@ -26,7 +26,7 @@ class MPS(object):
         self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
         # The rest of the matrix nodes
 
-        for i in range(self.input_size - 2):
+        for i in range(self.input_size - 3):
             self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
         # Last node
         self.nodes = self.nodes.write(self.input_size - 1, self._make_random_normal([self.d_feature, self.d_matrix]))
