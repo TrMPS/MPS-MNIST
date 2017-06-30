@@ -60,7 +60,8 @@ class MPSOptimizer(object):
     def train(self, phi, delta):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            #end_results = sess.run(self.results, {self._phi: phi, self._delta: delta})
+            #end_results = sess.run(self.C1, {self._phi: phi, self._delta: delta})
+            #print(end_results)
             writer = tf.summary.FileWriter("output", sess.graph)
             writer.close()
         #self.MPS.nodes = end_results[-1]
@@ -77,7 +78,7 @@ class MPSOptimizer(object):
         C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
         self.C1 = tf.einsum('ni,tn->ti', n1, phi[0])
         C2 = tf.einsum('mi,tm->ti', nlast, phi[-1])
-        C2s.write(self.MPS.input_size-3, C2)
+        C2s = C2s.write(self.MPS.input_size-3, C2)
         cond = lambda counter,b,c: tf.less(counter, self.MPS.input_size-4)
         # C2_finder = self._generate_C2_finder(nodes,phi)
         _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[0, C2, C2s], 
@@ -108,7 +109,7 @@ class MPSOptimizer(object):
         contracted_node2 = tf.einsum('mij,tm->tij', node2, self._phi[loc2]) # CHECK einsum
         updated_counter = counter + 1
         new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
-        C2s.write(self.MPS.input_size-4-counter, new_C2)
+        C2s = C2s.write(self.MPS.input_size-4-counter, new_C2)
         return [updated_counter, new_C2, C2s]
         
 
@@ -140,7 +141,7 @@ class MPSOptimizer(object):
             aj, aj1 = self._bond_decomposition(updated_bond, m)
 
             # Update and return the values
-            updated_nodes.write(counter, aj)
+            updated_nodes = updated_nodes.write(counter, aj)
             contracted_aj = tf.einsum('mij,tm->tij', aj, phi[counter])
             C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             updated_counter = counter + 1 
