@@ -49,10 +49,10 @@ def _split_node_at(index, node_tuple):
     null_result = tf.constant(0.0)
     input_size = length
     index = tf.cond(index < 0, lambda: tf.add(input_size, index), lambda: index)
-    result = tf.cond(tf.equal(index, input_size - 1), lambda: end_nodes[index], lambda: null_result)
-    result = tf.cond(tf.equal(index, 1), lambda: second_node, lambda: result)
-    result = tf.cond(tf.equal(index, 0), lambda: end_nodes[0], lambda: result)
-    result = tf.cond(tf.equal(result, null_result), lambda: middle_nodes[index - 2], lambda: result)
+    result = tf.case({tf.equal(index, 0): lambda:end_nodes[0],
+                      tf.equal(index, input_size - 1): lambda: end_nodes[-1],
+                     tf.equal(index, 1): lambda: second_node},
+                     default = lambda: middle_nodes[index - 2], exclusive = True)
     return result
 
 def _split(nodes):
