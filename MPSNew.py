@@ -87,9 +87,7 @@ class MPSOptimizer(object):
     def train(self, phi, delta):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            print(self._phi)
-            print(self._delta)
-            end_results = sess.run(self.middle_nodes, {self._phi: phi, self._delta: delta})
+            #end_results = sess.run(self.results, {self._phi: phi, self._delta: delta})
             writer = tf.summary.FileWriter("output", sess.graph)
             writer.close()
         #self.MPS.nodes = end_results[-1]
@@ -121,11 +119,11 @@ class MPSOptimizer(object):
        shape = []
        for _ in self.MPS.nodes:
            shape.append(tf.TensorShape(None))
-       self.result = tf.while_loop(cond= cond, body = _update, loop_vars=wrapped,
+       self.results = tf.while_loop(cond= cond, body = _update, loop_vars=wrapped,
                                    shape_invariants = [tf.TensorShape([]), shape, tf.TensorShape([self.MPS.input_size, None, self.MPS.d_feature]),
                                                        self._delta.shape, tf.TensorShape([None,None]), self.C_2.shape,
                                                        tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
-       self.middle_nodes = self.result[-2].stack()
+       self.middle_nodes = self.results[-2].stack()
 
 def _update(counter, nodes, phi, delta, C_1, C_2, rate, updated_nodes, previous_node):
     n1 = previous_node
