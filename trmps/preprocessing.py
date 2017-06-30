@@ -57,7 +57,7 @@ def preprocess_images():
     sys.stdout.flush()
     print("\r" + str(100) + " % done")
 
-    zeroes_and_ones = list(filter(lambda x: x[1][0] == 1. or x[1][1] == 1., data))
+    zeroes_and_ones = np.array(list(filter(lambda x: x[1][0] == 1. or x[1][1] == 1., data)))
     return zeroes_and_ones
 
 if __name__ == "__main__":
