@@ -98,13 +98,10 @@ class MPSOptimizer(object):
         self.C_1 = tf.einsum('ni,tn->ti', nodes[0], phi[0])
         C_2_1 = tf.einsum('mi,tm->ti', nodes[-1], phi[-1])
         C_2 = tf.stack([C_2_1, C_2_1])
-        cond = lambda counter,b,c,d,e: tf.less(counter, self.MPS.input_size - 3)
-        shape = []
-        for _ in nodes:
-            shape.append(tf.TensorShape(None))
-        _, _, _, _, self.C_2= tf.while_loop(cond = cond, body = _find_C_2, loop_vars = [0.0, nodes, phi, C_2_1, C_2],
-                                          shape_invariants = [tf.TensorShape([]), shape,
-                                                              tf.TensorShape([self.MPS.input_size, None, self.MPS.d_feature]),
+        cond = lambda counter,b,c: tf.less(counter, self.MPS.input_size - 3)
+        C2_finder = _generate_C_2_finder(nodes,phi)
+        _, _, self.C_2= tf.while_loop(cond = cond, body = C2_finder, loop_vars = [0.0, C_2_1, C_2],
+                                          shape_invariants = [tf.TensorShape([]),
                                                               tf.TensorShape([None, None]), tf.TensorShape(None)])
 
     def _setup_training_graph(self):
@@ -112,53 +109,54 @@ class MPSOptimizer(object):
        phi = self._phi
        delta = self._delta
        updated_nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size = True, infer_shape = False)
-       wrapped = [counter, self.MPS.nodes, self._phi,
-                  self._delta, self.C_1, self.C_2,
-                  self.rate_of_change, updated_nodes, self.MPS.nodes[1]]
-       cond = lambda counter, b, c, d, e, f, g, h, i: tf.less(counter, self.MPS.input_size - 2)
-       shape = []
-       for _ in self.MPS.nodes:
-           shape.append(tf.TensorShape(None))
-       self.results = tf.while_loop(cond= cond, body = _update, loop_vars=wrapped,
-                                   shape_invariants = [tf.TensorShape([]), shape, tf.TensorShape([self.MPS.input_size, None, self.MPS.d_feature]),
-                                                       self._delta.shape, tf.TensorShape([None,None]), self.C_2.shape,
-                                                       tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
+       update_func = _generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
+       wrapped = [counter, self.C_1, self.C_2,
+                 updated_nodes, self.MPS.nodes[1]]
+       cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 2)
+       self.results = tf.while_loop(cond= cond, body = update_func, loop_vars=wrapped,
+                                   shape_invariants = [tf.TensorShape([]),  tf.TensorShape([None,None]), self.C_2.shape,
+                                                        tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
        self.middle_nodes = self.results[-2].stack()
 
-def _update(counter, nodes, phi, delta, C_1, C_2, rate, updated_nodes, previous_node):
-    n1 = previous_node
-    n2 = _node_at(counter+2, nodes)
-    n1.set_shape([None, None, None, None])
-    n2.set_shape([None, None, None])
-    bond = tf.einsum('abcd,ecg->abedg',n1, n2)
-    RHS = C_2[counter]
-    RHS.set_shape([None,None])
-    C = tf.einsum('ti,tk,tm,tn->tmnik', C_1, RHS, phi[counter], phi[counter+1])
-    f = tf.einsum('lmnik,tmnik->tl', bond, C)
-    # TODO: Change to delta  - f squared?
-    gradient = tf.einsum('tl,tmnik->lmnik', delta - f, C)
-    delta_bond = tf.scalar_mul(rate, gradient)
-    updated_bond = tf.add(bond, delta_bond)
-    aj, aj1 = _bond_decomposition(updated_bond, m)
-    updated_nodes.write(-1, n1)
-    updated_counter = tf.add(counter, 1)
-    P = tf.einsum('flr,bf->lrb', aj, phi[counter])
-    C_1 = tf.einsum('lrb,bl->br', P, C_1)
-    wrapped = [updated_counter, nodes, phi, delta, C_1, C_2, rate, updated_nodes, aj1]
-    return wrapped
+def _generate_update_func(nodes, phi, delta, rate):
 
+    def _update(counter, C_1, C_2, updated_nodes, previous_node):
+        n1 = previous_node
+        n2 = _node_at(counter+2, nodes)
+        n1.set_shape([None, None, None, None])
+        n2.set_shape([None, None, None])
+        bond = tf.einsum('abcd,ecg->abedg',n1, n2)
+        RHS = C_2[counter]
+        RHS.set_shape([None,None])
+        C = tf.einsum('ti,tk,tm,tn->tmnik', C_1, RHS, phi[counter], phi[counter+1])
+        f = tf.einsum('lmnik,tmnik->tl', bond, C)
+        # TODO: Change to delta  - f squared?
+        gradient = tf.einsum('tl,tmnik->lmnik', delta - f, C)
+        delta_bond = tf.scalar_mul(rate, gradient)
+        updated_bond = tf.add(bond, delta_bond)
+        aj, aj1 = _bond_decomposition(updated_bond, m)
+        updated_nodes.write(-1, n1)
+        updated_counter = tf.add(counter, 1)
+        P = tf.einsum('flr,bf->lrb', aj, phi[counter])
+        C_1 = tf.einsum('lrb,bl->br', P, C_1)
+        wrapped = [updated_counter, C_1, C_2, updated_nodes, aj1]
+        return wrapped
 
-def _find_C_2(counter, nodes, phi, prev_C2, results):
-    loc2= tf.cast(-2 - counter, tf.int32)
-    node2 = _node_at(loc2, nodes)
-    node2.set_shape([phi[loc2].shape[1], None, None])
-    processed_node2 = tf.einsum('abc,da->bcd', node2, phi[loc2])
-    updated_counter = counter + 1
-    C_2 = tf.einsum('acb,cb->ab',
-                         processed_node2, prev_C2)
-    results = tf.concat([results,C_2], 0)
-    wrapped = [updated_counter, nodes, phi, C_2, results]
-    return wrapped
+    return _update
+
+def _generate_C_2_finder(nodes, phi):
+    def _find_C_2(counter, prev_C2, results):
+        loc2= tf.cast(-2 - counter, tf.int32)
+        node2 = _node_at(loc2, nodes)
+        node2.set_shape([phi[loc2].shape[1], None, None])
+        processed_node2 = tf.einsum('abc,da->bcd', node2, phi[loc2])
+        updated_counter = counter + 1
+        C_2 = tf.einsum('acb,cb->ab',
+                             processed_node2, prev_C2)
+        results = tf.concat([C_2,results], 0)
+        wrapped = [updated_counter, C_2, results]
+        return wrapped
+    return _find_C_2
 
 def _bond_decomposition(bond, m):
     """
