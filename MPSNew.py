@@ -139,27 +139,30 @@ class MPSOptimizer(object):
                                         shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]), 
                                         tf.TensorShape(None)])
 
-        # Check if this is the same 
-
     def _setup_training_graph(self):
         """
         Sets up graph needed to train the MPS, only for going to the right once.
         :return: nothing
         """
-
-        counter = 0
-        updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
-        updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(self.MPS.input_size-1))
-        updated_nodes = updated_nodes.write(self.MPS.input_size, self.MPS.nodes.read(0))
-
+        # First sweep 
         n1 = self.MPS.nodes.read(1)
         n1.set_shape([None, None, None, None])
+        C1s, n1 = self._one_sweep(n1, self.C1, self.C2s)
 
-        self.C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
-        self.C1s = self.C1s.write(0, self.C1)
-        wrapped = [counter, self.C1, self.C1s, self.C2s, updated_nodes, n1]
+        # Second sweep
+        C2 = self.C2s.read(self.MPS.input_size-4)
+        C2.set_shape([None, None])
+        self.C2s, _ = self._one_sweep(n1, C2, C1s)
+
+    def _one_sweep(self, n1, C1, C2s):
+        C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
+        C1s = C1s.write(0, C1)
+
+        updated_nodes = self._make_new_nodes()
+        wrapped = [0, C1, C1s, C2s, updated_nodes, n1]
         cond = lambda counter, b, c, d, e, f: tf.less(counter, self.MPS.input_size - 3)
-        _, self.C1, self.C1s, self.C2s, self.MPS.nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
+
+        _, C1, C1s, C2s, self.MPS.nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
                                                                     parallel_iterations = 1,
                                                                     shape_invariants=[tf.TensorShape([]),
                                                                                       tf.TensorShape([None, None]),
@@ -167,9 +170,17 @@ class MPSOptimizer(object):
                                                                                       tf.TensorShape(None),
                                                                                       tf.TensorShape(None),
                                                                                       tf.TensorShape([None, None, None, None])])
+        n1 = tf.transpose(n1, perm=[0, 1, 3, 2])
+        self.MPS.nodes = self.MPS.nodes.write(1, n1)
+        return (C1s, n1)
+
+
 
     def _make_new_nodes(self):
-        new_nodes = tf.TensorArry(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
+        new_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
+        new_nodes = new_nodes.write(0, self.MPS.nodes.read(self.MPS.input_size-1))
+        new_nodes = new_nodes.write(self.MPS.input_size, self.MPS.nodes.read(0))
+        return new_nodes
 
                                                                                          
     def _find_C2(self, counter, prev_C2, C2s):
