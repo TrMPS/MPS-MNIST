@@ -18,7 +18,7 @@ class MPSOptimizer(object):
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
 
-    def train(self, feature, label):
+    def train(self, data_source, batch_size):
 
         f = self.MPS.predict(self._feature)
         accuracy = self.MPS.accuracy(f, self._label)
@@ -28,16 +28,13 @@ class MPSOptimizer(object):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             for i in range(10):
-                start = i * 100
-                end = (i+1) * 100 - 1
-                batch_feature = feature[:, start:end, :]
-                batch_label = label[start:end]
-
+                (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
+                print(batch_feature[0, 0])
+                print(batch_label[0])
                 train_accuracy = accuracy.eval(feed_dict={
                                     self._feature: batch_feature, self._label: batch_label})
                 print('step {}, training accuracy {}'.format(i, train_accuracy))
-                _ = C1.eval(feed_dict={
-                                    self._feature: batch_feature, self._label: batch_label})
+                _ = C1.eval(feed_dict={self._feature: batch_feature, self._label: batch_label})
 
 
     def _setup_optimization(self):
@@ -168,7 +165,7 @@ class MPSOptimizer(object):
         r_dim = dims[2] * dims[3] * dims[4]
         bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
         s, u, v = tf.svd(bond_flattened)
-        # filtered_s = s[:,-1]
+        
         filtered_s = s
         s_size = tf.size(filtered_s)
         s_im = tf.reshape(tf.diag(filtered_s), [s_size, s_size, 1])
@@ -192,14 +189,18 @@ if __name__ == '__main__':
     d_feature = 2
     d_matrix = 5
     d_output = 10
-    rate_of_change = 0.2
+    rate_of_change = 10
     batch_size = 1000
     bond_dim = 5
 
     data_source = preprocessing.MNISTData()
-    phi, delta = data_source.next_training_data_batch(batch_size)
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
     optimizer = MPSOptimizer(network, bond_dim, None, rate_of_change = rate_of_change)
-    optimizer.train(phi, delta)
+    optimizer.train(data_source, batch_size)
+
+
+
+
+    
