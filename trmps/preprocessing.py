@@ -4,16 +4,23 @@ import sys
 import math
 from tensorflow.examples.tutorials.mnist import input_data
 
-
 def preprocess_images():
+    print("Importing data")
+    return _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train, size = 60000)
+
+def test_images():
+    print("Importing data")
+    return _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size = 10000)
+
+
+def _preprocess_images(data, size):
     # Function to process images into format from paper, also currently just returns the images for zeroes and ones,
     # so that we can create a binary classifier first.
     # Returned as a list of [images, classifications]
 
-    # Import MNIST dataset
-    print("Importing data")
 
-    mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+    # written this way because originally, this was the only function and would read directly.
+    mnist = data
 
     sess = tf.Session()
     data = []
@@ -39,10 +46,11 @@ def preprocess_images():
         writer = tf.summary.FileWriter("output", sess.graph)
         writer.close()
         counter = 0
+
         for i in range(20):
             sys.stdout.flush()
             print("\r" + str(int((i / 20) * 100)) + " % done", end="")
-            batch = mnist.train.next_batch(3000)
+            batch = mnist.next_batch(int(size/20), shuffle = False)
             images = batch[0]
             for index, element in enumerate(images):
                 pooled = sess.run(pool,
@@ -72,7 +80,7 @@ def preprocess_images():
 
 if __name__ == "__main__":
     # If main, processes the images and also prints the number of images
-    data, labels = preprocess_images()
+    data, labels = test_images()
     print(len(data))
     print(len(labels))
     print(labels[0])
