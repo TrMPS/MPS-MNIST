@@ -137,6 +137,7 @@ class MPSOptimizer(object):
                                         tf.TensorShape(None)])
 
     def _setup_training_graph(self):
+<<<<<<< Updated upstream
        counter = 0
        updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
        updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
@@ -151,6 +152,35 @@ class MPSOptimizer(object):
                                                         tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
 
     
+=======
+        """
+        Sets up graph needed to train the MPS, only for going to the right once.
+        :return: nothing
+        """
+        counter = tf.Variable(0)
+        updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
+        updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
+        update_func = self._generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
+        n1 = self.MPS.nodes.read(1)
+        n1.set_shape([None, None, None, None])
+        #counter, self.C1, self.C2s, updated_nodes, self.n1 = update_func(counter, self.C1, self.C2s, updated_nodes, n1)
+        #counter, self.C1, self.C2s, updated_nodes, self.n1 = update_func(counter, self.C1, self.C2s, updated_nodes, n1)
+        #counter, self.C1, self.C2s, updated_nodes, self.n1 = update_func(counter, self.C1, self.C2s, updated_nodes, n1)
+        #self.test_shape = tf.shape(self.n1)
+        #counter, self.C1, self.C2s, updated_nodes, self.n1 = update_func(counter, self.C1, self.C2s, updated_nodes, n1)
+        wrapped = [counter, self.C1, self.C2s,
+                   updated_nodes, n1]
+        cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 3)
+        _, self.C1, self.C2s, self.updated_nodes, _ = tf.while_loop(cond=cond, body=update_func, loop_vars=wrapped,
+                                                                    parallel_iterations = 1,
+                                                                    shape_invariants=[tf.TensorShape([]),
+                                                                                      tf.TensorShape([None, None]),
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape(
+                                                                                          [None, None, None, None])])
+
+>>>>>>> Stashed changes
     def _find_C2(self, counter, prev_C2, C2s):
 
         loc2 = self.MPS.input_size - 2 - counter
@@ -223,7 +253,7 @@ class MPSOptimizer(object):
         sv = tf.matmul(s_mat, v_mat)
         a_prime_j1_mixed = tf.reshape(sv, [m, 2, 3, 5])
         a_prime_j = tf.transpose(a_prime_j_mixed, perm=[1, 0, 2])
-        a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[3, 1, 0, 2])
+        a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[2, 1, 0, 3])
         return (a_prime_j, a_prime_j1)
 
 if __name__ == '__main__':
@@ -233,7 +263,11 @@ if __name__ == '__main__':
     d_matrix = 5
     d_output = 3
     rate_of_change = 0.2
+<<<<<<< Updated upstream
     batch_size = 10
+=======
+    batch_size = 15
+>>>>>>> Stashed changes
     m = 5
 
     # Make up input and output
