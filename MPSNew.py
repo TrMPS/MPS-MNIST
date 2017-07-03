@@ -215,27 +215,31 @@ class MPSOptimizer(object):
 
     def _bond_decomposition(self, bond, m):
         """
+        Decomposes bond, so that the next step can be done.
         :param bond:
         :param m:
         :return:
         """
         bond_reshaped = tf.transpose(bond, perm=[3, 1, 2, 0, 4])
-        bond_flattened = tf.reshape(bond_reshaped, [10, 30])
+        dims = tf.shape(bond_reshaped)
+        l_dim = dims[0] * dims[1]
+        r_dim = dims[2] * dims[3] * dims[4]
+        bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
         s, u, v = tf.svd(bond_flattened)
         # filtered_s = s[:,-1]
         filtered_s = s
         s_size = tf.size(filtered_s)
         s_im = tf.reshape(tf.diag(filtered_s), [s_size, s_size, 1])
-        v_im = tf.reshape(v, [s_size, 30, 1])
-        u_im = tf.reshape(u, [10, s_size, 1])
+        v_im = tf.reshape(v, [s_size, r_dim, 1])
+        u_im = tf.reshape(u, [l_dim, s_size, 1])
         s_im_cropped = tf.image.resize_image_with_crop_or_pad(s_im, m, m)
-        v_im_cropped = tf.image.resize_image_with_crop_or_pad(v_im, m, 30)
-        u_im_cropped = tf.image.resize_image_with_crop_or_pad(u_im, 10, m)
+        v_im_cropped = tf.image.resize_image_with_crop_or_pad(v_im, m, r_dim)
+        u_im_cropped = tf.image.resize_image_with_crop_or_pad(u_im, l_dim, m)
         s_mat = tf.reshape(s_im_cropped, [m, m])
-        v_mat = tf.reshape(v_im_cropped, [m, 30])
-        a_prime_j_mixed = tf.reshape(u_im_cropped, [5, 2, m])
+        v_mat = tf.reshape(v_im_cropped, [m, r_dim])
+        a_prime_j_mixed = tf.reshape(u_im_cropped, [dims[0], dims[1], m])
         sv = tf.matmul(s_mat, v_mat)
-        a_prime_j1_mixed = tf.reshape(sv, [m, 2, 3, 5])
+        a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
         a_prime_j = tf.transpose(a_prime_j_mixed, perm=[1, 0, 2])
         a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[2, 1, 0, 3])
         return (a_prime_j, a_prime_j1)
@@ -243,9 +247,9 @@ class MPSOptimizer(object):
 if __name__ == '__main__':
     # Model parameters
     input_size = 4
-    d_feature = 5
+    d_feature = 2
     d_matrix = 5
-    d_output = 3
+    d_output = 6
     rate_of_change = 0.2
     batch_size = 10
     m = 5
@@ -253,9 +257,12 @@ if __name__ == '__main__':
     # Make up input and output
     phi = np.random.normal(size=(input_size, batch_size, d_feature)).astype(np.float32)
 
-    delta = [[1, 0, 0], [0, 1, 0]]
+    delta = []
+    for i in range(batch_size):
+        delta.append([0,1,0, 0, 0, 0])
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
-    network.predict(phi)
+    optimizer = MPSOptimizer(network, m, None, rate_of_change = rate_of_change)
+    optimizer.train(phi, delta)
     
