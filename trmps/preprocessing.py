@@ -1,5 +1,7 @@
 import tensorflow as tf
+import numpy as np
 import sys
+import math
 from tensorflow.examples.tutorials.mnist import input_data
 
 
@@ -15,6 +17,7 @@ def preprocess_images():
 
     sess = tf.Session()
     data = []
+    labels = []
 
     # Tensorflow operators / placeholders to resize the data from MNIST to format from paper
     # Resize images from 28*28 to 14*14
@@ -24,11 +27,17 @@ def preprocess_images():
                           strides=[1, 2, 2, 1], padding='SAME')
     pooled_image = tf.placeholder(tf.float32, shape=[1, 14, 14, 1])
     snaked_image = tf.reshape(pooled_image, shape=[196])
+    sined = tf.sin((np.pi/2) * snaked_image)
+    cosined = tf.cos((np.pi/2) * snaked_image)
+    phi = tf.stack([cosined, sined], axis = 1)
+
     print("0 % done", end="")
 
     # Loop through all the elements in the dataset and resize
     with sess.as_default():
         sess.run(tf.global_variables_initializer())
+        writer = tf.summary.FileWriter("output", sess.graph)
+        writer.close()
         counter = 0
         for i in range(20):
             sys.stdout.flush()
@@ -39,7 +48,8 @@ def preprocess_images():
                 pooled = sess.run(pool,
                                   feed_dict={reshaped_image: sess.run(reshaped_image,
                                                                       feed_dict={image: element})})
-                data.append([sess.run(snaked_image, feed_dict={pooled_image: pooled}), batch[1][index]])
+                data.append(sess.run(phi, feed_dict={pooled_image: pooled}))
+                labels.append(batch[1][index])
                 if index % 300 == 0:
                     # Spinner to show progress 
                     if counter == 0:
@@ -56,11 +66,14 @@ def preprocess_images():
                         counter = 0
     sys.stdout.flush()
     print("\r" + str(100) + " % done")
+    return (data, labels)
 
-    zeroes_and_ones = np.array(list(filter(lambda x: x[1][0] == 1. or x[1][1] == 1., data)))
-    return zeroes_and_ones
+
 
 if __name__ == "__main__":
     # If main, processes the images and also prints the number of images
-    print(len(preprocess_images()))
+    data, labels = preprocess_images()
+    print(len(data))
+    print(len(labels))
+    print(labels[0])
 
