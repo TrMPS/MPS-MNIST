@@ -204,6 +204,10 @@ class MPSOptimizer(object):
     	# Decompose the bond 
         aj, aj1 = self._bond_decomposition(updated_bond, m)
 
+
+        # Transpose the values and add to the new variables 
+        updated_nodes = updated_nodes.write(counter, aj.)
+
         # Update and return the values
         updated_nodes = updated_nodes.write(counter, aj)
         contracted_aj = tf.einsum('mij,tm->tij', aj, self._phi[counter])
