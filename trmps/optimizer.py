@@ -1,5 +1,6 @@
 import tensorflow as tf 
 import numpy as np
+import preprocessing
 from mps import MPS
 
 
@@ -187,20 +188,16 @@ class MPSOptimizer(object):
 
 if __name__ == '__main__':
     # Model parameters
-    input_size = 10
+    input_size = 196
     d_feature = 2
     d_matrix = 5
-    d_output = 6
+    d_output = 10
     rate_of_change = 0.2
     batch_size = 1000
     bond_dim = 5
 
-    # Make up input and output
-    phi = np.random.normal(size=(input_size, batch_size, d_feature)).astype(np.float32)
-
-    delta = np.zeros((batch_size, d_output))
-    delta[:500, 1] = 1 
-    delta[500:, 4] = 1
+    data_source = preprocessing.MNISTData()
+    phi, delta = data_source.next_training_data_batch(batch_size)
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
