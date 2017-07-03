@@ -50,8 +50,8 @@ def _preprocess_images(data, size):
                 pooled = sess.run(pool,
                                   feed_dict={reshaped_image: sess.run(reshaped_image,
                                                                       feed_dict={image: element})})
-                data.append(sess.run(phi, feed_dict={pooled_image: pooled}))
-                labels.append(batch[1][index])
+                data.append(np.array(sess.run(phi, feed_dict={pooled_image: pooled})))
+                labels.append(np.array(batch[1][index]))
                 if index % 300 == 0:
                     # Spinner to show progress 
                     if counter == 0:
@@ -82,21 +82,20 @@ class MNISTData(object):
         self._test_path = "testing.npy"
         if os.path.isfile(self._test_path):
             self._test_data = np.load(self._test_path)
-        print(len(self._test_data))
         self.current_index = 0
 
     @property
     def test_data(self):
         if self._test_data is None:
             self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size = 10000)
-            np.save(self._test_path, self._test_data)
+            #np.save(self._test_path, self._test_data)
         return self._test_data
 
     @property
     def training_data(self):
         if self._training_data is None:
             self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train, size = 60000)
-            np.save(self._training_path, self._training_data)
+            #np.save(self._training_path, self._training_data)
         return self._training_data
 
     def next_training_data_batch(self, batch_size, shuffle=None):
@@ -118,25 +117,26 @@ class MNISTData(object):
         all_data, all_labels = self.training_data
         while batch_size > 0:
             if len(all_data) - self.current_index < batch_size:
+                # print("A" + str(self.current_index))
                 batch_size -= (len(all_data) - self.current_index)
                 self.current_index = 0
                 if data is None:
-                    data = all_data[self.current_index:]
-                    labels = all_labels[self.current_index:]
+                    data = np.array(all_data[self.current_index:])
+                    labels = np.array(all_labels[self.current_index:])
                 else:
                     data = np.concatenate((data, all_data[self.current_index:]), axis = 0)
                     labels = np.concatenate((labels, all_labels[self.current_index:]), axis = 0)
             else:
+                # print("B" + str(self.current_index))
                 if data is None:
                     data = all_data[self.current_index:self.current_index + batch_size]
-                    labels = all_labels[self.current_index:self.current_index + batch_size]
+                    labels = np.array(all_labels[self.current_index:self.current_index + batch_size])
                 else:
                     data = np.concatenate((data, all_data[self.current_index:self.current_index + batch_size]), axis = 0)
                     labels = np.concatenate((labels, all_labels[self.current_index:self.current_index + batch_size]), axis = 0)
-                batch_size = 0
                 self.current_index += batch_size
+                batch_size = 0
         data = np.array(data)
-        print(data.shape)
         data = np.transpose(data, (1, 0, 2))
         return (data, labels)
 
@@ -144,8 +144,6 @@ if __name__ == "__main__":
     # If main, processes the images and also prints the number of images
     data_source = MNISTData()
     data, labels = data_source.next_training_data_batch(500)
-    print(labels[1])
-    print(labels[0])
     data, labels = data_source.next_training_data_batch(500)
     print(labels[0])
     data, labels = data_source.next_training_data_batch(500)
