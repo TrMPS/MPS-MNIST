@@ -16,17 +16,28 @@ class MPSOptimizer(object):
         self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
-        self._setup_training_graph()
-
 
     def train(self, feature, label):
+
+        f = self.MPS.predict(self._feature)
+        accuracy = self.MPS.accuracy(f, self._label)
+        C1 = self.train_step()
+        
+
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            end_results = sess.run(self.C1, {self._feature: feature, self._label: label})
-            print(end_results)
-            writer = tf.summary.FileWriter("output", sess.graph)
-            writer.close()
-        #self.MPS.nodes = end_results[-1]
+            for i in range(10):
+                start = i * 100
+                end = (i+1) * 100 - 1
+                batch_feature = feature[:, start:end, :]
+                batch_label = label[start:end]
+
+                train_accuracy = accuracy.eval(feed_dict={
+                                    self._feature: batch_feature, self._label: batch_label})
+                print('step {}, training accuracy {}'.format(i, train_accuracy))
+                _ = C1.eval(feed_dict={
+                                    self._feature: batch_feature, self._label: batch_label})
+
 
     def _setup_optimization(self):
         feature = self._feature
@@ -46,7 +57,7 @@ class MPSOptimizer(object):
                                         shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]), 
                                         tf.TensorShape(None)])
 
-    def _setup_training_graph(self):
+    def train_step(self):
         """
         Sets up graph needed to train the MPS, only for going to the right once.
         :return: nothing
@@ -60,6 +71,12 @@ class MPSOptimizer(object):
         C2 = self.C2s.read(self.MPS.input_size-4)
         C2.set_shape([None, None])
         self.C2s, _ = self._one_sweep(n1, C2, C1s)
+
+        # Update C1
+        self.C1 = C1s.read(self.MPS.input_size-4)
+        self.C1.set_shape([None, None])
+
+        return self.C1
 
     def _one_sweep(self, n1, C1, C2s):
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
@@ -134,7 +151,7 @@ class MPSOptimizer(object):
         contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
         C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
         C1s = C1s.write(counter+1, C1)
-        updated_counter = counter + 1 
+        updated_counter = counter+1 
 
         return [updated_counter, C1, C1s, C2s, updated_nodes, aj1]
 
@@ -171,22 +188,22 @@ class MPSOptimizer(object):
 
 if __name__ == '__main__':
     # Model parameters
-    input_size = 4
+    input_size = 10
     d_feature = 2
     d_matrix = 5
     d_output = 6
     rate_of_change = 0.2
-    batch_size = 10
-    m = 5
+    batch_size = 1000
+    bond_dim = 5
 
     # Make up input and output
     phi = np.random.normal(size=(input_size, batch_size, d_feature)).astype(np.float32)
 
-    delta = []
-    for i in range(batch_size):
-        delta.append([0,1,0, 0, 0, 0])
+    delta = np.zeros((batch_size, d_output))
+    delta[:500, 1] = 1 
+    delta[500:, 4] = 1
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
-    optimizer = MPSOptimizer(network, m, None, rate_of_change = rate_of_change)
+    optimizer = MPSOptimizer(network, bond_dim, None, rate_of_change = rate_of_change)
     optimizer.train(phi, delta)
