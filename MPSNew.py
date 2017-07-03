@@ -57,6 +57,8 @@ class MPS(object):
 
             
 	def _predict(self, phi):
+		# read in phi
+		self.phi = phi
 
 		# Read in the nodes 
 		node1 = self.nodes.read(0)
@@ -76,17 +78,17 @@ class MPS(object):
 		C2 = tf.einsum('mi,tm->ti', nodelast, phi[self.input_size-1])
 
         #counter = tf.Variable(2, dtype=tf.int32)
-		counter = tf.constant(2)
+		counter = 2
 		cond = lambda c, b: tf.less(c, self.input_size-1)
 		_, C1 = tf.while_loop(cond=cond, body=self._chain_multiply, loop_vars=[counter, C1], 
-		                                shape_invariants=[counter.get_shape(), tf.TensorShape([None, self.d_output, None])])
+		                                shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])])
 		f = tf.einsum('tli,ti->tl', C1, C2)
 		return f 
 
 	def _chain_multiply(self, counter, C1):
 		node = self.nodes.read(counter)
 		node.set_shape([self.d_feature, None, None])
-		input_leg = tf.gather(phi, counter) # "phi[counter]"
+		input_leg = self.phi[counter]
 		contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
 		C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
 		counter = counter + 1 
@@ -147,11 +149,6 @@ class MPSOptimizer(object):
         update_func = self._generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
         n1 = self.MPS.nodes.read(1)
         n1.set_shape([None, None, None, None])
-        #counter, self.C1, self.C2s, updated_nodes, self.n1 = update_func(counter, self.C1, self.C2s, updated_nodes, n1)
-        #counter, self.C1, self.C2s, updated_nodes, self.n1 = update_func(counter, self.C1, self.C2s, updated_nodes, n1)
-        #counter, self.C1, self.C2s, updated_nodes, self.n1 = update_func(counter, self.C1, self.C2s, updated_nodes, n1)
-        #self.test_shape = tf.shape(self.n1)
-        #counter, self.C1, self.C2s, updated_nodes, self.n1 = update_func(counter, self.C1, self.C2s, updated_nodes, n1)
         wrapped = [counter, self.C1, self.C2s,
                    updated_nodes, n1]
         cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 3)
