@@ -46,7 +46,18 @@ class MPS(object):
 
 
 class MPSOptimizer(object):
+    """
+    Class to optimize an MPS system. Create this object, and then use train(phi, delta),
+    where phi represents the inputs, and delta the correct labels.
+    """
     def __init__(self, MPSNetwork, m, grad_func, rate_of_change=None):
+        """
+        :param MPSNetwork: MPS, the MPS network to be optimised.
+        :param m: integer, the maximum size of the A matrices comprising the MPS
+        :param grad_func: Some function which determines the direction in which the graph should change.
+        (is derived by differentiating the loss function)
+        :param rate_of_change: The rate of change for the network.
+        """
         self.MPS = MPSNetwork
         if rate_of_change is None:
             self.rate_of_change = 0.1
@@ -60,6 +71,7 @@ class MPSOptimizer(object):
         self._setup_training_graph()
 
     def train(self, phi, delta):
+        # TODO: rewrite this so it adds nodes to graph, which are then run outside, instead of current form.
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             end_results = sess.run(self.C1, {self._phi: phi, self._delta: delta})
@@ -69,6 +81,11 @@ class MPSOptimizer(object):
             # self.MPS.nodes = end_results[-1]
 
     def _setup_optimization(self):
+        """
+        Creates the initial values for C1, C2 (the left hand and right hand collected nodes/inputs)
+        as a warmup to the optimisation.
+        :return: nothing
+        """
         phi = self._phi
         nodes = self.MPS.nodes
 
@@ -88,6 +105,10 @@ class MPSOptimizer(object):
                                                          tf.TensorShape(None)])
 
     def _setup_training_graph(self):
+        """
+        Sets up graph needed to train the MPS, only for going to the right once.
+        :return: nothing
+        """
         counter = 0
         updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
         updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
@@ -106,6 +127,13 @@ class MPSOptimizer(object):
                                                                                           [None, None, None, None])])
 
     def _find_C2(self, counter, prev_C2, C2s):
+        """
+        Finds C2 values, used internally by _setup_optimisation
+        :param counter:
+        :param prev_C2:
+        :param C2s:
+        :return:
+        """
 
         loc2 = self.MPS.input_size - 2 - counter
         node2 = self.MPS.nodes.read(loc2)
@@ -117,6 +145,15 @@ class MPSOptimizer(object):
         return [updated_counter, new_C2, C2s]
 
     def _generate_update_func(self, nodes, phi, delta, rate):
+        """
+        Generates function required to setup the training graph. Used internally by _setup_training_graph.
+        Currently broken.
+        :param nodes:
+        :param phi:
+        :param delta:
+        :param rate:
+        :return:
+        """
 
         def _update(counter, C1, C2s, updated_nodes, previous_node):
             # Read in the notes
@@ -160,6 +197,7 @@ class MPSOptimizer(object):
 
     def _bond_decomposition(self, bond, m):
         """
+        Decomposes bond, so that the next step can be done.
         :param bond:
         :param m:
         :return:
