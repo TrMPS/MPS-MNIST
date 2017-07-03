@@ -101,6 +101,7 @@ class MPSOptimizer(object):
         cond = lambda counter, b, c: tf.less(counter, self.MPS.input_size - 4)
         # C2_finder = self._generate_C2_finder(nodes,phi)
         _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[0, C2, C2s],
+                                       parallel_iterations = 1,
                                        shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                          tf.TensorShape(None)])
 
@@ -119,6 +120,7 @@ class MPSOptimizer(object):
                    updated_nodes, n1]
         cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 3)
         _, self.C1, self.C2s, self.updated_nodes, _ = tf.while_loop(cond=cond, body=update_func, loop_vars=wrapped,
+                                                                    parallel_iterations = 1,
                                                                     shape_invariants=[tf.TensorShape([]),
                                                                                       tf.TensorShape([None, None]),
                                                                                       tf.TensorShape(None),
@@ -235,7 +237,7 @@ if __name__ == '__main__':
     d_output = 6
     rate_of_change = 0.2
     batch_size = 15
-    m = 5
+    m = 10
 
     # Make up input and output
     phi = np.random.normal(size=(input_size, batch_size, d_feature))
