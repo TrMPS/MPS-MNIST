@@ -15,8 +15,8 @@ class MPS(object):
 	'''
 
 	def __init__(self, d_matrix, d_feature, d_output, input_size):
+		# structure parameters
 
-        # structure parameters
 		self.input_size = input_size
 		self.d_matrix = d_matrix
 		self.d_feature = d_feature
@@ -58,6 +58,7 @@ class MPS(object):
 
             
 	def _predict(self, phi):
+		self.phi = phi
 
 		# Read in the nodes 
 		node1 = self.nodes.read(0)
@@ -77,17 +78,20 @@ class MPS(object):
 		C2 = tf.einsum('mi,tm->ti', nodelast, phi[self.input_size-1])
 
         #counter = tf.Variable(2, dtype=tf.int32)
-		counter = tf.constant(2)
+		counter = 2
 		cond = lambda c, b: tf.less(c, self.input_size-1)
 		_, C1 = tf.while_loop(cond=cond, body=self._chain_multiply, loop_vars=[counter, C1], 
-		                                shape_invariants=[counter.get_shape(), tf.TensorShape([None, self.d_output, None])])
+		                                shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])])
+
 		f = tf.einsum('tli,ti->tl', C1, C2)
 		return f 
 
 	def _chain_multiply(self, counter, C1):
 		node = self.nodes.read(counter)
 		node.set_shape([self.d_feature, None, None])
-		input_leg = tf.gather(phi, counter) # "phi[counter]"
+
+		input_leg = self.phi[counter]
+
 		contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
 		C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
 		counter = counter + 1 
@@ -138,20 +142,29 @@ class MPSOptimizer(object):
                                         tf.TensorShape(None)])
 
     def _setup_training_graph(self):
-       counter = 0
-       updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
-       updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
-       update_func = self._generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
-       n1 = self.MPS.nodes.read(1)
-       n1.set_shape([None, None, None, None])
-       wrapped = [counter, self.C1, self.C2s,
-                 updated_nodes, n1]
-       cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 2)
-       _, self.C1, self.C2s, self.updated_nodes, _ = tf.while_loop(cond= cond, body = update_func, loop_vars=wrapped,
-                                   shape_invariants = [tf.TensorShape([]),  tf.TensorShape([None,None]), tf.TensorShape(None),
-                                                        tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
+        """
+        Sets up graph needed to train the MPS, only for going to the right once.
+        :return: nothing
+        """
+        counter = tf.Variable(0)
+        updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
+        updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
+        update_func = self._generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
+        n1 = self.MPS.nodes.read(1)
+        n1.set_shape([None, None, None, None])
+        wrapped = [counter, self.C1, self.C2s,
+                   updated_nodes, n1]
+        cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 3)
+        _, self.C1, self.C2s, self.updated_nodes, _ = tf.while_loop(cond=cond, body=update_func, loop_vars=wrapped,
+                                                                    parallel_iterations = 1,
+                                                                    shape_invariants=[tf.TensorShape([]),
+                                                                                      tf.TensorShape([None, None]),
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape(
+                                                                                          [None, None, None, None])])
 
-    
+
     def _find_C2(self, counter, prev_C2, C2s):
 
         loc2 = self.MPS.input_size - 2 - counter
@@ -224,7 +237,7 @@ class MPSOptimizer(object):
         sv = tf.matmul(s_mat, v_mat)
         a_prime_j1_mixed = tf.reshape(sv, [m, 2, 3, 5])
         a_prime_j = tf.transpose(a_prime_j_mixed, perm=[1, 0, 2])
-        a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[3, 1, 0, 2])
+        a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[2, 1, 0, 3])
         return (a_prime_j, a_prime_j1)
 
 if __name__ == '__main__':
