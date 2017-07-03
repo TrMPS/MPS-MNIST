@@ -125,6 +125,7 @@ class MNISTData(object):
                     labels = np.concatenate((labels, all_labels[self.current_index:self.current_index + batch_size]), axis = 0)
                 batch_size = 0
                 self.current_index += batch_size
+        data = np.transpose(data, (1, 0, 2))
         return (data, labels)
 
 if __name__ == "__main__":
