@@ -28,7 +28,7 @@ class MPS(object):
         # Initialise the nodes
         self._setup_nodes()
 
-    def test(self, feature, label):
+    def test(self, test_feature, test_label):
         '''
         feature must be numpy array of dtype float32
         '''
@@ -41,6 +41,7 @@ class MPS(object):
             sess.run(tf.global_variables_initializer())
             test_cost = sess.run(cost, {feature:test_feature, label:test_label})
             test_accuracy = sess.run(accuracy, {feature:test_feature, label:test_label})
+            print(test_cost)
             print(test_accuracy)
 
     # ================

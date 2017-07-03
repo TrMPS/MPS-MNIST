@@ -80,7 +80,6 @@ class MPSOptimizer(object):
 
     def _one_sweep(self, n1, C1, C2s):
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
-        C1s = C1s.write(0, C1)
 
         updated_nodes = self._make_new_nodes()
         wrapped = [0, C1, C1s, C2s, updated_nodes, n1]
@@ -133,6 +132,7 @@ class MPSOptimizer(object):
         # Calculate the C matrix 
         C2 = C2s.read(counter)
         C2.set_shape([None,None])
+        C1s = C1s.write(counter, C1)
         C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter+1])
 
         # Update the bond 
@@ -150,7 +150,6 @@ class MPSOptimizer(object):
         updated_nodes = updated_nodes.write(self.MPS.input_size-3-counter, aj)
         contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
         C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
-        C1s = C1s.write(counter+1, C1)
         updated_counter = counter+1 
 
         return [updated_counter, C1, C1s, C2s, updated_nodes, aj1]
