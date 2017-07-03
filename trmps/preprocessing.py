@@ -2,15 +2,8 @@ import tensorflow as tf
 import numpy as np
 import sys
 import math
+
 from tensorflow.examples.tutorials.mnist import input_data
-
-def preprocess_images():
-    print("Importing data")
-    return _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train, size = 60000)
-
-def test_images():
-    print("Importing data")
-    return _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size = 10000)
 
 
 def _preprocess_images(data, size):
@@ -76,12 +69,70 @@ def _preprocess_images(data, size):
     print("\r" + str(100) + " % done")
     return (data, labels)
 
+class MNISTData(object):
 
+    def __init__(self):
+        self._training_data = None
+        self._test_data = None
+        self._is_first_read = False
+        self.current_index = 0
+
+    @property
+    def test_data(self):
+        if self._test_data is None:
+            self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size = 10000)
+        return self._test_data
+
+    @property
+    def training_data(self):
+        if self._training_data is None:
+            self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train, size = 60000)
+        return self._training_data
+
+    def next_training_data_batch(self, batch_size, shuffle = None):
+        if batch_size > len(self.training_data[0]):
+            print("Probably shouldn't do this; your batch size is greater than the size of the dataset")
+        if shuffle is None:
+            _shuffle = True
+        else:
+            _shuffle = shuffle
+        if _shuffle == True:
+            if self._is_first_read == True:
+                data, labels = self.training_data
+                permutation = np.random.permutation(len(data))
+                self._training_data = data[permutation], labels[permutation]
+                np.random.shuffle(self.training_data)
+        self._is_first_read = False
+        data = None
+        labels = None
+        all_data, all_labels = self.training_data
+        while batch_size > 0:
+            if len(all_data) - self.current_index < batch_size:
+                batch_size -= (len(all_data) - self.current_index)
+                self.current_index = 0
+                if data is None:
+                    data = all_data[self.current_index:]
+                    labels = all_labels[self.current_index:]
+                else:
+                    data = np.concatenate((data, all_data[self.current_index:]), axis = 0)
+                    labels = np.concatenate((labels, all_labels[self.current_index:]), axis = 0)
+            else:
+                if data is None:
+                    data = all_data[self.current_index:self.current_index + batch_size]
+                    labels = all_labels[self.current_index:self.current_index + batch_size]
+                else:
+                    data = np.concatenate((data, all_data[self.current_index:self.current_index + batch_size]), axis = 0)
+                    labels = np.concatenate((labels, all_labels[self.current_index:self.current_index + batch_size]), axis = 0)
+                batch_size = 0
+                self.current_index += batch_size
+        return (data, labels)
 
 if __name__ == "__main__":
     # If main, processes the images and also prints the number of images
-    data, labels = test_images()
+    data_source = MNISTData()
+    data, labels = data_source.next_training_data_batch(65000)
     print(len(data))
     print(len(labels))
+    print(len(data[0]))
     print(labels[0])
 
