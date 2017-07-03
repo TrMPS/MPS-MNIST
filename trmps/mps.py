@@ -7,158 +7,95 @@ import numpy as np
 
 class MPS(object):
 
-	def __init__(self, d_matrix, d_feature, d_output, batch_size, input_size, rate_of_change=0.1):
-		# structure parameters
-		self.input_size = input_size
-		self.d_matrix = d_matrix
-		self.d_feature = d_feature
-		self.d_output = d_output
+    '''
+    Class variables:
+        input_size: int
+        d_matrix: int
+        d_feature: int
+        d_output: int
+        nodes: tf.TensorArray
+        phi: tf.Tensor of shape (intput_size, batch_size, d_output)
+    '''
 
-		# training parameters
-		self.batch_size = batch_size
-		self.rate_of_change = rate_of_change
+    def __init__(self, d_matrix, d_feature, d_output, input_size):
+        
+        # structure parameters
+        self.input_size = input_size
+        self.d_matrix = d_matrix
+        self.d_feature = d_feature
+        self.d_output = d_output
 
-		# Initialise the nodes, input and output
-		self.nodes = self.make_nodes()
-		self.phi = tf.placeholder(tf.float32, shape=[input_size, batch_size, d_feature])
-		self.delta = tf.placeholder(tf.float32, shape=[batch_size, d_output])
+        # Initialise the nodes
+        self._setup_nodes()
 
-	def prepare(self):
-		# Calculate the bond matrix
-		self.bond = tf.einsum('lmij,njk->lmnik', self.nodes[1], self.nodes[2]) # ik: matrix leg, mn: input leg, l: output leg
+    def predict(self, feature):
+        '''
+        feature must be numpy array of dtype float32
+        '''
+        phi = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
+        f = self._predict(phi)
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            print(sess.run(f, {phi: feature}))
 
-		# Calculate the first C, where f_Nl = B_tl * C_ikmn
-		C_1 = tf.einsum('ni,tn->ti', self.nodes[0], self.phi[0]) # left part
-		C_2 = tf.einsum('mij,tm->tij', self.nodes[3], self.phi[3]) # need to check whether the input size is large enough!
-		for i in range(4, self.input_size-1):
-			C_2 = tf.einsum('tij,mjk,tm->tik', C_2, self.nodes[i], self.phi[i])
-		C_2 = tf.einsum('tij,mj,tm->ti', C_2, self.nodes[-1], self.phi[-1])
+    # ================
+    # hidden functions
+    # ================
 
-		self.C = tf.einsum('ti,tk,tm,tn->tmnik', C_1, C_2, self.phi[1], self.phi[2])
+    def _setup_nodes(self):
 
+        self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
+                                    clear_after_read= False, infer_shape= False)
+        # First node
+        self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix]))
+        # The Second node with output leg attached
+        self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+        # The rest of the matrix nodes
+        for i in range(self.input_size - 3):
+            self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
+        # Last node
+        self.nodes = self.nodes.write(self.input_size-1, self._make_random_normal([self.d_feature, self.d_matrix]))
 
-	def batch_train(self, phi, delta):
-		# Update the nodes and move along the string
-		for i in range(1, self.input_size-3):
+    def _make_random_normal(self, shape, mean=0, stddev=1):
+        return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
+            
+    def _predict(self, phi):
 
-			self.update_bond()
-			self.update_nodes(i)
-			self.move_one_step(i)
+        # Read in phi 
+        self.phi = phi
 
-		# Update the last bond
-		self.update_bond()
-		self.update_nodes(self.input_size-3)
+        # Read in the nodes 
+        node1 = self.nodes.read(0)
+        node1.set_shape([self.d_feature, None])
+        node2 = self.nodes.read(1)
+        node2.set_shape([self.d_output, self.d_feature, None, None])
+        nodelast = self.nodes.read(self.input_size-1)
+        nodelast.set_shape([self.d_feature, None])
 
-		with tf.Session() as sess:
-			sess.run(tf.global_variables_initializer())
-			print(sess.run(self.nodes, {self.phi: phi, self.delta: delta}))
-
-
-	# Test function
-	def test(self, phi, delta):
-		f = tf.einsum('lmnik,tmnik->tl', self.bond, self.C)
-		with tf.Session() as sess:
-			sess.run(tf.global_variables_initializer())
-			print(sess.run(f, {self.phi: phi, self.delta: delta}))
-			writer = tf.summary.FileWriter("output", sess.graph)
-			writer.close()
-
-
-
-	# =====================
-	# Helper functions
-	# =====================
-
-	def make_random_normal(self, shape, mean=0, stddev=1):
-		return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
-
-
-	def make_nodes(self):
-		nodes = []
-
-		# First node
-		nodes.append(self.make_random_normal([self.d_feature, self.d_matrix]))
-		# The second node with output leg attached
-		nodes.append(self.make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
-		# The rest of the matrix nodes
-		for i in range(self.input_size-2):
-			nodes.append(self.make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
-		# Last node
-		nodes.append(self.make_random_normal([self.d_feature, self.d_matrix]))
-
-		return nodes
-
-	def update_bond(self):
-		'''
-		Update the bond matrix with gradient descent
-		'''
-		f = tf.einsum('lmnik,tmnik->tl', self.bond, self.C)
-		gradient = tf.einsum('tl,tmnik->lmnik', self.delta - f, self.C)
-		delta_bond = self.rate_of_change * gradient
-		self.bond += delta_bond
+        # Calculate C1 
+        C1 = tf.einsum('ni,tn->ti', node1, phi[0])
+        contracted_node2 = tf.einsum('lnij,tn->tlij', node2, phi[1])
+        C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
 
 
-	def update_nodes(self, index):
-		'''
-		Update the relevant notes
-		'''
-		a_prime_j, a_prime_j1 = self.bond_decomposition(self.d_matrix)
-		self.nodes[index] = a_prime_j
-		self.nodes[index+1] = a_prime_j1
+        # Calculate C2
+        C2 = tf.einsum('mi,tm->ti', nodelast, phi[self.input_size-1])
 
-	def move_one_step(self, index):
-		'''
-		Move one step along the chain
-		We achieve this by updating the bond and C matrices
-		'''
-		a_inverse_j = tf.matrix_inverse(self.nodes[index])
-		a_inverse_j2 = tf.matrix_inverse(self.nodes[index+2])
+        #counter = tf.Variable(2, dtype=tf.int32)
+        counter = 2 
+        cond = lambda c, b: tf.less(c, self.input_size-1)
+        _, C1 = tf.while_loop(cond=cond, body=self._chain_multiply, loop_vars=[counter, C1], 
+                                        shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])])
+        f = tf.einsum('tli,ti->tl', C1, C2)
+        return f 
 
-		self.bond = tf.einsum('lmnik,mij,okh->lnojh', self.bond, a_inverse_j, self.nodes[i+2])
-		self.C = tf.einsum('tmnik,mij,okh->tnojh', self.C, self.nodes[i], a_inverse_j2)
-
-	def bond_decomposition(self, m):
-		"""
-		:param bond:
-		:param m:
-		:return:
-		"""
-		s, a_prime_j, v = tf.svd(self.bond)
-		filtered_s = self.highest_values(s, m)
-		a_prime_j1 = tf.matmul(filtered_s, v)
-		return (a_prime_j, a_prime_j1)
+    def _chain_multiply(self, counter, C1):
+        node = self.nodes.read(counter)
+        node.set_shape([self.d_feature, None, None])
+        input_leg = self.phi[counter]
+        contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+        C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
+        counter = counter + 1 
+        return [counter, C1]
 
 
-	def highest_values(self, matrix, m):
-		return matrix
-
-	# 	array_np = np.array(matrix)
-	# 	flattened = np.ravel(array_np)
-	# 	highest_vals = np.unique(np.sort(array_np.flatten())[-m:])
-	# 	output = np.zeros(array_np.shape)
-	# 	for val in highest_vals:
-	# 		masked_array = ma.masked_where(array_np != val, array_np)
-	# 		filled = masked_array.filled(0.0)
-	# 		output += filled
-	# 	return (output)
-
-
-if __name__ == '__main__':
-
-	# Model parameters
-	input_size = 10
-	d_feature = 2
-	d_matrix = 5
-	d_output = 3
-	rate_of_change = 0.2
-	batch_size = 2
-
-	# Make up input and output
-	phi = np.random.normal(size=(input_size, batch_size, d_feature))
-	delta = [[1, 0, 0], [0, 1, 0]]
-
-	# Initialise the model
-	network = MPS(d_matrix, d_feature, d_output, batch_size, input_size,
-					rate_of_change=rate_of_change)
-	network.prepare()
-	network.test(phi, delta)
