@@ -5,96 +5,96 @@ from collections import namedtuple
 #TODO: REALLY needs some documentation
 
 class MPS(object):
-	'''
-	Class variables:
-		input_size: int
-		d_matrix: int
-		d_feature: int
-		d_output: int
-		nodes: tf.TensorArray
-	'''
+    '''
+    Class variables:
+        input_size: int
+        d_matrix: int
+        d_feature: int
+        d_output: int
+        nodes: tf.TensorArray
+    '''
 
-	def __init__(self, d_matrix, d_feature, d_output, input_size):
-		# structure parameters
+    def __init__(self, d_matrix, d_feature, d_output, input_size):
+        # structure parameters
 
-		self.input_size = input_size
-		self.d_matrix = d_matrix
-		self.d_feature = d_feature
-		self.d_output = d_output
+        self.input_size = input_size
+        self.d_matrix = d_matrix
+        self.d_feature = d_feature
+        self.d_output = d_output
 
-		# Initialise the nodes, input and output
-		self._setup_nodes()
+        # Initialise the nodes, input and output
+        self._setup_nodes()
 
-	def predict(self, feature):
-		'''
-		feature must be numpy array of dtype float32
-		'''
-		phi = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
-		f = self._predict(phi)
-		with tf.Session() as sess:
-		    sess.run(tf.global_variables_initializer())
-		    print(sess.run(f, {phi: feature}))
+    def predict(self, feature):
+        '''
+        feature must be numpy array of dtype float32
+        '''
+        phi = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
+        f = self._predict(phi)
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            print(sess.run(f, {phi: feature}))
 
-	# ================
-	# hidden functions
-	# ================
+    # ================
+    # hidden functions
+    # ================
 
-	def _setup_nodes(self):
+    def _setup_nodes(self):
 
-		self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
-		                            clear_after_read= False, infer_shape= False)
-		# First node
-		self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix]))
-		# The Second node with output leg attached
-		self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
-		# The rest of the matrix nodes
-		for i in range(self.input_size - 3):
-		    self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
-		# Last node
-		self.nodes = self.nodes.write(self.input_size-1, self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
+                                    clear_after_read= False, infer_shape= False)
+        # First node
+        self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix]))
+        # The Second node with output leg attached
+        self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+        # The rest of the matrix nodes
+        for i in range(self.input_size - 3):
+            self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
+        # Last node
+        self.nodes = self.nodes.write(self.input_size-1, self._make_random_normal([self.d_feature, self.d_matrix]))
 
-	def _make_random_normal(self, shape, mean=0, stddev=1):
-		return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
+    def _make_random_normal(self, shape, mean=0, stddev=1):
+        return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
 
             
-	def _predict(self, phi):
+    def _predict(self, phi):
 
-		# Read in phi 
-		self.phi = phi
+        # Read in phi 
+        self.phi = phi
 
-		# Read in the nodes 
-		node1 = self.nodes.read(0)
-		node1.set_shape([self.d_feature, None])
-		node2 = self.nodes.read(1)
-		node2.set_shape([self.d_output, self.d_feature, None, None])
-		nodelast = self.nodes.read(self.input_size-1)
-		nodelast.set_shape([self.d_feature, None])
+        # Read in the nodes 
+        node1 = self.nodes.read(0)
+        node1.set_shape([self.d_feature, None])
+        node2 = self.nodes.read(1)
+        node2.set_shape([self.d_output, self.d_feature, None, None])
+        nodelast = self.nodes.read(self.input_size-1)
+        nodelast.set_shape([self.d_feature, None])
 
-		# Calculate C1 
-		C1 = tf.einsum('ni,tn->ti', node1, phi[0])
-		contracted_node2 = tf.einsum('lnij,tn->tlij', node2, phi[1])
-		C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
+        # Calculate C1 
+        C1 = tf.einsum('ni,tn->ti', node1, phi[0])
+        contracted_node2 = tf.einsum('lnij,tn->tlij', node2, phi[1])
+        C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
 
 
- 		# Calculate C2
-		C2 = tf.einsum('mi,tm->ti', nodelast, phi[self.input_size-1])
+        # Calculate C2
+        C2 = tf.einsum('mi,tm->ti', nodelast, phi[self.input_size-1])
 
         #counter = tf.Variable(2, dtype=tf.int32)
-		counter = 2 
-		cond = lambda c, b: tf.less(c, self.input_size-1)
-		_, C1 = tf.while_loop(cond=cond, body=self._chain_multiply, loop_vars=[counter, C1], 
-		                                shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])])
-		f = tf.einsum('tli,ti->tl', C1, C2)
-		return f 
+        counter = 2 
+        cond = lambda c, b: tf.less(c, self.input_size-1)
+        _, C1 = tf.while_loop(cond=cond, body=self._chain_multiply, loop_vars=[counter, C1], 
+                                        shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])])
+        f = tf.einsum('tli,ti->tl', C1, C2)
+        return f 
 
-	def _chain_multiply(self, counter, C1):
-		node = self.nodes.read(counter)
-		node.set_shape([self.d_feature, None, None])
-		input_leg = self.phi[counter]
-		contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
-		C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
-		counter = counter + 1 
-		return [counter, C1]
+    def _chain_multiply(self, counter, C1):
+        node = self.nodes.read(counter)
+        node.set_shape([self.d_feature, None, None])
+        input_leg = self.phi[counter]
+        contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+        C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
+        counter = counter + 1 
+        return [counter, C1]
 
 
 class MPSOptimizer(object):
@@ -147,26 +147,31 @@ class MPSOptimizer(object):
         :return: nothing
         """
 
-        counter = tf.Variable(0)
+        counter = 0
         updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
-        updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
+        updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(self.MPS.input_size-1))
+        updated_nodes = updated_nodes.write(self.MPS.input_size, self.MPS.nodes.read(0))
 
         n1 = self.MPS.nodes.read(1)
         n1.set_shape([None, None, None, None])
+
         self.C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
+        self.C1s = self.C1s.write(0, self.C1)
         wrapped = [counter, self.C1, self.C1s, self.C2s, updated_nodes, n1]
-        cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 3)
-        _, self.C1, self.C2s, self.updated_nodes, _ = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
+        cond = lambda counter, b, c, d, e, f: tf.less(counter, self.MPS.input_size - 3)
+        _, self.C1, self.C1s, self.C2s, self.MPS.nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
                                                                     parallel_iterations = 1,
                                                                     shape_invariants=[tf.TensorShape([]),
                                                                                       tf.TensorShape([None, None]),
-                                                                                      tf.TensorShape([None])
                                                                                       tf.TensorShape(None),
                                                                                       tf.TensorShape(None),
-                                                                                      tf.TensorShape(
-                                                                                          [None, None, None, None])])
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape([None, None, None, None])])
 
+    def _make_new_nodes(self):
+        new_nodes = tf.TensorArry(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
 
+                                                                                         
     def _find_C2(self, counter, prev_C2, C2s):
 
         loc2 = self.MPS.input_size - 2 - counter
@@ -179,13 +184,13 @@ class MPSOptimizer(object):
         return [updated_counter, new_C2, C2s]
         
         
-    def _update(counter, C1, C1s, C2s, updated_nodes, previous_node):
+    def _update(self, counter, C1, C1s, C2s, updated_nodes, previous_node):
 
         # Read in the notes 
-		n1 = previous_node
-		n2 = self.MPS.nodes.read(counter+2)
-		n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
-		n2.set_shape([self.MPS.d_feature, None, None])
+        n1 = previous_node
+        n2 = self.MPS.nodes.read(counter+2)
+        n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
+        n2.set_shape([self.MPS.d_feature, None, None])
 
         # Calculate the bond 
         bond = tf.einsum('lmij,njk->lmnik', n1, n2)
@@ -201,20 +206,19 @@ class MPSOptimizer(object):
         delta_bond = self.rate_of_change * gradient
         updated_bond = tf.add(bond, delta_bond)
 
-    	# Decompose the bond 
+        # Decompose the bond 
         aj, aj1 = self._bond_decomposition(updated_bond, m)
 
 
         # Transpose the values and add to the new variables 
-        updated_nodes = updated_nodes.write(counter, aj.)
-
-        # Update and return the values
-        updated_nodes = updated_nodes.write(counter, aj)
+        aj = tf.transpose(aj, perm=[0, 2, 1])
+        updated_nodes = updated_nodes.write(self.MPS.input_size-3-counter, aj)
         contracted_aj = tf.einsum('mij,tm->tij', aj, self._phi[counter])
         C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
+        C1s = C1s.write(counter+1, C1)
         updated_counter = counter + 1 
 
-        return [updated_counter, C1, C1s C2s, updated_nodes, aj1]
+        return [updated_counter, C1, C1s, C2s, updated_nodes, aj1]
 
     def _bond_decomposition(self, bond, m):
         """
