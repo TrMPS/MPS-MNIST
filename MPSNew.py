@@ -137,22 +137,6 @@ class MPSOptimizer(object):
                                         tf.TensorShape(None)])
 
     def _setup_training_graph(self):
-<<<<<<< Updated upstream
-       counter = 0
-       updated_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
-       updated_nodes = updated_nodes.write(0, self.MPS.nodes.read(0))
-       update_func = self._generate_update_func(self.MPS.nodes, self._phi, self._delta, self.rate_of_change)
-       n1 = self.MPS.nodes.read(1)
-       n1.set_shape([None, None, None, None])
-       wrapped = [counter, self.C1, self.C2s,
-                 updated_nodes, n1]
-       cond = lambda counter, b, c, d, e: tf.less(counter, self.MPS.input_size - 2)
-       _, self.C1, self.C2s, self.updated_nodes, _ = tf.while_loop(cond= cond, body = update_func, loop_vars=wrapped,
-                                   shape_invariants = [tf.TensorShape([]),  tf.TensorShape([None,None]), tf.TensorShape(None),
-                                                        tf.TensorShape(None), tf.TensorShape([None, None, None, None])])
-
-    
-=======
         """
         Sets up graph needed to train the MPS, only for going to the right once.
         :return: nothing
@@ -180,7 +164,7 @@ class MPSOptimizer(object):
                                                                                       tf.TensorShape(
                                                                                           [None, None, None, None])])
 
->>>>>>> Stashed changes
+
     def _find_C2(self, counter, prev_C2, C2s):
 
         loc2 = self.MPS.input_size - 2 - counter
@@ -263,11 +247,7 @@ if __name__ == '__main__':
     d_matrix = 5
     d_output = 3
     rate_of_change = 0.2
-<<<<<<< Updated upstream
     batch_size = 10
-=======
-    batch_size = 15
->>>>>>> Stashed changes
     m = 5
 
     # Make up input and output
