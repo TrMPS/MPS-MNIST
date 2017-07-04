@@ -5,7 +5,8 @@ output/
 
 # The following is boilerplate gitignore from https://github.com/github/gitignore/blob/master/Python.gitignore
 # Byte-compiled / optimized / DLL files
-__pycache__/
+
+**/__pycache__/
 *.py[cod]
 *$py.class
 
@@ -73,7 +74,7 @@ docs/_build/
 target/
 
 # Jupyter Notebook
-.ipynb_checkpoints
+notebooks/.ipynb_checkpoints/
 
 # pyenv
 .python-version
