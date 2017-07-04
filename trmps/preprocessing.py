@@ -68,7 +68,7 @@ def _preprocess_images(data, size):
                         counter = 0
     sys.stdout.flush()
     print("\r" + str(100) + " % done")
-    return (data, labels)
+    return (np.array(data), np.array(labels))
 
 class MNISTData(object):
 
@@ -76,26 +76,30 @@ class MNISTData(object):
         self._training_data = None
         self._test_data = None
         self._is_first_read = False
-        self._training_path = "training.npy"
-        if os.path.isfile(self._training_path):
-            self._training_data = np.load(self._training_path)
-        self._test_path = "testing.npy"
-        if os.path.isfile(self._test_path):
-            self._test_data = np.load(self._test_path)
+        self._training_data_path = "training_data.npy"
+        self._training_labels_path = "training_labels.npy"
+        if os.path.isfile(self._training_data_path):
+            self._training_data = (np.load(self._training_data_path), np.load(self._training_labels_path))
+        self._test_data_path = "testing_data.npy"
+        self._test_labels_path = "testing_labels.npy"
+        if os.path.isfile(self._test_data_path):
+            self._test_data = (np.load(self._test_data_path), np.load(self._test_labels_path))
         self.current_index = 0
 
     @property
     def test_data(self):
         if self._test_data is None:
             self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size = 10000)
-            #np.save(self._test_path, self._test_data)
+            np.save(self._test_data_path, self._test_data[0])
+            np.save(self._test_labels_path, self._test_data[1])
         return self._test_data
 
     @property
     def training_data(self):
         if self._training_data is None:
             self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train, size = 60000)
-            #np.save(self._training_path, self._training_data)
+            np.save(self._training_data_path, self._training_data[0])
+            np.save(self._training_labels_path, self._training_data[1])
         return self._training_data
 
     def next_training_data_batch(self, batch_size, shuffle=None):
@@ -110,7 +114,6 @@ class MNISTData(object):
                 data, labels = self.training_data
                 permutation = np.random.permutation(len(data))
                 self._training_data = data[permutation], labels[permutation]
-                np.random.shuffle(self.training_data)
         self._is_first_read = False
         data = None
         labels = None
@@ -145,9 +148,6 @@ if __name__ == "__main__":
     data_source = MNISTData()
     data, labels = data_source.next_training_data_batch(500)
     data, labels = data_source.next_training_data_batch(500)
-    print(labels[0])
     data, labels = data_source.next_training_data_batch(500)
-    print(labels[0])
     data, labels = data_source.next_training_data_batch(500)
-    print(labels[0])
 
