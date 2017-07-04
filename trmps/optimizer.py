@@ -22,7 +22,7 @@ class MPSOptimizer(object):
 
         f = self.MPS.predict(self._feature)
         accuracy = self.MPS.accuracy(f, self._label)
-        C1 = self.train_step()
+        post_accuracy = self.train_step()
         
 
         with tf.Session() as sess:
@@ -34,7 +34,9 @@ class MPSOptimizer(object):
                 train_accuracy = accuracy.eval(feed_dict={
                                     self._feature: batch_feature, self._label: batch_label})
                 print('step {}, training accuracy {}'.format(i, train_accuracy))
-                _ = C1.eval(feed_dict={self._feature: batch_feature, self._label: batch_label})
+                train_accuracy = post_accuracy.eval(feed_dict={
+                                    self._feature: batch_feature, self._label: batch_label})
+                print('step {}, training accuracy {}'.format(i, train_accuracy))
 
 
     def _setup_optimization(self):
@@ -51,41 +53,36 @@ class MPSOptimizer(object):
         C2 = tf.einsum('mi,tm->ti', nlast, feature[-1])
         C2s = C2s.write(self.MPS.input_size-4, C2)
         cond = lambda counter,b,c: tf.less(counter, self.MPS.input_size-4)
-        _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[0, C2, C2s], 
+        _, self.C2, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[0, C2, C2s], 
                                         shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]), 
                                         tf.TensorShape(None)])
 
     def train_step(self):
-        """
-        Sets up graph needed to train the MPS, only for going to the right once.
-        :return: nothing
-        """
         # First sweep 
         n1 = self.MPS.nodes.read(1)
         n1.set_shape([None, None, None, None])
-        C1s, n1 = self._one_sweep(n1, self.C1, self.C2s)
+        C1s, C2, C1, n1 = self._one_sweep(n1, self.C1, self.C2, self.C2s)
 
         # Second sweep
-        C2 = self.C2s.read(self.MPS.input_size-4)
-        C2.set_shape([None, None])
-        self.C2s, _ = self._one_sweep(n1, C2, C1s)
+        self.C2s, self.C2, self.C1, _ = self._one_sweep(n1, C2, C1, C1s)
 
-        # Update C1
-        self.C1 = C1s.read(self.MPS.input_size-4)
-        self.C1.set_shape([None, None])
+        # accuracy
+        f = self.MPS.predict(self._feature)
+        accuracy = self.MPS.accuracy(f, self._label)
 
-        return self.C1
+        return accuracy
 
-    def _one_sweep(self, n1, C1, C2s):
+    def _one_sweep(self, n1, C1, C2, C2s):
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
 
         updated_nodes = self._make_new_nodes()
-        wrapped = [0, C1, C1s, C2s, updated_nodes, n1]
-        cond = lambda counter, b, c, d, e, f: tf.less(counter, self.MPS.input_size - 3)
+        wrapped = [0, C1, C2, C1s, C2s, updated_nodes, n1]
+        cond = lambda counter, b, c, d, e, f, g: tf.less(counter, self.MPS.input_size - 3)
 
-        _, C1, C1s, C2s, self.MPS.nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
+        _, C1, C2, C1s, C2s, self.MPS.nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
                                                                     parallel_iterations = 1,
                                                                     shape_invariants=[tf.TensorShape([]),
+                                                                                      tf.TensorShape([None, None]),
                                                                                       tf.TensorShape([None, None]),
                                                                                       tf.TensorShape(None),
                                                                                       tf.TensorShape(None),
@@ -93,14 +90,14 @@ class MPSOptimizer(object):
                                                                                       tf.TensorShape([None, None, None, None])])
         n1 = tf.transpose(n1, perm=[0, 1, 3, 2])
         self.MPS.nodes = self.MPS.nodes.write(1, n1)
-        return (C1s, n1)
+        return (C1s, C2, C1, n1)
 
 
 
     def _make_new_nodes(self):
         new_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
         new_nodes = new_nodes.write(0, self.MPS.nodes.read(self.MPS.input_size-1))
-        new_nodes = new_nodes.write(self.MPS.input_size, self.MPS.nodes.read(0))
+        new_nodes = new_nodes.write(self.MPS.input_size-1, self.MPS.nodes.read(0))
         return new_nodes
 
                                                                                          
@@ -116,7 +113,7 @@ class MPSOptimizer(object):
         return [updated_counter, new_C2, C2s]
         
         
-    def _update(self, counter, C1, C1s, C2s, updated_nodes, previous_node):
+    def _update(self, counter, C1, C2, C1s, C2s, updated_nodes, previous_node):
 
         # Read in the notes 
         n1 = previous_node
@@ -145,12 +142,12 @@ class MPSOptimizer(object):
 
         # Transpose the values and add to the new variables 
         aj = tf.transpose(aj, perm=[0, 2, 1])
-        updated_nodes = updated_nodes.write(self.MPS.input_size-3-counter, aj)
+        updated_nodes = updated_nodes.write(self.MPS.input_size-2-counter, aj)
         contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
         C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
         updated_counter = counter+1 
 
-        return [updated_counter, C1, C1s, C2s, updated_nodes, aj1]
+        return [updated_counter, C1, C2, C1s, C2s, updated_nodes, aj1]
 
     def _bond_decomposition(self, bond, m):
         """
