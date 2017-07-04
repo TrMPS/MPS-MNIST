@@ -65,11 +65,16 @@ class MPSOptimizer(object):
         C1s, C2, C1, n1 = self._one_sweep(n1, self.C1, self.C2, self.C2s)
 
         # Second sweep
-        self.C2s, self.C2, self.C1, _ = self._one_sweep(n1, C2, C1, C1s)
-
-        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], message = "optimizerTrainend")
-        # accuracy
+        a = tf.Print(self.updated_nodes.read(0), [self.updated_nodes.read(0)], summarize = 196, message = "optimizerEndedFirstSweep")
         with tf.control_dependencies([a]):
+            self.MPS.nodes = self.updated_nodes
+            self.C2s, self.C2, self.C1, _ = self._one_sweep(n1, C2, C1, C1s)
+
+        self.MPS.nodes = self.updated_nodes
+        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], message = "optimizerTrainend")
+        b = tf.Print(self.updated_nodes.read(0), [self.updated_nodes.read(0)], summarize = 196, message = "optimizerTrainEndUpdatedNodes")
+        # accuracy
+        with tf.control_dependencies([a,b]):
             f = self.MPS.predict(self._feature)
             accuracy = self.MPS.accuracy(f, self._label)
 
@@ -77,13 +82,13 @@ class MPSOptimizer(object):
 
     def _one_sweep(self, n1, C1, C2, C2s):
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
-        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)],message = "optimizerOnesweep")
+        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], summarize = 196, message = "optimizerStartedOnesweep")
         with tf.control_dependencies([a]):
-            updated_nodes = self._make_new_nodes()
-            wrapped = [0, C1, C2, C1s, C2s, updated_nodes, n1]
+            self.updated_nodes = self._make_new_nodes()
+            wrapped = [0, C1, C2, C1s, C2s, self.updated_nodes, n1]
             cond = lambda counter, b, c, d, e, f, g: tf.less(counter, self.MPS.input_size - 3)
     
-            _, C1, C2, C1s, C2s, self.MPS.nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
+            _, C1, C2, C1s, C2s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
                                                                         parallel_iterations = 1,
                                                                         shape_invariants=[tf.TensorShape([]),
                                                                                           tf.TensorShape([None, None]),
@@ -93,7 +98,7 @@ class MPSOptimizer(object):
                                                                                           tf.TensorShape(None),
                                                                                           tf.TensorShape([None, None, None, None])])
             n1 = tf.transpose(n1, perm=[0, 1, 3, 2])
-            self.MPS.nodes = self.MPS.nodes.write(1, n1)
+            self.updated_nodes = self.updated_nodes.write(1, n1)
         return (C1s, C2, C1, n1)
 
 
