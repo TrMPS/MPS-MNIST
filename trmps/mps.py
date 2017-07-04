@@ -85,6 +85,7 @@ class MPS(object):
         node1 = self.nodes.read(0)
         node1.set_shape([self.d_feature, None])
         node2 = self.nodes.read(1)
+        node1 = tf.Print(node1, [node1], message = "mpspredict")
         node2.set_shape([self.d_output, self.d_feature, None, None])
         nodelast = self.nodes.read(self.input_size-1)
         nodelast.set_shape([self.d_feature, None])
@@ -93,7 +94,6 @@ class MPS(object):
         C1 = tf.einsum('ni,tn->ti', node1, feature[0])
         contracted_node2 = tf.einsum('lnij,tn->tlij', node2, feature[1])
         C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
-
 
         # Calculate C2
         C2 = tf.einsum('mi,tm->ti', nodelast, feature[self.input_size-1])

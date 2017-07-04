@@ -17,6 +17,7 @@ class MPSOptimizer(object):
         self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
+        _ = self.train_step()
 
     def train(self, data_source, batch_size):
 
@@ -66,36 +67,39 @@ class MPSOptimizer(object):
         # Second sweep
         self.C2s, self.C2, self.C1, _ = self._one_sweep(n1, C2, C1, C1s)
 
+        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], message = "optimizerTrainend")
         # accuracy
-        f = self.MPS.predict(self._feature)
-        accuracy = self.MPS.accuracy(f, self._label)
+        with tf.control_dependencies([a]):
+            f = self.MPS.predict(self._feature)
+            accuracy = self.MPS.accuracy(f, self._label)
 
         return accuracy
 
     def _one_sweep(self, n1, C1, C2, C2s):
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False)
-
-        updated_nodes = self._make_new_nodes()
-        wrapped = [0, C1, C2, C1s, C2s, updated_nodes, n1]
-        cond = lambda counter, b, c, d, e, f, g: tf.less(counter, self.MPS.input_size - 3)
-
-        _, C1, C2, C1s, C2s, self.MPS.nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
-                                                                    parallel_iterations = 1,
-                                                                    shape_invariants=[tf.TensorShape([]),
-                                                                                      tf.TensorShape([None, None]),
-                                                                                      tf.TensorShape([None, None]),
-                                                                                      tf.TensorShape(None),
-                                                                                      tf.TensorShape(None),
-                                                                                      tf.TensorShape(None),
-                                                                                      tf.TensorShape([None, None, None, None])])
-        n1 = tf.transpose(n1, perm=[0, 1, 3, 2])
-        self.MPS.nodes = self.MPS.nodes.write(1, n1)
+        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)],message = "optimizerOnesweep")
+        with tf.control_dependencies([a]):
+            updated_nodes = self._make_new_nodes()
+            wrapped = [0, C1, C2, C1s, C2s, updated_nodes, n1]
+            cond = lambda counter, b, c, d, e, f, g: tf.less(counter, self.MPS.input_size - 3)
+    
+            _, C1, C2, C1s, C2s, self.MPS.nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
+                                                                        parallel_iterations = 1,
+                                                                        shape_invariants=[tf.TensorShape([]),
+                                                                                          tf.TensorShape([None, None]),
+                                                                                          tf.TensorShape([None, None]),
+                                                                                          tf.TensorShape(None),
+                                                                                          tf.TensorShape(None),
+                                                                                          tf.TensorShape(None),
+                                                                                          tf.TensorShape([None, None, None, None])])
+            n1 = tf.transpose(n1, perm=[0, 1, 3, 2])
+            self.MPS.nodes = self.MPS.nodes.write(1, n1)
         return (C1s, C2, C1, n1)
 
 
 
     def _make_new_nodes(self):
-        new_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False)
+        new_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False, clear_after_read=False)
         new_nodes = new_nodes.write(0, self.MPS.nodes.read(self.MPS.input_size-1))
         new_nodes = new_nodes.write(self.MPS.input_size-1, self.MPS.nodes.read(0))
         return new_nodes
