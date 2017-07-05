@@ -181,28 +181,29 @@ class MPSOptimizer(object):
         :param m:
         :return:
         """
-        bond_reshaped = tf.transpose(bond, perm=[3, 1, 2, 0, 4])
-        dims = tf.shape(bond_reshaped)
-        l_dim = dims[0] * dims[1]
-        r_dim = dims[2] * dims[3] * dims[4]
-        bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
-        s, u, v = tf.svd(bond_flattened)
-        
-        filtered_s = s
-        s_size = tf.size(filtered_s)
-        s_im = tf.reshape(tf.diag(filtered_s), [s_size, s_size, 1])
-        v_im = tf.reshape(v, [s_size, r_dim, 1])
-        u_im = tf.reshape(u, [l_dim, s_size, 1])
-        s_im_cropped = tf.image.resize_image_with_crop_or_pad(s_im, m, m)
-        v_im_cropped = tf.image.resize_image_with_crop_or_pad(v_im, m, r_dim)
-        u_im_cropped = tf.image.resize_image_with_crop_or_pad(u_im, l_dim, m)
-        s_mat = tf.reshape(s_im_cropped, [m, m])
-        v_mat = tf.reshape(v_im_cropped, [m, r_dim])
-        a_prime_j_mixed = tf.reshape(u_im_cropped, [dims[0], dims[1], m])
-        sv = tf.matmul(s_mat, v_mat)
-        a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
-        a_prime_j = tf.transpose(a_prime_j_mixed, perm=[1, 0, 2])
-        a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[2, 1, 0, 3])
+        with tf.name_scope("bond_decomposition"):
+            bond_reshaped = tf.transpose(bond, perm=[3, 1, 2, 0, 4])
+            dims = tf.shape(bond_reshaped)
+            l_dim = dims[0] * dims[1]
+            r_dim = dims[2] * dims[3] * dims[4]
+            bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
+            s, u, v = tf.svd(bond_flattened)
+            
+            filtered_s = s
+            s_size = tf.size(filtered_s)
+            s_im = tf.reshape(tf.diag(filtered_s), [s_size, s_size, 1])
+            v_im = tf.reshape(v, [s_size, r_dim, 1])
+            u_im = tf.reshape(u, [l_dim, s_size, 1])
+            s_im_cropped = tf.image.resize_image_with_crop_or_pad(s_im, m, m)
+            v_im_cropped = tf.image.resize_image_with_crop_or_pad(v_im, m, r_dim)
+            u_im_cropped = tf.image.resize_image_with_crop_or_pad(u_im, l_dim, m)
+            s_mat = tf.reshape(s_im_cropped, [m, m])
+            v_mat = tf.reshape(v_im_cropped, [m, r_dim])
+            a_prime_j_mixed = tf.reshape(u_im_cropped, [dims[0], dims[1], m])
+            sv = tf.matmul(s_mat, v_mat)
+            a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
+            a_prime_j = tf.transpose(a_prime_j_mixed, perm=[1, 0, 2])
+            a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[2, 1, 0, 3])
 
         return (a_prime_j, a_prime_j1)
 
