@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import preprocessing
 from mps import MPS
+import pickle
 
 def list_from(tensorArray, length):
     arr = tensorArray
@@ -15,37 +16,45 @@ class MPSOptimizer(object):
 
     def __init__(self, MPSNetwork, bond_dim, grad_func, rate_of_change = None):
         self.MPS = MPSNetwork
-        if rate_of_change is None:
-            self.rate_of_change = 10**(-7)
-        else:
-            self.rate_of_change = rate_of_change
+        self.rate_of_change = 10**(-4)
         self.bond_dim = bond_dim
         self.grad_func = grad_func
         self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
+        _ = self.train_step()
 
     def train(self, data_source, batch_size):
-
-        with tf.Session() as sess:
-
-            sess.run(tf.global_variables_initializer())
-            writer = tf.summary.FileWriter("output", sess.graph)
-            writer.close()
+            if self.rate_of_change == None:
+                self.rate_of_change = 0.1/(batch_size)
+            self.feed_dict = None
+            self.test = None
             for i in range(10):
-                (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
-                f = self.MPS.predict(self._feature)
-                accuracy = self.MPS.accuracy(f, self._label)
-                train_accuracy = accuracy.eval(feed_dict={
-                                    self._feature: batch_feature, self._label: batch_label})
-                print('step {}, training accuracy {}'.format(i, train_accuracy))
-
-                post_accuracy = self.train_step()
-                train_accuracy = post_accuracy.eval(feed_dict={
-                                    self._feature: batch_feature, self._label: batch_label})
-                print('step {}, training accuracy {}'.format(i, train_accuracy))
-                test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
-                test = sess.run(test_result, feed_dict={self._feature: batch_feature, self._label: batch_label})
+                if self.test is not None:
+                    self.MPS.load_nodes(self.test)
+                    with open('weights', 'wb') as fp:
+                        pickle.dump(self.test, fp)
+                    print(self.test[-5])
+                with tf.Session() as sess:
+                    sess.run(tf.global_variables_initializer())
+    
+                    (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
+                    if self.feed_dict is None:
+                        self.feed_dict={self._feature: batch_feature, self._label: batch_label}
+                    self.feed_dict[self._feature] = batch_feature
+                    self.feed_dict[self._label] = batch_label
+                    f = self.MPS.predict(self._feature)
+                    cost = self.MPS.cost(f, self._label)
+                    train_accuracy = cost.eval(feed_dict=self.feed_dict)
+                    print('step {}, training accuracy {}'.format(i, train_accuracy))
+    
+                    test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
+                    self.test = sess.run(test_result, feed_dict=self.feed_dict)
+                    self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
+                    for index, element in enumerate(self.test):
+                        self.feed_dict[self.MPS.nodes_list[index]] = element
+                    #train_accuracy = accuracy.eval(feed_dict=self.feed_dict)
+                    #print('step {}, training accuracy {}'.format(i, train_accuracy))
 
 
 
@@ -158,6 +167,8 @@ class MPSOptimizer(object):
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
         gradient = tf.einsum('tl,tmnik->lmnik', self._label - f, C)
         label_bond = self.rate_of_change * gradient
+        label_bond = tf.clip_by_value(label_bond, -(10**(-5)), 10**(-5))
+        #label_bond = tf.Print(label_bond, [label_bond, bond], message = "label_bond and bond")
         #label_bond = tf.Print(label_bond, [label_bond], "label_bond")
         updated_bond = tf.add(bond, label_bond)
 
@@ -221,6 +232,11 @@ if __name__ == '__main__':
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
+    #with open('weights', 'rb') as fp:
+    #    weights = pickle.load(fp)
+    #    network.load_nodes(weights)
+    feature, labels = data_source.next_training_data_batch(batch_size)
+    network.test(feature, labels)
     optimizer = MPSOptimizer(network, bond_dim, None, rate_of_change = None)
     optimizer.train(data_source, batch_size)
 

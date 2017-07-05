@@ -45,6 +45,15 @@ class MPS(object):
             print(test_cost)
             print(test_accuracy)
 
+    def load_nodes(self, weights):
+        updated_nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size = True,
+                                       clear_after_read = False, infer_shape = False)
+        with tf.name_scope("newMPSNodes"):
+            for index, weight in enumerate(weights):
+                updated_nodes = updated_nodes.write(index, tf.Variable(weight))
+        self.nodes = updated_nodes
+
+
     # ================
     # hidden functions
     # ================
@@ -63,20 +72,29 @@ class MPS(object):
     def _setup_nodes(self):
         maxval = 2.005/self.d_matrix
         with tf.name_scope("MPSnodes"):
+            self.nodes_list = []
             self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
                                         clear_after_read= False, infer_shape= False)
             # First node
-            self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
+            self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval),
+                shape = [self.d_feature, self.d_matrix]))
+            self.nodes = self.nodes.write(0, self.nodes_list[-1])
             # The Second node with output leg attached
-            self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
+            self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
+                shape = [self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+            self.nodes = self.nodes.write(1, self.nodes_list[-1])
             # The rest of the matrix nodes
             for i in range(self.input_size - 3):
-                self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
+                self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
+                    shape = [self.d_feature, self.d_matrix, self.d_matrix]))
+                self.nodes = self.nodes.write(i+2, self.nodes_list[-1])
             # Last node
-            self.nodes = self.nodes.write(self.input_size-1, self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
+            self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval),
+                shape = [self.d_feature, self.d_matrix]))
+            self.nodes = self.nodes.write(self.input_size-1, self.nodes_list[-1])
 
     def _make_random_normal(self, shape, minval=0, maxval=1):
-        return tf.Variable(tf.random_uniform(shape, minval=minval, maxval = maxval))
+        return tf.random_uniform(shape, minval=minval, maxval = maxval)
             
     def predict(self, feature):
 
