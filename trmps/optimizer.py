@@ -15,7 +15,7 @@ class MPSOptimizer(object):
     def __init__(self, MPSNetwork, bond_dim, grad_func, rate_of_change = None):
         self.MPS = MPSNetwork
         if rate_of_change is None:
-            self.rate_of_change = 0.1
+            self.rate_of_change = 10**(-7)
         else:
             self.rate_of_change = rate_of_change
         self.bond_dim = bond_dim
@@ -75,13 +75,13 @@ class MPSOptimizer(object):
         with tf.control_dependencies([C1]):
             self.MPS.nodes = self.updated_nodes
         # Second sweep
-        #a = tf.Print(self.updated_nodes.read(0), [self.updated_nodes.read(0)], summarize = 196, message = "optimizerEndedFirstSweep")
-        #with tf.control_dependencies([a]):
-        #    self.MPS.nodes = self.updated_nodes
-        #    self.C2s, self.C2, self.C1, _ = self._one_sweep(n1, C2, C1, C1s)
+        a = tf.Print(self.updated_nodes.read(0), [self.updated_nodes.read(0)], summarize = 196, message = "optimizerEndedFirstSweep")
+        with tf.control_dependencies([a]):
+            self.MPS.nodes = self.updated_nodes
+            self.C2s, self.C2, self.C1, _ = self._one_sweep(n1, C2, C1, C1s)
 
         a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], message = "optimizerTrainend")
-        b = tf.Print(self.updated_nodes.read(0), [self.updated_nodes.read(0)], summarize = 196, message = "optimizerTrainEndUpdatedNodes")
+        b = tf.Print(self.updated_nodes.read(0), [self.updated_nodes.read(0)], message = "optimizerTrainEndUpdatedNodes")
         # accuracy
         with tf.control_dependencies([a,b]):
             f = self.MPS.predict(self._feature)
@@ -91,7 +91,7 @@ class MPSOptimizer(object):
 
     def _one_sweep(self, n1, C1, C2, C2s):
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False, clear_after_read = False)
-        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], summarize = 196, message = "optimizerStartedOnesweep")
+        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], message = "optimizerStartedOnesweep")
         with tf.control_dependencies([a]):
             self.updated_nodes = self._make_new_nodes()
             wrapped = [0, C1, C2, C1s, C2s, self.updated_nodes, n1]
@@ -120,13 +120,15 @@ class MPSOptimizer(object):
 
                                                                                          
     def _find_C2(self, counter, prev_C2, C2s):
-
+        #prev_C2 = tf.Print(prev_C2, [prev_C2], "prev_C2")
         loc2 = self.MPS.input_size - 2 - counter
         node2 = self.MPS.nodes.read(loc2)
         node2.set_shape([self.MPS.d_feature, None, None])
         contracted_node2 = tf.einsum('mij,tm->tij', node2, self._feature[loc2]) # CHECK einsum
+        #contracted_node2 = tf.Print(contracted_node2, [contracted_node2], message = "cnode_2")
         updated_counter = counter + 1
         new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
+        #new_C2 = tf.Print(new_C2, [new_C2], message = "new_C2")
         C2s = C2s.write(self.MPS.input_size-5-counter, new_C2)
         return [updated_counter, new_C2, C2s]
         
@@ -141,17 +143,22 @@ class MPSOptimizer(object):
 
         # Calculate the bond 
         bond = tf.einsum('lmij,njk->lmnik', n1, n2)
+        #bond = tf.Print(bond, [bond], message = "bond")
 
         # Calculate the C matrix 
         C2 = C2s.read(counter)
         C2.set_shape([None,None])
+        #C2 = tf.Print(C2, [C2], message = "C2")
         C1s = C1s.write(counter, C1)
+        #C1 = tf.Print(C1, [C1], message = "C1")
         C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter+1])
+        #C = tf.Print(C, [C], message = "C")
 
         # Update the bond 
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
         gradient = tf.einsum('tl,tmnik->lmnik', self._label - f, C)
         label_bond = self.rate_of_change * gradient
+        #label_bond = tf.Print(label_bond, [label_bond], "label_bond")
         updated_bond = tf.add(bond, label_bond)
 
         # Decompose the bond 
@@ -196,6 +203,7 @@ class MPSOptimizer(object):
         a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
         a_prime_j = tf.transpose(a_prime_j_mixed, perm=[1, 0, 2])
         a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[2, 1, 0, 3])
+        #a_prime_j = tf.Print(a_prime_j, [a_prime_j, a_prime_j1], message = "a_j, a_j1")
         return (a_prime_j, a_prime_j1)
 
 if __name__ == '__main__':
@@ -212,7 +220,7 @@ if __name__ == '__main__':
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
-    optimizer = MPSOptimizer(network, bond_dim, None, rate_of_change = rate_of_change)
+    optimizer = MPSOptimizer(network, bond_dim, None, rate_of_change = None)
     optimizer.train(data_source, batch_size)
 
 

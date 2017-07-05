@@ -35,6 +35,7 @@ class MPS(object):
         feature = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.d_output])
         f = self.predict(feature)
+        f = tf.Print(f, [f], summarize = 190, message =  "prediction")
         cost = self.cost(f, label)
         accuracy = self.accuracy(f, label)
         with tf.Session() as sess:
@@ -60,21 +61,21 @@ class MPS(object):
         return accuracy
 
     def _setup_nodes(self):
-
+        maxval = 2.005/self.d_matrix
         self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
                                     clear_after_read= False, infer_shape= False)
         # First node
-        self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
         # The Second node with output leg attached
-        self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+        self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
         # The rest of the matrix nodes
         for i in range(self.input_size - 3):
-            self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix]))
+            self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
         # Last node
-        self.nodes = self.nodes.write(self.input_size-1, self._make_random_normal([self.d_feature, self.d_matrix]))
+        self.nodes = self.nodes.write(self.input_size-1, self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
 
-    def _make_random_normal(self, shape, mean=0, stddev=1):
-        return tf.Variable(tf.random_normal(shape, mean=mean, stddev=stddev))
+    def _make_random_normal(self, shape, minval=0, maxval=1):
+        return tf.Variable(tf.random_uniform(shape, minval=minval, maxval = maxval))
             
     def predict(self, feature):
 
@@ -85,7 +86,7 @@ class MPS(object):
         node1 = self.nodes.read(0)
         node1.set_shape([self.d_feature, None])
         node2 = self.nodes.read(1)
-        node1 = tf.Print(node1, [node1], message = "mpspredict")
+        #node1 = tf.Print(node1, [node1], message = "mpspredictnode1")
         node2.set_shape([self.d_output, self.d_feature, None, None])
         nodelast = self.nodes.read(self.input_size-1)
         nodelast.set_shape([self.d_feature, None])
@@ -118,20 +119,20 @@ class MPS(object):
 if __name__ == '__main__':
 
     # Model parameters
-    input_size = 4
+    input_size = 196
     d_feature = 2
     d_matrix = 5
     d_output = 6
     rate_of_change = 0.2
-    batch_size = 1000
+    batch_size = 10
     m = 5
 
     # Make up input and output
     phi = np.random.normal(size=(input_size, batch_size, d_feature)).astype(np.float32)
 
     delta = np.zeros((batch_size, d_output))
-    delta[:500, 1] = 1 
-    delta[500:, 4] = 1
+    delta[:5, 1] = 1 
+    delta[5:, 4] = 1
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
