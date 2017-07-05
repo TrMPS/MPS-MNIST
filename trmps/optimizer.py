@@ -24,32 +24,29 @@ class MPSOptimizer(object):
         self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
-        _ = self.train_step()
 
     def train(self, data_source, batch_size):
 
-        f = self.MPS.predict(self._feature)
-        accuracy = self.MPS.accuracy(f, self._label)
-        post_accuracy = self.train_step()
-        test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
-        
-
         with tf.Session() as sess:
+
             sess.run(tf.global_variables_initializer())
             writer = tf.summary.FileWriter("output", sess.graph)
             writer.close()
             for i in range(10):
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
-                print(batch_feature[0, 0])
-                print(batch_label[0])
-                test = sess.run(test_result, feed_dict={self._feature: batch_feature, self._label: batch_label})
-                #print(test)
+                f = self.MPS.predict(self._feature)
+                accuracy = self.MPS.accuracy(f, self._label)
                 train_accuracy = accuracy.eval(feed_dict={
                                     self._feature: batch_feature, self._label: batch_label})
                 print('step {}, training accuracy {}'.format(i, train_accuracy))
+
+                post_accuracy = self.train_step()
                 train_accuracy = post_accuracy.eval(feed_dict={
                                     self._feature: batch_feature, self._label: batch_label})
                 print('step {}, training accuracy {}'.format(i, train_accuracy))
+                test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
+                test = sess.run(test_result, feed_dict={self._feature: batch_feature, self._label: batch_label})
+
 
 
     def _setup_optimization(self):
@@ -74,14 +71,16 @@ class MPSOptimizer(object):
         # First sweep 
         n1 = self.MPS.nodes.read(1)
         n1.set_shape([None, None, None, None])
+        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], summarize = 196, message = "optimizerStartedFirstSweep")
         C1s, C2, C1, n1 = self._one_sweep(n1, self.C1, self.C2, self.C2s)
         with tf.control_dependencies([C1]):
             self.MPS.nodes = self.updated_nodes
+
         # Second sweep
         a = tf.Print(self.updated_nodes.read(1), [self.updated_nodes.read(1)], message = "optimizerEndedFirstSweep")
         with tf.control_dependencies([a]):
+            self.C2s, self.C1, self.C2, _ = self._one_sweep(n1, C2, C1, C1s)
             self.MPS.nodes = self.updated_nodes
-            self.C2s, self.C2, self.C1, _ = self._one_sweep(n1, C2, C1, C1s)
 
         a = tf.Print(self.MPS.nodes.read(1), [self.MPS.nodes.read(1)], message = "optimizerTrainend")
         b = tf.Print(self.updated_nodes.read(1), [self.updated_nodes.read(1)], message = "optimizerTrainEndUpdatedNodes")
@@ -123,15 +122,13 @@ class MPSOptimizer(object):
 
                                                                                          
     def _find_C2(self, counter, prev_C2, C2s):
-        #prev_C2 = tf.Print(prev_C2, [prev_C2], "prev_C2")
+        
         loc2 = self.MPS.input_size - 2 - counter
         node2 = self.MPS.nodes.read(loc2)
         node2.set_shape([self.MPS.d_feature, None, None])
         contracted_node2 = tf.einsum('mij,tm->tij', node2, self._feature[loc2]) # CHECK einsum
-        #contracted_node2 = tf.Print(contracted_node2, [contracted_node2], message = "cnode_2")
         updated_counter = counter + 1
         new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
-        #new_C2 = tf.Print(new_C2, [new_C2], message = "new_C2")
         C2s = C2s.write(self.MPS.input_size-5-counter, new_C2)
         return [updated_counter, new_C2, C2s]
         
@@ -206,7 +203,7 @@ class MPSOptimizer(object):
         a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
         a_prime_j = tf.transpose(a_prime_j_mixed, perm=[1, 0, 2])
         a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[2, 1, 0, 3])
-        #a_prime_j = tf.Print(a_prime_j, [a_prime_j, a_prime_j1], message = "a_j, a_j1")
+
         return (a_prime_j, a_prime_j1)
 
 if __name__ == '__main__':
