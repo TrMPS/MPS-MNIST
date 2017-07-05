@@ -62,17 +62,18 @@ class MPS(object):
 
     def _setup_nodes(self):
         maxval = 2.005/self.d_matrix
-        self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
-                                    clear_after_read= False, infer_shape= False)
-        # First node
-        self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
-        # The Second node with output leg attached
-        self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
-        # The rest of the matrix nodes
-        for i in range(self.input_size - 3):
-            self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
-        # Last node
-        self.nodes = self.nodes.write(self.input_size-1, self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
+        with tf.name_scope("MPSnodes"):
+            self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
+                                        clear_after_read= False, infer_shape= False)
+            # First node
+            self.nodes = self.nodes.write(0, self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
+            # The Second node with output leg attached
+            self.nodes = self.nodes.write(1, self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
+            # The rest of the matrix nodes
+            for i in range(self.input_size - 3):
+                self.nodes = self.nodes.write(i+2, self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
+            # Last node
+            self.nodes = self.nodes.write(self.input_size-1, self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
 
     def _make_random_normal(self, shape, minval=0, maxval=1):
         return tf.Variable(tf.random_uniform(shape, minval=minval, maxval = maxval))

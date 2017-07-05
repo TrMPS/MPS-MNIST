@@ -6,8 +6,9 @@ from mps import MPS
 def list_from(tensorArray, length):
     arr = tensorArray
     result_list = []
-    for i in range(length):
-        result_list.append(arr.read(i))
+    with tf.name_scope("createlist"):
+        for i in range(length):
+            result_list.append(arr.read(i))
     return result_list
 
 class MPSOptimizer(object):
@@ -35,12 +36,14 @@ class MPSOptimizer(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
+            writer = tf.summary.FileWriter("output", sess.graph)
+            writer.close()
             for i in range(10):
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
                 print(batch_feature[0, 0])
                 print(batch_label[0])
                 test = sess.run(test_result, feed_dict={self._feature: batch_feature, self._label: batch_label})
-                print(test)
+                #print(test)
                 train_accuracy = accuracy.eval(feed_dict={
                                     self._feature: batch_feature, self._label: batch_label})
                 print('step {}, training accuracy {}'.format(i, train_accuracy))
@@ -75,13 +78,13 @@ class MPSOptimizer(object):
         with tf.control_dependencies([C1]):
             self.MPS.nodes = self.updated_nodes
         # Second sweep
-        a = tf.Print(self.updated_nodes.read(0), [self.updated_nodes.read(0)], summarize = 196, message = "optimizerEndedFirstSweep")
+        a = tf.Print(self.updated_nodes.read(1), [self.updated_nodes.read(1)], message = "optimizerEndedFirstSweep")
         with tf.control_dependencies([a]):
             self.MPS.nodes = self.updated_nodes
             self.C2s, self.C2, self.C1, _ = self._one_sweep(n1, C2, C1, C1s)
 
-        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], message = "optimizerTrainend")
-        b = tf.Print(self.updated_nodes.read(0), [self.updated_nodes.read(0)], message = "optimizerTrainEndUpdatedNodes")
+        a = tf.Print(self.MPS.nodes.read(1), [self.MPS.nodes.read(1)], message = "optimizerTrainend")
+        b = tf.Print(self.updated_nodes.read(1), [self.updated_nodes.read(1)], message = "optimizerTrainEndUpdatedNodes")
         # accuracy
         with tf.control_dependencies([a,b]):
             f = self.MPS.predict(self._feature)
@@ -91,7 +94,7 @@ class MPSOptimizer(object):
 
     def _one_sweep(self, n1, C1, C2, C2s):
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False, clear_after_read = False)
-        a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], message = "optimizerStartedOnesweep")
+        a = tf.Print(self.MPS.nodes.read(1), [self.MPS.nodes.read(1)], message = "optimizerStartedOnesweep")
         with tf.control_dependencies([a]):
             self.updated_nodes = self._make_new_nodes()
             wrapped = [0, C1, C2, C1s, C2s, self.updated_nodes, n1]
