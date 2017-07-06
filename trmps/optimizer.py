@@ -29,7 +29,7 @@ class MPSOptimizer(object):
                 self.rate_of_change = 0.1/(batch_size)
             self.feed_dict = None
             self.test = None
-            for i in range(10):
+            for i in range(1):
                 if self.test is not None:
                     self.MPS.load_nodes(self.test)
                     with open('weights', 'wb') as fp:
@@ -78,17 +78,15 @@ class MPSOptimizer(object):
 
     def train_step(self):
         # First sweep 
-        n1 = self.MPS.nodes.read(1)
-        n1.set_shape([None, None, None, None])
         a = tf.Print(self.MPS.nodes.read(0), [self.MPS.nodes.read(0)], summarize = 196, message = "optimizerStartedFirstSweep")
-        C1s, C2, C1, n1 = self._one_sweep(n1, self.C1, self.C2, self.C2s)
+        C1s, C2, C1 = self._one_sweep(self.C1, self.C2, self.C2s)
         with tf.control_dependencies([C1]):
             self.MPS.nodes = self.updated_nodes
 
         # Second sweep
         a = tf.Print(self.updated_nodes.read(1), [self.updated_nodes.read(1)], message = "optimizerEndedFirstSweep")
         with tf.control_dependencies([a]):
-            self.C2s, self.C1, self.C2, _ = self._one_sweep(n1, C2, C1, C1s)
+            self.C2s, self.C1, self.C2  = self._one_sweep(C2, C1, C1s)
             self.MPS.nodes = self.updated_nodes
 
         a = tf.Print(self.MPS.nodes.read(1), [self.MPS.nodes.read(1)], message = "optimizerTrainend")
@@ -100,33 +98,36 @@ class MPSOptimizer(object):
 
         return accuracy
 
-    def _one_sweep(self, n1, C1, C2, C2s):
+    def _one_sweep(self, C1, C2, C2s):
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False, clear_after_read = False)
-        a = tf.Print(self.MPS.nodes.read(1), [self.MPS.nodes.read(1)], message = "optimizerStartedOnesweep")
-        with tf.control_dependencies([a]):
-            self.updated_nodes = self._make_new_nodes()
-            wrapped = [0, C1, C2, C1s, C2s, self.updated_nodes, n1]
-            cond = lambda counter, b, c, d, e, f, g: tf.less(counter, self.MPS.input_size - 3)
-    
-            _, C1, C2, C1s, C2s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
-                                                                        parallel_iterations = 1,
-                                                                        shape_invariants=[tf.TensorShape([]),
-                                                                                          tf.TensorShape([None, None]),
-                                                                                          tf.TensorShape([None, None]),
-                                                                                          tf.TensorShape(None),
-                                                                                          tf.TensorShape(None),
-                                                                                          tf.TensorShape(None),
-                                                                                          tf.TensorShape([None, None, None, None])])
-            n1 = tf.transpose(n1, perm=[0, 1, 3, 2])
-            self.updated_nodes = self.updated_nodes.write(1, n1)
-        return (C1s, C2, C1, n1)
+        n1 = self.MPS.nodes.read(1)
+        n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
+
+
+        new_nodes = self._make_new_nodes(self.MPS.nodes)
+        wrapped = [0, C1, C1s, C2s, new_nodes, self.MPS.nodes, n1]
+        cond = lambda counter, b, c, d, e, f, g: tf.less(counter, self.MPS.input_size - 3)
+
+        _, C1, C1s, C2s, self.updated_nodes, _, n1 = tf.while_loop(cond=cond, body=self._update, loop_vars=wrapped,
+                                                                    parallel_iterations = 1,
+                                                                    shape_invariants=[tf.TensorShape([]),
+                                                                                      tf.TensorShape([None, None]),  
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape(None),
+                                                                                      tf.TensorShape([None, None, None, None])])
+        n1 = tf.transpose(n1, perm=[0, 1, 3, 2])
+        self.updated_nodes = self.updated_nodes.write(1, n1)
+        return (C1s, C2, C1)
 
 
 
-    def _make_new_nodes(self):
-        new_nodes = tf.TensorArray(tf.float32, size=self.MPS.input_size, dynamic_size=True, infer_shape=False, clear_after_read=False)
-        new_nodes = new_nodes.write(0, self.MPS.nodes.read(self.MPS.input_size-1))
-        new_nodes = new_nodes.write(self.MPS.input_size-1, self.MPS.nodes.read(0))
+    def _make_new_nodes(self, nodes):
+        size = nodes.size()
+        new_nodes = tf.TensorArray(tf.float32, size=size, dynamic_size=True, infer_shape=False, clear_after_read=False)
+        new_nodes = new_nodes.write(0, nodes.read(size-1))
+        new_nodes = new_nodes.write(size-1, nodes.read(0))
         return new_nodes
 
                                                                                          
@@ -142,34 +143,28 @@ class MPSOptimizer(object):
         return [updated_counter, new_C2, C2s]
         
         
-    def _update(self, counter, C1, C2, C1s, C2s, updated_nodes, previous_node):
+    def _update(self, counter, C1, C1s, C2s, updated_nodes, nodes, previous_node):
 
         # Read in the notes 
         n1 = previous_node
-        n2 = self.MPS.nodes.read(counter+2)
-        n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
+        n2 = nodes.read(counter+2)
         n2.set_shape([self.MPS.d_feature, None, None])
 
         # Calculate the bond 
         bond = tf.einsum('lmij,njk->lmnik', n1, n2)
-        #bond = tf.Print(bond, [bond], message = "bond")
 
         # Calculate the C matrix 
         C2 = C2s.read(counter)
         C2.set_shape([None,None])
-        #C2 = tf.Print(C2, [C2], message = "C2")
         C1s = C1s.write(counter, C1)
-        #C1 = tf.Print(C1, [C1], message = "C1")
         C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter+1])
-        #C = tf.Print(C, [C], message = "C")
 
         # Update the bond 
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
-        gradient = tf.einsum('tl,tmnik->lmnik', self._label - f, C)
+        f = tf.Print(f, [counter, f], message = 'counter, f')
+        gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
         label_bond = self.rate_of_change * gradient
         label_bond = tf.clip_by_value(label_bond, -(10**(-5)), 10**(-5))
-        #label_bond = tf.Print(label_bond, [label_bond, bond], message = "label_bond and bond")
-        #label_bond = tf.Print(label_bond, [label_bond], "label_bond")
         updated_bond = tf.add(bond, label_bond)
 
         # Decompose the bond 
@@ -183,7 +178,7 @@ class MPSOptimizer(object):
         C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
         updated_counter = counter+1 
 
-        return [updated_counter, C1, C2, C1s, C2s, updated_nodes, aj1]
+        return [updated_counter, C1, C1s, C2s, updated_nodes, nodes, aj1]
 
     def _bond_decomposition(self, bond, m):
         """
@@ -225,16 +220,13 @@ if __name__ == '__main__':
     d_matrix = 5
     d_output = 10
     rate_of_change = 10
-    batch_size = 1000
+    batch_size = 5
     bond_dim = 5
 
     data_source = preprocessing.MNISTData()
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
-    #with open('weights', 'rb') as fp:
-    #    weights = pickle.load(fp)
-    #    network.load_nodes(weights)
     feature, labels = data_source.next_training_data_batch(batch_size)
     network.test(feature, labels)
     optimizer = MPSOptimizer(network, bond_dim, None, rate_of_change = None)
