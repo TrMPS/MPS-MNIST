@@ -165,7 +165,7 @@ class MPSOptimizer(object):
 
         # Calculate the bond 
         #n1 = tf.Print(n1, [tf.shape(n1), tf.shape(n2)], "n1 and n2")
-        bond = tf.einsum('lmji,nkj->lnmki', n1, n2)
+        bond = tf.einsum('lmij,nkj->lnmik', n1, n2)
 
         # Calculate the C matrix 
         C2 = C2s.read(counter - 1)
@@ -299,20 +299,42 @@ class MPSOptimizer(object):
         return [updated_counter, new_C2, C2s]
         
         
-    def _bond_decomposition(self, bond, m):
+    def _bond_decomposition(self, bond, max_size, min_size = None, threshold = None):
         """
         Decomposes bond, so that the next step can be done.
         :param bond:
         :param m:
         :return:
         """
+        if threshold is None:
+            _threshold = 10**(-3)
+        else:
+            _threshold = threshold
+        if min_size is None:
+            _min_size = 3
+        else:
+            _min_size = min_size
         with tf.name_scope("bond_decomposition"):
             bond_reshaped = tf.transpose(bond, perm=[1, 3, 0, 2, 4])
             dims = tf.shape(bond_reshaped)
+            _threshold = 10**(-3)
             l_dim = dims[0] * dims[1]
             r_dim = dims[2] * dims[3] * dims[4]
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
+            
+            s= tf.Print(s, [s], message = "s", summarize = 1000)
+            cond = lambda counter, values, output: tf.logical_and(tf.logical_or(tf.greater(values[counter], _threshold), tf.less(counter, _min_size)),
+                                                                            tf.less(counter, max_size))
+            def body (counter, values, output):
+                output = output.write(counter, values[counter])
+                return (counter + 1, values, output)
+            
+            s_interim = tf.TensorArray(tf.float32, size=_min_size, dynamic_size = True, infer_shape=False, clear_after_read = False)
+            wrapped = [0, s, s_interim]
+            m, _, s_interim = tf.while_loop(cond = cond, body = body, loop_vars = wrapped)
+            s = s_interim.stack()
+            #s= tf.Print(s, [s], message = "s", summarize = 1000)
             
             # make s into a matrix
             s_mat = tf.diag(s[0:m])
@@ -327,6 +349,8 @@ class MPSOptimizer(object):
             sv = tf.matmul(s_mat, v_cropped)
             a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
             a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
+            
+            new_bond = tf.einsum('mij,lnjk->lmnik', a_prime_j, a_prime_j1)
 
         return (a_prime_j, a_prime_j1)
 

@@ -106,3 +106,5 @@ ENV/
 .mypy_cache/
 
 *.pyc
+
+trmps/weights
