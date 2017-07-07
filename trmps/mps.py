@@ -24,6 +24,8 @@ class MPS(object):
         self.d_matrix = d_matrix
         self.d_feature = d_feature
         self.d_output = d_output
+        self._special_node_loc = int(np.floor(self.input_size/2))
+        #self._special_node_loc = 1
 
         # Initialise the nodes
         self._setup_nodes()
@@ -40,8 +42,7 @@ class MPS(object):
         accuracy = self.accuracy(f, label)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            test_cost = sess.run(cost, {feature:test_feature, label:test_label})
-            test_accuracy = sess.run(accuracy, {feature:test_feature, label:test_label})
+            test_cost, test_accuracy = sess.run([cost, accuracy], {feature:test_feature, label:test_label})
             print(test_cost)
             print(test_accuracy)
 
@@ -70,7 +71,7 @@ class MPS(object):
         return accuracy
 
     def _setup_nodes(self):
-        maxval = 2.005/self.d_matrix
+        maxval = 2.1/self.d_matrix
         with tf.name_scope("MPSnodes"):
             self.nodes_list = []
             self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
@@ -79,24 +80,26 @@ class MPS(object):
             self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval),
                 shape = [self.d_feature, self.d_matrix]))
             self.nodes = self.nodes.write(0, self.nodes_list[-1])
-            # The Second node with output leg attached
-            self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
-                shape = [self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
-            self.nodes = self.nodes.write(1, self.nodes_list[-1])
-            # The rest of the matrix nodes
-            for i in range(self.input_size - 3):
-                self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
-                    shape = [self.d_feature, self.d_matrix, self.d_matrix]))
-                self.nodes = self.nodes.write(i+2, self.nodes_list[-1])
+
+            for i in range(1, self.input_size - 1):
+                if i == self._special_node_loc:
+                    # The Second node with output leg attached
+                    self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
+                        shape = [self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+                    self.nodes = self.nodes.write(i, self.nodes_list[-1])
+                else:
+                    self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
+                        shape = [self.d_feature, self.d_matrix, self.d_matrix]))
+                    self.nodes = self.nodes.write(i, self.nodes_list[-1])
+
             # Last node
             self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval),
-                shape = [self.d_feature, self.d_matrix]))
+            shape = [self.d_feature, self.d_matrix]))
             self.nodes = self.nodes.write(self.input_size-1, self.nodes_list[-1])
-
     def _make_random_normal(self, shape, minval=0, maxval=1):
         return tf.random_uniform(shape, minval=minval, maxval = maxval)
             
-    def predict(self, feature):
+    def predict_old(self, feature):
 
         # Read in feature 
         self.feature = feature
@@ -135,6 +138,48 @@ class MPS(object):
         counter = counter + 1 
         return [counter, C1]
 
+    def _chain_multiply_l(self, counter, C1):
+        node = self.nodes.read(counter)
+        node.set_shape([self.d_feature, None, None])
+        input_leg = self.feature[counter]
+        contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+        C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
+        counter = counter + 1 
+        return [counter, C1]
+
+    def predict(self, feature):
+        # Read in feature 
+        self.feature = feature
+
+        # Read in the nodes 
+        node1 = self.nodes.read(0)
+        node1.set_shape([self.d_feature, None])
+        sp_node = self.nodes.read(self._special_node_loc)
+        sp_node.set_shape([self.d_output, self.d_feature, None, None])
+        nodelast = self.nodes.read(self.input_size-1)
+        nodelast.set_shape([self.d_feature, None])
+
+        # Calculate C1 
+        C1 = tf.einsum('ni,tn->ti', node1, feature[0])
+        cond = lambda c, b: tf.less(c, self._special_node_loc)
+
+        counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_l, loop_vars=[1, C1], 
+                                        shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
+                                        parallel_iterations = 1)
+        contracted_node2 = tf.einsum('lnij,tn->tlij', sp_node, feature[self._special_node_loc])
+
+        C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
+
+        cond2 = lambda c,b: tf.less(c, self.input_size - 1)
+        _, C1 = tf.while_loop(cond=cond2, body=self._chain_multiply, loop_vars=[counter + 1, C1], 
+                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])],
+                            parallel_iterations = 1)
+
+        C2 = tf.einsum('mi,tm->ti', nodelast, feature[self.input_size-1])
+        f = tf.einsum('tli,ti->tl', C1, C2)
+        return f
+
+
 if __name__ == '__main__':
 
     # Model parameters
@@ -143,19 +188,18 @@ if __name__ == '__main__':
     d_matrix = 5
     d_output = 6
     rate_of_change = 0.2
-    batch_size = 10
+    batch_size = 1000
     m = 5
 
     # Make up input and output
     phi = np.random.normal(size=(input_size, batch_size, d_feature)).astype(np.float32)
 
     delta = np.zeros((batch_size, d_output))
-    delta[:5, 1] = 1 
-    delta[5:, 4] = 1
+    ind = int(batch_size/2)
+    delta[:ind, 1] = 1 
+    delta[ind:, 4] = 1
 
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size)
     network.test(phi, delta)
-    
-
 
