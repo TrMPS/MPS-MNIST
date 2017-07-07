@@ -25,12 +25,12 @@ class MPSOptimizer(object):
         self._setup_optimization()
         _ = self.train_step()
 
-    def train(self, data_source, batch_size):
+    def train(self, data_source, batch_size, n_step):
             if self.rate_of_change == None:
                 self.rate_of_change = 0.1/(batch_size)
             self.feed_dict = None
             self.test = None
-            for i in range(10):
+            for i in range(n_step):
                 if self.test is not None:
                     self.MPS.load_nodes(self.test)
                     with open('weights', 'wb') as fp:
@@ -61,6 +61,13 @@ class MPSOptimizer(object):
 
 
     def _setup_optimization(self):
+        '''
+        C1s: size = input_size - 3 
+        C2s: size = input_size - 3
+
+        writes C1 from 0 to special_loc-1 
+        writes C2 from 0 to input_size-special_loc-3 
+        '''
         feature = self._feature
         nodes = self.MPS.nodes
         special_loc = self.MPS._special_node_loc
@@ -71,24 +78,26 @@ class MPSOptimizer(object):
         nlast.set_shape([None,None])
 
         C1 = tf.einsum('ni,tn->ti', n1, feature[0])
-        C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-2, dynamic_size = True, infer_shape=False, clear_after_read = False)
+        C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False, clear_after_read = False)
         C1s = C1s.write(0, C1)
         cond = lambda c, *args: tf.less(c, special_loc)
-        _, self.C1, self.C1s = tf.while_loop(cond=cond, body=self._find_C1, loop_vars=[1, C1, C1s], 
+        _, _, self.C1s = tf.while_loop(cond=cond, body=self._find_C1, loop_vars=[1, C1, C1s], 
                                         shape_invariants=[tf.TensorShape([]), tf.TensorShape([None,None]), tf.TensorShape(None)],
                                         parallel_iterations = 1)
 
         C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False, clear_after_read = False)
-        self.C1 = tf.einsum('ni,tn->ti', n1, feature[0])
         C2 = tf.einsum('mi,tm->ti', nlast, feature[-1])
         C2s = C2s.write(self.MPS.input_size-4, C2)
-        cond = lambda counter, *args: tf.less(counter, input_size - special_loc - 3)
-        _, self.C2, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[0, C2, C2s], 
+        cond = lambda counter, *args: tf.less(counter, self.MPS.input_size-special_loc-2)
+        _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[1, C2, C2s], 
                                         shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]), 
                                         tf.TensorShape(None)])
 
 
     def _find_C1(self, counter, C1, C1s):
+        '''
+        finds new C1, and write into C1s[counter]
+        '''
         node = self.MPS.nodes.read(counter)
         node.set_shape([self.MPS.d_feature, None, None])
         input_leg = self._feature[counter]
@@ -97,6 +106,20 @@ class MPSOptimizer(object):
         C1s = C1s.write(counter, C1)
         counter = counter + 1 
         return [counter, C1, C1s]
+
+    def _find_C2(self, counter, prev_C2, C2s):
+        '''
+        finds new C2, and write into C2s[counter]
+        '''
+        loc2 = self.MPS.input_size - 1 - counter
+        node2 = self.MPS.nodes.read(loc2)
+        node2.set_shape([self.MPS.d_feature, None, None])
+        contracted_node2 = tf.einsum('mij,tm->tij', node2, self._feature[loc2]) # CHECK einsum
+        updated_counter = counter + 1
+        new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
+        C2s = C2s.write(self.MPS.input_size-4-counter, new_C2)
+        return [updated_counter, new_C2, C2s]
+
 
     def train_step(self):
         # Create updated_nodes and fill in the first half from current one
@@ -285,19 +308,7 @@ class MPSOptimizer(object):
         old_node = old_nodes.read(index)
         new_nodes = new_nodes.write(index, old_node)
         index += 1
-        return (index, old_nodes, new_nodes)
-
-    def _find_C2(self, counter, prev_C2, C2s):
-        
-        loc2 = self.MPS.input_size - 2 - counter
-        node2 = self.MPS.nodes.read(loc2)
-        node2.set_shape([self.MPS.d_feature, None, None])
-        contracted_node2 = tf.einsum('mij,tm->tij', node2, self._feature[loc2]) # CHECK einsum
-        updated_counter = counter + 1
-        new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
-        C2s = C2s.write(self.MPS.input_size-5-counter, new_C2)
-        return [updated_counter, new_C2, C2s]
-        
+        return (index, old_nodes, new_nodes)        
         
     def _bond_decomposition(self, bond, max_size, min_size = None, threshold = None):
         """
@@ -358,22 +369,22 @@ if __name__ == '__main__':
     # Model parameters
     input_size = 196
     d_feature = 2
-    d_matrix = 5
     d_output = 10
     batch_size = 1000
-    bond_dim = 5
+    bond_dim = 50
     init_param = 1.9
     rate_of_change = 1
     cutoff = 10 ** (-4)
+    n_step = 10
 
     data_source = preprocessing.MNISTData()
 
     # Initialise the model
-    network = MPS(d_matrix, d_feature, d_output, input_size, init_param)
+    network = MPS(bond_dim, d_feature, d_output, input_size, init_param)
     #feature, labels = data_source.next_training_data_batch(batch_size)
     #network.test(feature, labels)
     optimizer = MPSOptimizer(network, bond_dim, None, rate_of_change=rate_of_change, cutoff=cutoff)
-    optimizer.train(data_source, batch_size)
+    optimizer.train(data_source, batch_size, n_step)
 
 
 
