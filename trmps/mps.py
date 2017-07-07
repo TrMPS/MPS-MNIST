@@ -17,7 +17,7 @@ class MPS(object):
         feature: tf.Tensor of shape (intput_size, batch_size, d_output)
     '''
 
-    def __init__(self, d_matrix, d_feature, d_output, input_size):
+    def __init__(self, d_matrix, d_feature, d_output, input_size, init_param):
         
         # structure parameters
         self.input_size = input_size
@@ -25,7 +25,7 @@ class MPS(object):
         self.d_feature = d_feature
         self.d_output = d_output
         self._special_node_loc = int(np.floor(self.input_size/2))
-        #self._special_node_loc = 1
+        self.init_param = init_param
 
         # Initialise the nodes
         self._setup_nodes()
@@ -71,7 +71,7 @@ class MPS(object):
         return accuracy
 
     def _setup_nodes(self):
-        maxval = 2.1/self.d_matrix
+        maxval = self.init_param/self.d_matrix
         with tf.name_scope("MPSnodes"):
             self.nodes_list = []
             self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
@@ -190,6 +190,7 @@ if __name__ == '__main__':
     rate_of_change = 0.2
     batch_size = 1000
     m = 5
+    init_param = 2.0
 
     # Make up input and output
     phi = np.random.normal(size=(input_size, batch_size, d_feature)).astype(np.float32)
@@ -200,6 +201,6 @@ if __name__ == '__main__':
     delta[ind:, 4] = 1
 
     # Initialise the model
-    network = MPS(d_matrix, d_feature, d_output, input_size)
+    network = MPS(d_matrix, d_feature, d_output, input_size, init_param)
     network.test(phi, delta)
 
