@@ -76,25 +76,22 @@ class MPS(object):
             self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
                                         clear_after_read= False, infer_shape= False)
             # First node
-            self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval),
-                shape = [self.d_feature, self.d_matrix]))
+            self.nodes_list.append(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
             self.nodes = self.nodes.write(0, self.nodes_list[-1])
 
             for i in range(1, self.input_size - 1):
                 if i == self._special_node_loc:
                     # The Second node with output leg attached
-                    self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
-                        shape = [self.d_output, self.d_feature, self.d_matrix, self.d_matrix]))
+                    self.nodes_list.append(self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
                 else:
-                    self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
-                        shape = [self.d_feature, self.d_matrix, self.d_matrix]))
+                    self.nodes_list.append(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval))
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
 
             # Last node
-            self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval),
-            shape = [self.d_feature, self.d_matrix]))
+            self.nodes_list.append(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval))
             self.nodes = self.nodes.write(self.input_size-1, self.nodes_list[-1])
+
     def _make_random_normal(self, shape, minval=0, maxval=1):
         return tf.random_uniform(shape, minval=minval, maxval = maxval)
             

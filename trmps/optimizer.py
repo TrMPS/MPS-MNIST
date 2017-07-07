@@ -54,8 +54,6 @@ class MPSOptimizer(object):
                     self.test = sess.run(test_result, feed_dict=self.feed_dict)
                     #print(self.test)
                     self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
-                    for index, element in enumerate(self.test):
-                        self.feed_dict[self.MPS.nodes_list[index]] = element
                     #train_accuracy = accuracy.eval(feed_dict=self.feed_dict)
                     #print('step {}, training accuracy {}'.format(i, train_accuracy))
 
