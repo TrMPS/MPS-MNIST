@@ -48,12 +48,14 @@ class MPSOptimizer(object):
                     cost = self.MPS.cost(f, self._label)
                     train_accuracy, prediction = sess.run([cost,f] ,feed_dict=self.feed_dict)
                     print('step {}, training accuracy {}'.format(i, train_accuracy))
-                    print(prediction[0])
+                    print("prediction:" + str(prediction[0]))
     
                     test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
                     self.test = sess.run(test_result, feed_dict=self.feed_dict)
-                    #print(self.test)
+                    print(self.test[0])
                     self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
+                    for index, element in enumerate(self.test):
+                        self.feed_dict[self.MPS.nodes_list[index]] = element
                     #train_accuracy = accuracy.eval(feed_dict=self.feed_dict)
                     #print('step {}, training accuracy {}'.format(i, train_accuracy))
 
@@ -191,7 +193,7 @@ class MPSOptimizer(object):
         # Update the bond 
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
         cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
-        cost = tf.Print(cost, [counter, cost])
+        #cost = tf.Print(cost, [counter, cost])
 
         with tf.control_dependencies([cost]):   
             gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
@@ -254,7 +256,7 @@ class MPSOptimizer(object):
         # Update the bond 
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
         cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
-        cost = tf.Print(cost, [counter, cost])
+        #cost = tf.Print(cost, [counter, cost])
 
         with tf.control_dependencies([cost]):   
             gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
@@ -360,12 +362,12 @@ if __name__ == '__main__':
     d_feature = 2
     d_output = 10
     batch_size = 1000
-    bond_dim = 10
+    bond_dim = 5
     init_param = 1.9
-    rate_of_change = 100
+    rate_of_change = 10
 
     cutoff = 10 ** (-4)
-    n_step = 2
+    n_step = 10
 
     data_source = preprocessing.MNISTData()
 
@@ -376,7 +378,7 @@ if __name__ == '__main__':
     #    network.load_nodes(weights)
     #feature, labels = data_source.next_training_data_batch(batch_size)
     #network.test(feature, labels)
-    optimizer = MPSOptimizer(network, 100, None, rate_of_change=rate_of_change, cutoff=cutoff)
+    optimizer = MPSOptimizer(network, 5, None, rate_of_change=rate_of_change, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step)
 
 
