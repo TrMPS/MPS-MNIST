@@ -1,4 +1,4 @@
-import tensorflow as tf
+import tensorflow as tf 
 import numpy as np
 
 '''
@@ -99,11 +99,9 @@ class MPS(object):
         return tf.random_uniform(shape, minval=minval, maxval = maxval)
             
     def predict_old(self, feature):
-
-        # Read in feature
         self.feature = feature
 
-        # Read in the nodes
+        # Read in the nodes 
         node1 = self.nodes.read(0)
         node1.set_shape([self.d_feature, None])
         node2 = self.nodes.read(1)
@@ -112,7 +110,7 @@ class MPS(object):
         nodelast = self.nodes.read(self.input_size-1)
         nodelast.set_shape([self.d_feature, None])
 
-        # Calculate C1
+        # Calculate C1 
         C1 = tf.einsum('ni,tn->ti', node1, feature[0])
         contracted_node2 = tf.einsum('lnij,tn->tlij', node2, feature[1])
         C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
@@ -121,12 +119,12 @@ class MPS(object):
         C2 = tf.einsum('mi,tm->ti', nodelast, feature[self.input_size-1])
 
         #counter = tf.Variable(2, dtype=tf.int32)
-        counter = 2
+        counter = 2 
         cond = lambda c, b: tf.less(c, self.input_size-1)
-        _, C1 = tf.while_loop(cond=cond, body=self._chain_multiply, loop_vars=[counter, C1],
+        _, C1 = tf.while_loop(cond=cond, body=self._chain_multiply, loop_vars=[counter, C1], 
                                         shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])])
         f = tf.einsum('tli,ti->tl', C1, C2)
-        return f
+        return f 
 
     def _chain_multiply(self, counter, C1):
         node = self.nodes.read(counter)
@@ -134,7 +132,7 @@ class MPS(object):
         input_leg = self.feature[counter]
         contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
         C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
-        counter = counter + 1
+        counter = counter + 1 
         return [counter, C1]
 
     def _chain_multiply_l(self, counter, C1):
@@ -202,3 +200,4 @@ if __name__ == '__main__':
     # Initialise the model
     network = MPS(d_matrix, d_feature, d_output, input_size, init_param)
     network.test(phi, delta)
+

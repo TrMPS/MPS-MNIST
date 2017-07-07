@@ -30,6 +30,7 @@ class MPSOptimizer(object):
                 self.rate_of_change = 0.1/(batch_size)
             self.feed_dict = None
             self.test = None
+
             for i in range(n_step):
                 if self.test is not None:
                     self.MPS.load_nodes(self.test)
@@ -134,10 +135,8 @@ class MPSOptimizer(object):
         # First back-sweep
         self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, 0, 0)
         self.updated_nodes = self._backwards_sweep()
-        a = tf.Print(self.updated_nodes.read(1), [self.updated_nodes.read(1)], message = "optimizerEndedBackSweep")
-        with tf.control_dependencies([a]):
-            self.MPS.nodes = self.updated_nodes
-            self.MPS._special_node_loc = 1
+        self.MPS.nodes = self.updated_nodes
+        self.MPS._special_node_loc = 1
 #
         # Second half-sweep
         self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, original_special_node_loc + 1, self.MPS.nodes.size() + 10)
@@ -145,10 +144,8 @@ class MPSOptimizer(object):
         self.C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-2, dynamic_size = True, infer_shape=False, clear_after_read = False)
         self.C1s = self.C1s.write(0, C1)
         self.updated_nodes = self._sweep_right(1, original_special_node_loc)
-        a = tf.Print(self.updated_nodes.read(1), [self.updated_nodes.read(1)], message = "optimizerEndedFinalHalfSweep")
-        with tf.control_dependencies([a]):
-            self.MPS.nodes = self.updated_nodes
-            self.MPS._special_node_loc = original_special_node_loc
+        self.MPS.nodes = self.updated_nodes
+        self.MPS._special_node_loc = original_special_node_loc
 ##
         # accuracy
         f = self.MPS.predict(self._feature)
@@ -313,7 +310,7 @@ class MPSOptimizer(object):
         index += 1
         return (index, old_nodes, new_nodes)        
         
-    def _bond_decomposition(self, bond, max_size, min_size = None, threshold = None):
+    def _bond_decomposition(self, bond, max_size, min_size=None, threshold=None):
         """
         Decomposes bond, so that the next step can be done.
         :param bond:
@@ -325,39 +322,29 @@ class MPSOptimizer(object):
         else:
             _threshold = threshold
         if min_size is None:
-            _min_size = 3
+            min_size = 3
         else:
-            _min_size = min_size
+            min_size = min_size
         with tf.name_scope("bond_decomposition"):
             bond_reshaped = tf.transpose(bond, perm=[1, 3, 0, 2, 4])
             dims = tf.shape(bond_reshaped)
-            # _threshold = 10**(-3)
             l_dim = dims[0] * dims[1]
             r_dim = dims[2] * dims[3] * dims[4]
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
             
-            s_size = tf.shape(s)[0]
-            max_size = tf.minimum(s_size, max_size)
-            max_size = tf.Print(max_size, [max_size, tf.shape(s), _min_size], message = "sizes")
-            #s= tf.Print(s, [s], message = "s", summarize = 1000)
-            cond = lambda counter, values, output: tf.logical_and(tf.logical_or(tf.greater(values[counter], _threshold), tf.less(counter, _min_size)),
-                                                                            tf.less(counter, max_size - 1))
-            def body (counter, values, output):
-                output = output.write(counter, values[counter])
-                return (counter + 1, values, output)
+            filtered_s = tf.boolean_mask(s, tf.greater(s, _threshold))
+            s_size = tf.size(filtered_s)
             
-            s_interim = tf.TensorArray(tf.float32, size=_min_size, dynamic_size = True, infer_shape=False, clear_after_read = False)
-            wrapped = [0, s, s_interim]
-            m, _, s_interim = tf.while_loop(cond = cond, body = body, loop_vars = wrapped)
-            s = s_interim.stack()
-            #s= tf.Print(s, [s], message = "s", summarize = 1000)
+            case1 = lambda : min_size 
+            case2 = lambda : max_size
+            case3 = lambda : s_size
+            m = tf.case({tf.less(s_size, min_size): case1, tf.greater(s_size, max_size): case2}, default=case3, exclusive=True)
             
             # make s into a matrix
             s_mat = tf.diag(s[0:m])
             
             # make u, v into suitable matrices
-            s_size = tf.size(s)
             u_cropped = u[:, 0:m] 
             v_cropped = tf.transpose(v[:, 0:m])
             
@@ -378,8 +365,9 @@ if __name__ == '__main__':
     bond_dim = 10
     init_param = 1.9
     rate_of_change = 100
+
     cutoff = 10 ** (-4)
-    n_step = 10
+    n_step = 2
 
     data_source = preprocessing.MNISTData()
 
