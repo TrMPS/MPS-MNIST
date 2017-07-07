@@ -35,7 +35,6 @@ class MPSOptimizer(object):
                     self.MPS.load_nodes(self.test)
                     with open('weights', 'wb') as fp:
                         pickle.dump(self.test, fp)
-                    print(self.test[-5])
                 with tf.Session() as sess:
                     sess.run(tf.global_variables_initializer())
     
@@ -46,8 +45,9 @@ class MPSOptimizer(object):
                     self.feed_dict[self._label] = batch_label
                     f = self.MPS.predict(self._feature)
                     cost = self.MPS.cost(f, self._label)
-                    train_accuracy = cost.eval(feed_dict=self.feed_dict)
+                    train_accuracy, prediction = sess.run([cost,f] ,feed_dict=self.feed_dict)
                     print('step {}, training accuracy {}'.format(i, train_accuracy))
+                    print(prediction[0])
     
                     test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
                     self.test = sess.run(test_result, feed_dict=self.feed_dict)
@@ -337,9 +337,12 @@ class MPSOptimizer(object):
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
             
+            s_size = tf.shape(s)[0]
+            max_size = tf.minimum(s_size, max_size)
+            max_size = tf.Print(max_size, [max_size, tf.shape(s), _min_size], message = "sizes")
             #s= tf.Print(s, [s], message = "s", summarize = 1000)
             cond = lambda counter, values, output: tf.logical_and(tf.logical_or(tf.greater(values[counter], _threshold), tf.less(counter, _min_size)),
-                                                                            tf.less(counter, max_size))
+                                                                            tf.less(counter, max_size - 1))
             def body (counter, values, output):
                 output = output.write(counter, values[counter])
                 return (counter + 1, values, output)
@@ -372,9 +375,9 @@ if __name__ == '__main__':
     d_feature = 2
     d_output = 10
     batch_size = 1000
-    bond_dim = 5
+    bond_dim = 10
     init_param = 1.9
-    rate_of_change = 1
+    rate_of_change = 100
     cutoff = 10 ** (-4)
     n_step = 10
 
@@ -382,9 +385,12 @@ if __name__ == '__main__':
 
     # Initialise the model
     network = MPS(bond_dim, d_feature, d_output, input_size, init_param)
+    #with open('weights', 'rb') as fp:
+    #    weights = pickle.load(fp)
+    #    network.load_nodes(weights)
     #feature, labels = data_source.next_training_data_batch(batch_size)
     #network.test(feature, labels)
-    optimizer = MPSOptimizer(network, bond_dim, None, rate_of_change=rate_of_change, cutoff=cutoff)
+    optimizer = MPSOptimizer(network, 100, None, rate_of_change=rate_of_change, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step)
 
 
