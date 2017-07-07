@@ -119,18 +119,19 @@ class MNISTData(object):
         labels = None
         all_data, all_labels = self.training_data
         while batch_size > 0:
-            if len(all_data) - self.current_index < batch_size:
-                # print("A" + str(self.current_index))
+            if len(all_data) - self.current_index  < batch_size:
+                #print("A" + str(self.current_index))
                 batch_size -= (len(all_data) - self.current_index)
+                if self.current_index != len(all_data):
+                    if data is None:
+                        data = np.array(all_data[self.current_index:])
+                        labels = np.array(all_labels[self.current_index:])
+                    else:
+                        data = np.concatenate((data, all_data[self.current_index:]), axis = 0)
+                        labels = np.concatenate((labels, all_labels[self.current_index:]), axis = 0)
                 self.current_index = 0
-                if data is None:
-                    data = np.array(all_data[self.current_index:])
-                    labels = np.array(all_labels[self.current_index:])
-                else:
-                    data = np.concatenate((data, all_data[self.current_index:]), axis = 0)
-                    labels = np.concatenate((labels, all_labels[self.current_index:]), axis = 0)
             else:
-                # print("B" + str(self.current_index))
+                #print("B" + str(self.current_index))
                 if data is None:
                     data = all_data[self.current_index:self.current_index + batch_size]
                     labels = np.array(all_labels[self.current_index:self.current_index + batch_size])
@@ -146,8 +147,11 @@ class MNISTData(object):
 if __name__ == "__main__":
     # If main, processes the images and also prints the number of images
     data_source = MNISTData()
-    data, labels = data_source.next_training_data_batch(500)
-    data, labels = data_source.next_training_data_batch(500)
-    data, labels = data_source.next_training_data_batch(500)
+    data, labels = data_source.next_training_data_batch(1000)
+    print(len(labels))
+    data, labels = data_source.next_training_data_batch(1000)
+    print(len(labels))
+    data, labels = data_source.next_training_data_batch(1000)
+    print(len(labels))
     data, labels = data_source.next_training_data_batch(500)
 
