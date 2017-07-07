@@ -78,14 +78,14 @@ class MPSOptimizer(object):
         nlast.set_shape([None,None])
 
         C1 = tf.einsum('ni,tn->ti', n1, feature[0])
-        C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False, clear_after_read = False)
+        C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-2, infer_shape=False, clear_after_read = False)
         C1s = C1s.write(0, C1)
         cond = lambda c, *args: tf.less(c, special_loc)
         _, _, self.C1s = tf.while_loop(cond=cond, body=self._find_C1, loop_vars=[1, C1, C1s], 
                                         shape_invariants=[tf.TensorShape([]), tf.TensorShape([None,None]), tf.TensorShape(None)],
                                         parallel_iterations = 1)
 
-        C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size-3, infer_shape=False, clear_after_read = False)
+        C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size-2, infer_shape=False, clear_after_read = False)
         C2 = tf.einsum('mi,tm->ti', nlast, feature[-1])
         C2s = C2s.write(self.MPS.input_size-4, C2)
         cond = lambda counter, *args: tf.less(counter, self.MPS.input_size-special_loc-2)
@@ -334,7 +334,7 @@ class MPSOptimizer(object):
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
             
-            s= tf.Print(s, [s], message = "s", summarize = 1000)
+            #s= tf.Print(s, [s], message = "s", summarize = 1000)
             cond = lambda counter, values, output: tf.logical_and(tf.logical_or(tf.greater(values[counter], _threshold), tf.less(counter, _min_size)),
                                                                             tf.less(counter, max_size))
             def body (counter, values, output):
@@ -371,7 +371,7 @@ if __name__ == '__main__':
     d_feature = 2
     d_output = 10
     batch_size = 1000
-    bond_dim = 50
+    bond_dim = 5
     init_param = 1.9
     rate_of_change = 1
     cutoff = 10 ** (-4)

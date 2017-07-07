@@ -108,3 +108,5 @@ ENV/
 *.pyc
 
 trmps/weights
+
+trmps/weights
