@@ -32,6 +32,7 @@ class MPSOptimizer(object):
             self.test = None
             f = self.MPS.predict(self._feature)
             cost = self.MPS.cost(f, self._label)
+            accuracy = self.MPS.accuracy(f, self._label)
             test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
 
             with tf.Session() as sess:
@@ -47,8 +48,8 @@ class MPSOptimizer(object):
                         self.feed_dict={self._feature: batch_feature, self._label: batch_label}
                     self.feed_dict[self._feature] = batch_feature
                     self.feed_dict[self._label] = batch_label
-                    train_accuracy, prediction, self.test = sess.run([cost,f, test_result], feed_dict=self.feed_dict)
-                    print('step {}, training cost {}'.format(i, train_accuracy))
+                    train_cost, prediction, self.test, train_accuracy= sess.run([cost,f, test_result, accuracy], feed_dict=self.feed_dict)
+                    print('step {}, training cost {}, accuracy {}'.format(i, train_cost, train_accuracy))
                     print("prediction:" + str(prediction[0]))
     
                     print(self.test[0])
@@ -186,15 +187,21 @@ class MPSOptimizer(object):
         C2.set_shape([None,None])
         C1 = C1s.read(counter-2)
         C1.set_shape([None,None])
+        #C_a = tf.einsum('ti,tk->tik', C2, C1)
+        #C_b = tf.einsum('tik,tm->tmik', C_a, self._feature[counter])
+        #C = tf.einsum('tmik,tn->tmnik',C_b, self._feature[counter-1])
         C = tf.einsum('ti,tk,tm,tn->tmnik', C2, C1, self._feature[counter], self._feature[counter-1])
+        #C = tf.Print(C, [C, C1, C2], message = "C, C1, C2")
 
         # Update the bond 
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
+        #f = tf.Print(f, [f], message = "f")
         cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
         #cost = tf.Print(cost, [counter, cost])
 
         with tf.control_dependencies([cost]):   
             gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
+            #gradient = tf.Print(gradient, [gradient,bond], message = "gradient&bond:")
             label_bond = self.rate_of_change * gradient
 
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
@@ -203,6 +210,12 @@ class MPSOptimizer(object):
         #label_bond = tf.add(label_bond, random_part)
         #label_bond = tf.Print(label_bond, [counter, label_bond , gradient], "label_bond")
         updated_bond = tf.add(bond, label_bond)
+
+        f1 = tf.einsum('lmnik,tmnik->tl', updated_bond, C)
+        cost1 = 0.5 * tf.einsum('tl,tl->', f1-self._label, f1-self._label)
+        cond_change_bond = tf.less(cost1, cost)
+        #cond_change_bond = tf.Print(cond_change_bond, [counter, cond_change_bond, cost, cost1])
+        updated_bond = tf.cond(cond_change_bond, true_fn = (lambda: tf.Print(updated_bond, [counter, updated_bond, label_bond])), false_fn = (lambda: bond))
 
         # Decompose the bond 
         aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
@@ -251,15 +264,21 @@ class MPSOptimizer(object):
         C2.set_shape([None, None])
         C1.set_shape([None, None])
         #C1 = tf.Print(C1, [counter, C1, C2], message = "C1&C2")
+        #C_a = tf.einsum('ti,tk->tik', C1, C2)
+        #C_b = tf.einsum('tik,tm->tmik', C_a, self._feature[counter])
+        #C = tf.einsum('tmik,tn->tmnik', C_b, self._feature[counter+1])
         C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter+1])
+        #C = tf.Print(C, [C, C1, C2], message = "C, C1, C2")
 
         # Update the bond 
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
+        #f = tf.Print(f, [f], message = "f")
         cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
         #cost = tf.Print(cost, [counter, cost])
 
         with tf.control_dependencies([cost]):   
             gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
+            #gradient = tf.Print(gradient, [gradient, bond], message = "gradient&bond:")
             label_bond = self.rate_of_change * gradient
             
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
@@ -268,6 +287,11 @@ class MPSOptimizer(object):
         #label_bond = tf.add(label_bond, random_part)
         #label_bond = tf.Print(label_bond, [counter, label_bond , gradient], "label_bond")
         updated_bond = tf.add(bond, label_bond)
+        f1 = tf.einsum('lmnik,tmnik->tl', updated_bond, C)
+        cost1 = 0.5 * tf.einsum('tl,tl->', f1-self._label, f1-self._label)
+        cond_change_bond = tf.less(cost1, cost)
+        #cond_change_bond = tf.Print(cond_change_bond, [counter, cond_change_bond, cost, cost1])
+        updated_bond = tf.cond(cond_change_bond, true_fn = (lambda: tf.Print(updated_bond, [counter, updated_bond, label_bond])), false_fn = (lambda: bond))
 
         # Decompose the bond 
         aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
@@ -354,6 +378,7 @@ class MPSOptimizer(object):
             sv = tf.matmul(s_mat, v_cropped)
             a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
             a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
+            #a_prime_j1 = tf.Print(a_prime_j1, [a_prime_j, a_prime_j1], message = "aj,aj1")
 
         return (a_prime_j, a_prime_j1)
 
@@ -365,10 +390,10 @@ if __name__ == '__main__':
     batch_size = 1000
     bond_dim = 3
     init_param = 1.9
-    rate_of_change = 1
+    rate_of_change = (10)
 
     cutoff = 10 ** (-1)
-    n_step = 10
+    n_step = 1000
 
     data_source = preprocessing.MNISTData()
 
@@ -379,7 +404,7 @@ if __name__ == '__main__':
     #    network.load_nodes(weights)
     #feature, labels = data_source.next_training_data_batch(batch_size)
     #network.test(feature, labels)
-    optimizer = MPSOptimizer(network, 5, None, rate_of_change=rate_of_change, cutoff=cutoff)
+    optimizer = MPSOptimizer(network, 7, None, rate_of_change=rate_of_change, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step)
 
 
