@@ -198,7 +198,7 @@ class MPSOptimizer(object):
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
         #f = tf.Print(f, [f], message = "f")
         cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
-        cost = tf.Print(cost, [counter, cost])
+        #cost = tf.Print(cost, [counter, cost])
 
         with tf.control_dependencies([cost]):   
             gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
@@ -212,7 +212,7 @@ class MPSOptimizer(object):
         cost1 = 0.5 * tf.einsum('tl,tl->', f1-self._label, f1-self._label)
         cond_change_bond = tf.less(cost1, cost)
         #cond_change_bond = tf.Print(cond_change_bond, [counter, cond_change_bond, cost, cost1])
-        updated_bond = tf.cond(cond_change_bond, true_fn = (lambda: tf.Print(updated_bond, [counter, updated_bond, label_bond])), false_fn = (lambda: bond))
+        updated_bond = tf.cond(cond_change_bond, true_fn = (lambda: updated_bond), false_fn = (lambda: bond))
 
         # Decompose the bond 
         aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
@@ -250,7 +250,7 @@ class MPSOptimizer(object):
         n1 = previous_node
         n2 = nodes.read(counter+1)
         n2.set_shape([self.MPS.d_feature, None, None])
-        n1 = tf.Print(n1, [n1[1, 1]])
+        #n1 = tf.Print(n1, [n1[1, 1]])
         # Calculate the bond 
         bond = tf.einsum('lmij,njk->lmnik', n1, n2)
 
@@ -270,7 +270,7 @@ class MPSOptimizer(object):
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
         #f = tf.Print(f, [f], message = "f")
         cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
-        cost = tf.Print(cost, [counter, cost])
+        #cost = tf.Print(cost, [counter, cost])
 
         with tf.control_dependencies([cost]):   
             gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
@@ -283,7 +283,7 @@ class MPSOptimizer(object):
         cost1 = 0.5 * tf.einsum('tl,tl->', f1-self._label, f1-self._label)
         cond_change_bond = tf.less(cost1, cost)
         #cond_change_bond = tf.Print(cond_change_bond, [counter, cond_change_bond, cost, cost1])
-        updated_bond = tf.cond(cond_change_bond, true_fn = (lambda: tf.Print(updated_bond, [counter, updated_bond, label_bond])), false_fn = (lambda: bond))
+        updated_bond = tf.cond(cond_change_bond, true_fn = (lambda: updated_bond), false_fn = (lambda: bond))
 
         # Decompose the bond 
         aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
@@ -349,7 +349,7 @@ class MPSOptimizer(object):
             r_dim = dims[2] * dims[3] * dims[4]
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
-            s = tf.Print(s, [tf.reduce_max(s)], message='largest singular value')
+            #s = tf.Print(s, [tf.reduce_max(s)], message='largest singular value')
             
             filtered_s = tf.boolean_mask(s, tf.greater(s, _threshold))
             s_size = tf.size(filtered_s)
@@ -382,12 +382,12 @@ if __name__ == '__main__':
     d_output = 10
     batch_size = 1000
 
-    bond_dim = 10
-    max_size = 10
-    rate_of_change = 10000
+    bond_dim = 3
+    max_size = 8
+    rate_of_change = 1000
 
-    cutoff = 10 ** (-4)
-    n_step = 3
+    cutoff = 10 ** (-1)
+    n_step = 500
 
     data_source = preprocessing.MNISTData()
 
