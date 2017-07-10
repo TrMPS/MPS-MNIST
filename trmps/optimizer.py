@@ -30,13 +30,16 @@ class MPSOptimizer(object):
                 self.rate_of_change = 0.1/(batch_size)
             self.feed_dict = None
             self.test = None
+            f = self.MPS.predict(self._feature)
+            cost = self.MPS.cost(f, self._label)
+            test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
 
-            for i in range(n_step):
-                if self.test is not None:
-                    self.MPS.load_nodes(self.test)
-                    with open('weights', 'wb') as fp:
-                        pickle.dump(self.test, fp)
-                with tf.Session() as sess:
+            with tf.Session() as sess:
+                for i in range(n_step):
+                    if self.test is not None:
+                        #self.MPS.load_nodes(self.test)
+                        with open('weights', 'wb') as fp:
+                            pickle.dump(self.test, fp)
                     sess.run(tf.global_variables_initializer())
     
                     (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
@@ -44,14 +47,10 @@ class MPSOptimizer(object):
                         self.feed_dict={self._feature: batch_feature, self._label: batch_label}
                     self.feed_dict[self._feature] = batch_feature
                     self.feed_dict[self._label] = batch_label
-                    f = self.MPS.predict(self._feature)
-                    cost = self.MPS.cost(f, self._label)
-                    train_accuracy, prediction = sess.run([cost,f] ,feed_dict=self.feed_dict)
-                    print('step {}, training accuracy {}'.format(i, train_accuracy))
+                    train_accuracy, prediction, self.test = sess.run([cost,f, test_result], feed_dict=self.feed_dict)
+                    print('step {}, training cost {}'.format(i, train_accuracy))
                     print("prediction:" + str(prediction[0]))
     
-                    test_result = list_from(self.updated_nodes, length = self.MPS.input_size)
-                    self.test = sess.run(test_result, feed_dict=self.feed_dict)
                     print(self.test[0])
                     self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
                     for index, element in enumerate(self.test):
@@ -75,9 +74,6 @@ class MPSOptimizer(object):
 
         n1 = nodes.read(0)
         n1.set_shape([None,None])
-        nlast = nodes.read(nodes.size() - 1)
-        nlast.set_shape([None,None])
-
         C1 = tf.einsum('ni,tn->ti', n1, feature[0])
         C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-2, infer_shape=False, clear_after_read = False)
         C1s = C1s.write(0, C1)
@@ -86,6 +82,9 @@ class MPSOptimizer(object):
                                         shape_invariants=[tf.TensorShape([]), tf.TensorShape([None,None]), tf.TensorShape(None)],
                                         parallel_iterations=1)
 
+
+        nlast = nodes.read(nodes.size() - 1)
+        nlast.set_shape([None,None])
         C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size-2, infer_shape=False, clear_after_read = False)
         C2 = tf.einsum('mi,tm->ti', nlast, feature[-1])
         C2s = C2s.write(self.MPS.input_size-3, C2)
@@ -169,7 +168,6 @@ class MPSOptimizer(object):
         counter, self.C1s, self.C2s, self.updated_nodes, _, n1 = tf.while_loop(cond = cond, body = self._update_left, loop_vars = wrapped,
                                                                         shape_invariants = shape_invariants,
                                                                          parallel_iterations = 1)
-        counter = tf.Print(counter, [counter], message = "counter at end of backsweep")
         with tf.control_dependencies([counter]):
             self.updated_nodes = self.updated_nodes.write(1, n1)
         return self.updated_nodes
@@ -201,8 +199,9 @@ class MPSOptimizer(object):
 
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
         #label_bond = tf.Print(label_bond, [label_bond], message = "label_bond")
-        random_part = tf.random_uniform(tf.shape(label_bond), minval=-(self.cutoff/10), maxval = self.cutoff/10)
-        label_bond = tf.add(label_bond, random_part)
+        #random_part = tf.random_uniform(tf.shape(label_bond), minval=-(self.cutoff/10), maxval = self.cutoff/10)
+        #label_bond = tf.add(label_bond, random_part)
+        #label_bond = tf.Print(label_bond, [counter, label_bond , gradient], "label_bond")
         updated_bond = tf.add(bond, label_bond)
 
         # Decompose the bond 
@@ -251,6 +250,7 @@ class MPSOptimizer(object):
         C1 = C1s.read(counter-1)
         C2.set_shape([None, None])
         C1.set_shape([None, None])
+        #C1 = tf.Print(C1, [counter, C1, C2], message = "C1&C2")
         C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter+1])
 
         # Update the bond 
@@ -264,8 +264,9 @@ class MPSOptimizer(object):
             
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
         #label_bond = tf.Print(label_bond, [label_bond], message = "label_bond")
-        random_part = tf.random_uniform(tf.shape(label_bond), minval=-(self.cutoff/10), maxval = self.cutoff/10)
-        label_bond = tf.add(label_bond, random_part)
+        #random_part = tf.random_uniform(tf.shape(label_bond), minval=-(self.cutoff/10), maxval = self.cutoff/10)
+        #label_bond = tf.add(label_bond, random_part)
+        #label_bond = tf.Print(label_bond, [counter, label_bond , gradient], "label_bond")
         updated_bond = tf.add(bond, label_bond)
 
         # Decompose the bond 
@@ -362,11 +363,11 @@ if __name__ == '__main__':
     d_feature = 2
     d_output = 10
     batch_size = 1000
-    bond_dim = 5
+    bond_dim = 3
     init_param = 1.9
-    rate_of_change = 10
+    rate_of_change = 1
 
-    cutoff = 10 ** (-4)
+    cutoff = 10 ** (-1)
     n_step = 10
 
     data_source = preprocessing.MNISTData()
