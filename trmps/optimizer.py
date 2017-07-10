@@ -22,6 +22,7 @@ class MPSOptimizer(object):
         self.cutoff = cutoff
         self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
+        self.MPS._setup_nodes(self._feature)
         self._setup_optimization()
         _ = self.train_step()
 
@@ -129,7 +130,7 @@ class MPSOptimizer(object):
         # First half-sweep
         self.updated_nodes = self._sweep_right(self.MPS._special_node_loc, self.MPS.input_size - 2)
         self.MPS.nodes = self.updated_nodes
-        self.MPS._special_node_loc = self.MPS.nodes.size() - 2
+        self.MPS._special_node_loc = self.MPS.nodes.size()-2
 
         # First back-sweep
         self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, 0, 0)
@@ -138,7 +139,7 @@ class MPSOptimizer(object):
         self.MPS._special_node_loc = 1
 #
         # Second half-sweep
-        self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, original_special_node_loc + 1, self.MPS.nodes.size() + 10)
+        self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, original_special_node_loc+1, self.MPS.nodes.size() + 10)
         C1 = self.C1s.read(0)
         self.C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size-2, dynamic_size = True, infer_shape=False, clear_after_read = False)
         self.C1s = self.C1s.write(0, C1)
@@ -191,17 +192,13 @@ class MPSOptimizer(object):
         # Update the bond 
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
         cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
-        #cost = tf.Print(cost, [counter, cost])
+        cost = tf.Print(cost, [counter, cost])
 
         with tf.control_dependencies([cost]):   
             gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
             label_bond = self.rate_of_change * gradient
 
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
-        #label_bond = tf.Print(label_bond, [label_bond], message = "label_bond")
-        #random_part = tf.random_uniform(tf.shape(label_bond), minval=-(self.cutoff/10), maxval = self.cutoff/10)
-        #label_bond = tf.add(label_bond, random_part)
-        #label_bond = tf.Print(label_bond, [counter, label_bond , gradient], "label_bond")
         updated_bond = tf.add(bond, label_bond)
 
         # Decompose the bond 
@@ -237,11 +234,10 @@ class MPSOptimizer(object):
     def _update_right(self, counter, C1s, C2s, updated_nodes, nodes, previous_node):
 
         # Read in the nodes 
-        #counter = tf.Print(counter, [counter], "Counter")
         n1 = previous_node
         n2 = nodes.read(counter+1)
         n2.set_shape([self.MPS.d_feature, None, None])
-        #n1 = tf.Print(n1, [tf.shape(n1), tf.shape(n2)], "n1 and n2")
+        n1 = tf.Print(n1, [n1[1, 1]])
         # Calculate the bond 
         bond = tf.einsum('lmij,njk->lmnik', n1, n2)
 
@@ -256,25 +252,21 @@ class MPSOptimizer(object):
         # Update the bond 
         f = tf.einsum('lmnik,tmnik->tl', bond, C)
         cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
-        #cost = tf.Print(cost, [counter, cost])
+        cost = tf.Print(cost, [counter, cost])
 
         with tf.control_dependencies([cost]):   
             gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
             label_bond = self.rate_of_change * gradient
             
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
-        #label_bond = tf.Print(label_bond, [label_bond], message = "label_bond")
-        #random_part = tf.random_uniform(tf.shape(label_bond), minval=-(self.cutoff/10), maxval = self.cutoff/10)
-        #label_bond = tf.add(label_bond, random_part)
-        #label_bond = tf.Print(label_bond, [counter, label_bond , gradient], "label_bond")
         updated_bond = tf.add(bond, label_bond)
 
         # Decompose the bond 
         aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
 
-
         # Transpose the values and add to the new variables 
         updated_nodes = updated_nodes.write(counter, aj)
+
         contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
         C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
         C1s = C1s.write(counter, C1)
@@ -319,7 +311,7 @@ class MPSOptimizer(object):
         :return:
         """
         if threshold is None:
-            _threshold = 10**(-3)
+            _threshold = 10**(-8)
         else:
             _threshold = threshold
         if min_size is None:
@@ -333,6 +325,7 @@ class MPSOptimizer(object):
             r_dim = dims[2] * dims[3] * dims[4]
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
+            s = tf.Print(s, [tf.reduce_max(s)], message='largest singular value')
             
             filtered_s = tf.boolean_mask(s, tf.greater(s, _threshold))
             s_size = tf.size(filtered_s)
@@ -363,23 +356,19 @@ if __name__ == '__main__':
     d_feature = 2
     d_output = 10
     batch_size = 1000
-    bond_dim = 3
-    init_param = 1.9
-    rate_of_change = 1
 
-    cutoff = 10 ** (-1)
-    n_step = 10
+    bond_dim = 10
+    max_size = 10
+    rate_of_change = 10000
+
+    cutoff = 10 ** (-4)
+    n_step = 3
 
     data_source = preprocessing.MNISTData()
 
     # Initialise the model
-    network = MPS(bond_dim, d_feature, d_output, input_size, init_param)
-    #with open('weights', 'rb') as fp:
-    #    weights = pickle.load(fp)
-    #    network.load_nodes(weights)
-    #feature, labels = data_source.next_training_data_batch(batch_size)
-    #network.test(feature, labels)
-    optimizer = MPSOptimizer(network, 5, None, rate_of_change=rate_of_change, cutoff=cutoff)
+    network = MPS(bond_dim, d_feature, d_output, input_size)
+    optimizer = MPSOptimizer(network, max_size, None, rate_of_change=rate_of_change, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step)
 
 

@@ -17,17 +17,16 @@ class MPS(object):
         feature: tf.Tensor of shape (intput_size, batch_size, d_output)
     '''
 
-    def __init__(self, d_matrix, d_feature, d_output, input_size, init_param):
+    def __init__(self, d_matrix, d_feature, d_output, input_size):
         # structure parameters
         self.input_size = input_size
         self.d_matrix = d_matrix
         self.d_feature = d_feature
         self.d_output = d_output
         self._special_node_loc = int(np.floor(self.input_size/2))
-        self.init_param = init_param
 
         # Initialise the nodes
-        self._setup_nodes()
+        # self._setup_nodes()
 
     def test(self, test_feature, test_label):
         '''
@@ -35,6 +34,7 @@ class MPS(object):
         '''
         feature = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.d_output])
+        self._setup_nodes(feature)
         f = self.predict(feature)
         f = tf.Print(f, [f], summarize = 190, message =  "prediction")
         cost = self.cost(f, label)
@@ -69,34 +69,51 @@ class MPS(object):
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return accuracy
 
-    def _setup_nodes(self):
-        maxval = self.init_param/self.d_matrix
+    def _setup_nodes(self, feature):
+        self.averaged_feature = tf.reduce_mean(feature, axis=1)
         with tf.name_scope("MPSnodes"):
             self.nodes_list = []
             self.nodes = tf.TensorArray(tf.float32, size = 0, dynamic_size= True,
                                         clear_after_read= False, infer_shape= False)
             # First node
-            self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval),
-                shape = [self.d_feature, None]))
+            self.nodes_list.append(tf.placeholder_with_default(self._make_end_vector(0), [self.d_feature, None]))
             self.nodes = self.nodes.write(0, self.nodes_list[-1])
 
             for i in range(1, self.input_size - 1):
                 if i == self._special_node_loc:
                     # The Second node with output leg attached
-                    self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_output, self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
-                        shape = [self.d_output, self.d_feature, None, None]))
+                    self.nodes_list.append(tf.placeholder_with_default(self._make_special_node(), 
+                                            [self.d_output, self.d_feature, None, None]))
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
                 else:
-                    self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix, self.d_matrix], maxval = maxval),
-                        shape = [self.d_feature, None, None]))
+                    self.nodes_list.append(tf.placeholder_with_default(self._make_middle_node(i),
+                                            [self.d_feature, None, None]))
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
 
             # Last node
-            self.nodes_list.append(tf.placeholder_with_default(self._make_random_normal([self.d_feature, self.d_matrix], maxval = maxval),
-            shape = [self.d_feature, None]))
+            self.nodes_list.append(tf.placeholder_with_default(self._make_end_vector(self.input_size-1), [self.d_feature, None]))
             self.nodes = self.nodes.write(self.input_size-1, self.nodes_list[-1])
-    def _make_random_normal(self, shape, minval=0, maxval=1):
-        return tf.random_uniform(shape, minval=minval, maxval = maxval)
+
+    def _make_end_vector(self, index):
+        cos = self.averaged_feature[index, 0]
+        sin = self.averaged_feature[index, 1]
+        vector = tf.ones(self.d_matrix)
+        return tf.stack([vector * cos, vector * sin])
+
+    def _make_middle_node(self, index):
+        cos = self.averaged_feature[index, 0]
+        sin = self.averaged_feature[index, 1]
+        identity = tf.eye(self.d_matrix)
+        return tf.stack([identity * cos, identity * sin])
+
+    def _make_special_node(self):
+        cos = self.averaged_feature[self._special_node_loc, 0]
+        sin = self.averaged_feature[self._special_node_loc, 1]
+        identity = tf.eye(self.d_matrix)
+        stacked = tf.stack([identity * cos,  identity * sin])
+        stacked_identity = tf.stack([identity] * 2)
+        return tf.stack([stacked] + [stacked_identity] * (self.d_output - 1))
+
             
     def predict_old(self, feature):
         self.feature = feature
@@ -184,10 +201,9 @@ if __name__ == '__main__':
     d_feature = 2
     d_matrix = 5
     d_output = 6
-    rate_of_change = 0.2
+    rate_of_change = 100
     batch_size = 1000
     m = 5
-    init_param = 2.0
 
     # Make up input and output
     phi = np.random.normal(size=(input_size, batch_size, d_feature)).astype(np.float32)
