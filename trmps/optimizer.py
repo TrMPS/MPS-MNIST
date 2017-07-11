@@ -1,5 +1,5 @@
 import tensorflow as tf
-import numpy as np
+import time
 import preprocessing
 from mps import MPS
 import pickle
@@ -47,10 +47,11 @@ class MPSOptimizer(object):
         self.test = initial_weights
 
         with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
             if _log_to_tensorboard:
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
-                sess.run(tf.global_variables_initializer())
+                start = time.time()
 
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
                 self.feed_dict = self.MPS.create_feed_dict(self.test)
@@ -60,8 +61,6 @@ class MPSOptimizer(object):
                                                                              feed_dict=self.feed_dict,
                                                                              options=run_options,
                                                                              run_metadata=run_metadata)
-                print('step {}, training cost {}, accuracy {}'.format(i, train_cost, train_accuracy))
-                print("prediction:" + str(prediction[0]))
 
                 print(self.test[0])
                 self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
@@ -71,6 +70,9 @@ class MPSOptimizer(object):
                     writer.add_run_metadata(run_metadata, 'step' + str(i))
                 with open('weights', 'wb') as fp:
                     pickle.dump(self.test, fp)
+                end = time.time()
+                print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_cost, train_accuracy, end - start))
+                print("prediction:" + str(prediction[0]))
             if _log_to_tensorboard:
                 writer.close()
     def _setup_optimization(self):
@@ -282,8 +284,8 @@ class MPSOptimizer(object):
     def _get_f_and_cost(self, bond, C):
         with tf.name_scope("einsumf"):
             f = tf.einsum('lmnik,tmnik->tl', bond, C)
-        with tf.name_scope("einsumcost"):
-            cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
+        with tf.name_scope("recude_sumcost"):
+            cost = 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
         return f, cost
 
@@ -404,10 +406,11 @@ if __name__ == '__main__':
     data_source = preprocessing.MNISTData()
 
     # Initialise the model
-    with open('weights', 'rb') as fp:
-        weights = pickle.load(fp)
-        if len(weights) != input_size:
-            weights = None
+    #with open('weights', 'rb') as fp:
+    #    weights = pickle.load(fp)
+    #    if len(weights) != input_size:
+    #        weights = None
+    weights = None
     network = MPS(bond_dim, d_feature, d_output, input_size)
     optimizer = MPSOptimizer(network, max_size, None, rate_of_change=rate_of_change, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step, log_to_tensorboard=log_to_tensorboard, initial_weights=weights)

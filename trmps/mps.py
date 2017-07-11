@@ -59,8 +59,8 @@ class MPS(object):
 
     def cost(self, f, label):
         with tf.name_scope("cost"):
-            cost = tf.einsum('tl,tl->', f - label, f - label)
-        return 0.5 * cost
+            cost = 0.5 * tf.reduce_sum(tf.square(f-label))
+        return cost
 
     def accuracy(self, f, label):
         with tf.name_scope("accuracy"):
@@ -212,7 +212,7 @@ if __name__ == '__main__':
     d_matrix = 5
     d_output = 6
     rate_of_change = 100
-    batch_size = 1000
+    batch_size = 5
     m = 5
 
     # Make up input and output
@@ -224,5 +224,5 @@ if __name__ == '__main__':
     delta[ind:, 4] = 1
 
     # Initialise the model
-    network = MPS(d_matrix, d_feature, d_output, input_size, init_param)
+    network = MPS(d_matrix, d_feature, d_output, input_size)
     network.test(phi, delta)
