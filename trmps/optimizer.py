@@ -3,6 +3,7 @@ import time
 import preprocessing
 from mps import MPS
 import pickle
+import utils
 
 
 def list_from(tensorArray, length):
@@ -15,7 +16,8 @@ def list_from(tensorArray, length):
 
 
 class MPSOptimizer(object):
-    def __init__(self, MPSNetwork, bond_dim, grad_func, rate_of_change=None, cutoff=10 ** (-5)):
+
+    def __init__(self, MPSNetwork, bond_dim, grad_func, rate_of_change=1000, cutoff=10 ** (-5)):
         self.MPS = MPSNetwork
         self.rate_of_change = rate_of_change
         self.bond_dim = bond_dim
@@ -31,13 +33,13 @@ class MPSOptimizer(object):
         _log_to_tensorboard = log_to_tensorboard
         if log_to_tensorboard is None:
             _log_to_tensorboard = False
+
         run_options = []
         run_metadata = []
         if log_to_tensorboard:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
-        if self.rate_of_change == None:
-            self.rate_of_change = 0.1 / (batch_size)
+
         self.feed_dict = None
         self.test = None
         f = self.MPS.predict(self._feature)
@@ -153,7 +155,7 @@ class MPSOptimizer(object):
             self.updated_nodes = self._sweep_left()
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = 1
-            #
+            
             # Second half-sweep
             self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, original_special_node_loc + 1,
                                                        self.MPS.nodes.size() + 10)
@@ -164,7 +166,7 @@ class MPSOptimizer(object):
             self.updated_nodes = self._sweep_right(1, original_special_node_loc)
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = original_special_node_loc
-            ##
+            
             # accuracy
             f = self.MPS.predict(self._feature)
             accuracy = self.MPS.accuracy(f, self._label)
@@ -304,6 +306,7 @@ class MPSOptimizer(object):
         
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
+        cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
 
@@ -357,12 +360,14 @@ class MPSOptimizer(object):
             min_size = min_size
         with tf.name_scope("bond_decomposition"):
             bond_reshaped = tf.transpose(bond, perm=[1, 3, 0, 2, 4])
+
             dims = tf.shape(bond_reshaped)
             l_dim = dims[0] * dims[1]
             r_dim = dims[2] * dims[3] * dims[4]
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
-            # s = tf.Print(s, [tf.reduce_max(s)], message='largest singular value')
+            filtered_u = utils.check_nan(u, 'u', replace_nan=True)
+            filtered_v = utils.check_nan(v, 'v', replace_nan=True)
 
             filtered_s = tf.boolean_mask(s, tf.greater(s, _threshold))
             s_size = tf.size(filtered_s)
@@ -377,17 +382,18 @@ class MPSOptimizer(object):
             s_mat = tf.diag(s[0:m])
 
             # make u, v into suitable matrices
-            u_cropped = u[:, 0:m]
-            v_cropped = tf.transpose(v[:, 0:m])
+            u_cropped = filtered_u[:, 0:m]
+            v_cropped = tf.transpose(filtered_v[:, 0:m])
 
             # make a_ 
             a_prime_j = tf.reshape(u_cropped, [dims[0], dims[1], m])
             sv = tf.matmul(s_mat, v_cropped)
             a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
             a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
-            # a_prime_j1 = tf.Print(a_prime_j1, [a_prime_j, a_prime_j1], message = "aj,aj1")
 
         return (a_prime_j, a_prime_j1)
+
+
 
 
 if __name__ == '__main__':
@@ -397,21 +403,23 @@ if __name__ == '__main__':
     d_output = 10
     batch_size = 1000
 
-    bond_dim = 3
-    max_size = 8
+    bond_dim = 4
+    max_size = 15
     rate_of_change = 1000
     log_to_tensorboard = False
 
     cutoff = 10
-    n_step = 500
+    n_step = 10
 
     data_source = preprocessing.MNISTData()
 
     # Initialise the model
+
     #with open('weights', 'rb') as fp:
     #    weights = pickle.load(fp)
     #    if len(weights) != input_size:
     #        weights = None
+
     weights = None
     network = MPS(bond_dim, d_feature, d_output, input_size)
     optimizer = MPSOptimizer(network, max_size, None, rate_of_change=rate_of_change, cutoff=cutoff)
