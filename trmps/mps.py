@@ -59,14 +59,16 @@ class MPS(object):
     # ================
 
     def cost(self, f, label):
-        cost = tf.einsum('tl,tl->', f-label, f-label)
+        with tf.name_scope("cost"):
+            cost = tf.einsum('tl,tl->', f-label, f-label)
         return 0.5 * cost
 
     def accuracy(self, f, label):
-        prediction = tf.argmax(f, axis=1)
-        true_value = tf.argmax(label, axis=1)
-        correct_prediction = tf.equal(prediction, true_value)
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        with tf.name_scope("accuracy"):
+            prediction = tf.argmax(f, axis=1)
+            true_value = tf.argmax(label, axis=1)
+            correct_prediction = tf.equal(prediction, true_value)
+            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return accuracy
 
     def _setup_nodes(self, feature):
@@ -144,53 +146,56 @@ class MPS(object):
         return f 
 
     def _chain_multiply(self, counter, C1):
-        node = self.nodes.read(counter)
-        node.set_shape([self.d_feature, None, None])
-        input_leg = self.feature[counter]
-        contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
-        C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
-        counter = counter + 1 
+        with tf.name_scope("chain_multiply"):
+            node = self.nodes.read(counter)
+            node.set_shape([self.d_feature, None, None])
+            input_leg = self.feature[counter]
+            contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+            C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
+            counter = counter + 1 
         return [counter, C1]
 
     def _chain_multiply_l(self, counter, C1):
-        node = self.nodes.read(counter)
-        node.set_shape([self.d_feature, None, None])
-        input_leg = self.feature[counter]
-        contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
-        C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
-        counter = counter + 1 
+        with tf.name_scope("chain_multiply_l"):
+            node = self.nodes.read(counter)
+            node.set_shape([self.d_feature, None, None])
+            input_leg = self.feature[counter]
+            contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+            C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
+            counter = counter + 1 
         return [counter, C1]
 
     def predict(self, feature):
-        # Read in feature 
-        self.feature = feature
-
-        # Read in the nodes 
-        node1 = self.nodes.read(0)
-        node1.set_shape([self.d_feature, None])
-        sp_node = self.nodes.read(self._special_node_loc)
-        sp_node.set_shape([self.d_output, self.d_feature, None, None])
-        nodelast = self.nodes.read(self.input_size-1)
-        nodelast.set_shape([self.d_feature, None])
-
-        # Calculate C1 
-        C1 = tf.einsum('ni,tn->ti', node1, feature[0])
-        cond = lambda c, b: tf.less(c, self._special_node_loc)
-
-        counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_l, loop_vars=[1, C1], 
-                                        shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
-                                        parallel_iterations = 1)
-        contracted_node2 = tf.einsum('lnij,tn->tlij', sp_node, feature[self._special_node_loc])
-
-        C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
-
-        cond2 = lambda c,b: tf.less(c, self.input_size - 1)
-        _, C1 = tf.while_loop(cond=cond2, body=self._chain_multiply, loop_vars=[counter + 1, C1], 
-                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])],
-                            parallel_iterations = 1)
-
-        C2 = tf.einsum('mi,tm->ti', nodelast, feature[self.input_size-1])
-        f = tf.einsum('tli,ti->tl', C1, C2)
+        with tf.name_scope("MPS_predict"):
+            # Read in feature 
+            self.feature = feature
+    
+            # Read in the nodes 
+            node1 = self.nodes.read(0)
+            node1.set_shape([self.d_feature, None])
+            sp_node = self.nodes.read(self._special_node_loc)
+            sp_node.set_shape([self.d_output, self.d_feature, None, None])
+            nodelast = self.nodes.read(self.input_size-1)
+            nodelast.set_shape([self.d_feature, None])
+    
+            # Calculate C1 
+            C1 = tf.einsum('ni,tn->ti', node1, feature[0])
+            cond = lambda c, b: tf.less(c, self._special_node_loc)
+    
+            counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_l, loop_vars=[1, C1], 
+                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
+                                            parallel_iterations = 1)
+            contracted_node2 = tf.einsum('lnij,tn->tlij', sp_node, feature[self._special_node_loc])
+    
+            C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
+    
+            cond2 = lambda c,b: tf.less(c, self.input_size - 1)
+            _, C1 = tf.while_loop(cond=cond2, body=self._chain_multiply, loop_vars=[counter + 1, C1], 
+                                shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])],
+                                parallel_iterations = 1)
+    
+            C2 = tf.einsum('mi,tm->ti', nodelast, feature[self.input_size-1])
+            f = tf.einsum('tli,ti->tl', C1, C2)
         return f
 
 
