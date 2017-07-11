@@ -144,6 +144,8 @@ class MPSOptimizer(object):
         return [updated_counter, new_C2, C2s]
 
     def train_step(self):
+        self.batch_size = tf.shape(self._feature)[1]
+
         with tf.name_scope("train_step"):
             # Create updated_nodes and fill in the first half from current one
             self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, 0, self.MPS._special_node_loc)
@@ -227,11 +229,12 @@ class MPSOptimizer(object):
 
             # Calculate the C matrix 
             C2 = C2s.read(counter - 1)
-            C2.set_shape([None, None])
             C1 = C1s.read(counter - 2)
             C1.set_shape([None, None])
-            with tf.name_scope("einsumC"):
-                C = tf.einsum('ti,tk,tm,tn->tmnik', C2, C1, self._feature[counter], self._feature[counter - 1])
+            C2.set_shape([None, None])
+            input1 = self._feature[counter-1]
+            input2 = self._feature[counter]
+            C = self._calculate_C(C2, C1, input2, input1)
 
             # update the bond 
             updated_bond = self._update_bond(bond, C)
@@ -252,6 +255,7 @@ class MPSOptimizer(object):
 
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
 
+
     def _update_right(self, counter, C1s, C2s, updated_nodes, nodes, previous_node):
         with tf.name_scope("update_right"):
             # Read in the nodes 
@@ -265,11 +269,12 @@ class MPSOptimizer(object):
             # Calculate the C matrix 
             C2 = C2s.read(counter)
             C1 = C1s.read(counter - 1)
-            C2.set_shape([None, None])
             C1.set_shape([None, None])
-            with tf.name_scope("einsumC"):
-                C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter + 1])
-    
+            C2.set_shape([None, None])
+            input1 = self._feature[counter]
+            input2 = self._feature[counter+1]
+            C = self._calculate_C(C1, C2, input1, input2)
+
             # Update the bond 
             updated_bond = self._update_bond(bond, C)
     
@@ -288,6 +293,20 @@ class MPSOptimizer(object):
             updated_counter = counter + 1
     
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
+
+    def _calculate_C(self, C1, C2, input1, input2):
+        # C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, input1, input2)
+        d1 = tf.shape(C1)[1]
+        d2 = tf.shape(C2)[1]
+
+        with tf.name_scope("einsumC"):
+            C1 = tf.reshape(C1, [self.batch_size, 1, 1, d1, 1])
+            C2 = tf.reshape(C2, [self.batch_size, 1, 1, 1, d2])
+            input1 = tf.reshape(input1, [self.batch_size, self.MPS.d_feature, 1, 1, 1])
+            input2 = tf.reshape(input2, [self.batch_size, 1, self.MPS.d_feature, 1, 1])
+            C = C1 * C2 * input1 * input2
+
+        return C
 
     def _get_f_and_cost(self, bond, C):
         with tf.name_scope("tensordotf"):
