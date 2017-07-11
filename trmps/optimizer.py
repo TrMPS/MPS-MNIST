@@ -17,9 +17,9 @@ def list_from(tensorArray, length):
 
 class MPSOptimizer(object):
 
-    def __init__(self, MPSNetwork, bond_dim, grad_func, rate_of_change=1000, cutoff=10 ** (-5)):
+    def __init__(self, MPSNetwork, bond_dim, grad_func, cutoff=10 ** (-5)):
         self.MPS = MPSNetwork
-        self.rate_of_change = rate_of_change
+        self.rate_of_change = tf.placeholder(tf.float32, shape=[])
         self.bond_dim = bond_dim
         self.grad_func = grad_func
         self.cutoff = cutoff
@@ -29,7 +29,7 @@ class MPSOptimizer(object):
         self._setup_optimization()
         _ = self.train_step()
 
-    def train(self, data_source, batch_size, n_step, log_to_tensorboard=None, initial_weights=None):
+    def train(self, data_source, batch_size, n_step, rate_of_change=1000, log_to_tensorboard=None, initial_weights=None):
         _log_to_tensorboard = log_to_tensorboard
         if log_to_tensorboard is None:
             _log_to_tensorboard = False
@@ -39,6 +39,8 @@ class MPSOptimizer(object):
         if log_to_tensorboard:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
+
+        increment = (1/10) ** (1/(n_step))
 
         self.feed_dict = None
         self.test = None
@@ -59,10 +61,13 @@ class MPSOptimizer(object):
                 self.feed_dict = self.MPS.create_feed_dict(self.test)
                 self.feed_dict[self._feature] = batch_feature
                 self.feed_dict[self._label] = batch_label
+                self.feed_dict[self.rate_of_change] = rate_of_change 
                 train_cost, prediction, self.test, train_accuracy = sess.run([cost, f, test_result, accuracy],
                                                                              feed_dict=self.feed_dict,
                                                                              options=run_options,
                                                                              run_metadata=run_metadata)
+                print(self.test[0])
+                rate_of_change = rate_of_change * increment
 
                 self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
                 for index, element in enumerate(self.test):
@@ -403,13 +408,14 @@ if __name__ == '__main__':
     d_output = 10
     batch_size = 1000
 
-    bond_dim = 3
-    max_size = 8
+    bond_dim = 5
+    max_size = 10
+
     rate_of_change = 1000
     log_to_tensorboard = False
 
-    cutoff = 10
-    n_step = 10
+    cutoff = 1000
+    n_step = 5
 
     data_source = preprocessing.MNISTData()
 
@@ -422,5 +428,13 @@ if __name__ == '__main__':
 
     weights = None
     network = MPS(bond_dim, d_feature, d_output, input_size)
-    optimizer = MPSOptimizer(network, max_size, None, rate_of_change=rate_of_change, cutoff=cutoff)
-    optimizer.train(data_source, batch_size, n_step, log_to_tensorboard=log_to_tensorboard, initial_weights=weights)
+    optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
+    optimizer.train(data_source, batch_size, n_step, 
+                    rate_of_change=rate_of_change, 
+                    log_to_tensorboard=log_to_tensorboard, 
+                    initial_weights=weights)
+
+
+
+
+
