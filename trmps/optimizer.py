@@ -246,39 +246,39 @@ class MPSOptimizer(object):
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
 
     def _update_right(self, counter, C1s, C2s, updated_nodes, nodes, previous_node):
-
-        # Read in the nodes 
-        n1 = previous_node
-        n2 = nodes.read(counter + 1)
-        n2.set_shape([self.MPS.d_feature, None, None])
-
-        # Calculate the bond 
-        bond = tf.einsum('lmij,njk->lmnik', n1, n2)
-
-        # Calculate the C matrix 
-        C2 = C2s.read(counter)
-        C1 = C1s.read(counter - 1)
-        C2.set_shape([None, None])
-        C1.set_shape([None, None])
-        with tf.name_scope("einsumC"):
-            C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter + 1])
-
-        # Update the bond 
-        updated_bond = self._update_bond(bond, C)
-
-        # Decompose the bond 
-        aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
-
-        # Transpose the values and add to the new variables 
-        updated_nodes = updated_nodes.write(counter, aj)
-
-        with tf.name_scope("einsumcontracted_aj"):
-            contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
-        with tf.name_scope("einsumC1"):
-            C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
-        C1s = C1s.write(counter, C1)
-        updated_counter = counter + 1
-
+        with tf.name_scope("update_right"):
+            # Read in the nodes 
+            n1 = previous_node
+            n2 = nodes.read(counter + 1)
+            n2.set_shape([self.MPS.d_feature, None, None])
+    
+            # Calculate the bond 
+            bond = tf.einsum('lmij,njk->lmnik', n1, n2)
+    
+            # Calculate the C matrix 
+            C2 = C2s.read(counter)
+            C1 = C1s.read(counter - 1)
+            C2.set_shape([None, None])
+            C1.set_shape([None, None])
+            with tf.name_scope("einsumC"):
+                C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter + 1])
+    
+            # Update the bond 
+            updated_bond = self._update_bond(bond, C)
+    
+            # Decompose the bond 
+            aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
+    
+            # Transpose the values and add to the new variables 
+            updated_nodes = updated_nodes.write(counter, aj)
+    
+            with tf.name_scope("einsumcontracted_aj"):
+                contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
+            with tf.name_scope("einsumC1"):
+                C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
+            C1s = C1s.write(counter, C1)
+            updated_counter = counter + 1
+    
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
 
     def _get_f_and_cost(self, bond, C):
@@ -401,7 +401,7 @@ if __name__ == '__main__':
     log_to_tensorboard = False
 
     cutoff = 10
-    n_step = 5
+    n_step = 500
 
     data_source = preprocessing.MNISTData()
 
