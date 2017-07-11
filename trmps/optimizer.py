@@ -27,9 +27,15 @@ class MPSOptimizer(object):
         self._setup_optimization()
         _ = self.train_step()
 
-    def train(self, data_source, batch_size, n_step):
-        run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-        run_metadata = tf.RunMetadata()
+    def train(self, data_source, batch_size, n_step, log_to_tensorboard=None):
+        _log_to_tensorboard = log_to_tensorboard
+        if log_to_tensorboard is None:
+            _log_to_tensorboard = False
+        run_options = []
+        run_metadata = []
+        if log_to_tensorboard:
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
         if self.rate_of_change == None:
             self.rate_of_change = 0.1 / (batch_size)
         self.feed_dict = None
@@ -40,7 +46,8 @@ class MPSOptimizer(object):
         test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
 
         with tf.Session() as sess:
-            writer = tf.summary.FileWriter("output", sess.graph)
+            if _log_to_tensorboard:
+                writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 if self.test is not None:
                     # self.MPS.load_nodes(self.test)
@@ -64,8 +71,10 @@ class MPSOptimizer(object):
                 self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
                 for index, element in enumerate(self.test):
                     self.feed_dict[self.MPS.nodes_list[index]] = element
-                writer.add_run_metadata(run_metadata, 'step%d' % i)
-            writer.close()
+                if _log_to_tensorboard:
+                    writer.add_run_metadata(run_metadata, 'step' + str(i))
+            if _log_to_tensorboard:
+                writer.close()
 
     def _setup_optimization(self):
         '''
@@ -395,6 +404,7 @@ if __name__ == '__main__':
     bond_dim = 3
     max_size = 8
     rate_of_change = 1000
+    log_to_tensorboard = False
 
     cutoff = 10 ** (-1)
     n_step = 500
@@ -404,4 +414,4 @@ if __name__ == '__main__':
     # Initialise the model
     network = MPS(bond_dim, d_feature, d_output, input_size)
     optimizer = MPSOptimizer(network, max_size, None, rate_of_change=rate_of_change, cutoff=cutoff)
-    optimizer.train(data_source, batch_size, n_step)
+    optimizer.train(data_source, batch_size, n_step, log_to_tensorboard=log_to_tensorboard)
