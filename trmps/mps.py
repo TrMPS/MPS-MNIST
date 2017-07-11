@@ -197,6 +197,13 @@ class MPS(object):
             f = tf.einsum('tli,ti->tl', C1, C2)
         return f
 
+    def create_feed_dict(self, weights):
+        feed_dict = {}
+        if weights != None:
+            for index, element in enumerate(weights):
+                feed_dict[self.nodes_list[index]] = element
+        return feed_dict
+
 
 if __name__ == '__main__':
     # Model parameters

@@ -27,7 +27,7 @@ class MPSOptimizer(object):
         self._setup_optimization()
         _ = self.train_step()
 
-    def train(self, data_source, batch_size, n_step, log_to_tensorboard=None):
+    def train(self, data_source, batch_size, n_step, log_to_tensorboard=None, initial_weights=None):
         _log_to_tensorboard = log_to_tensorboard
         if log_to_tensorboard is None:
             _log_to_tensorboard = False
@@ -44,20 +44,16 @@ class MPSOptimizer(object):
         cost = self.MPS.cost(f, self._label)
         accuracy = self.MPS.accuracy(f, self._label)
         test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
+        self.test = initial_weights
 
         with tf.Session() as sess:
             if _log_to_tensorboard:
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
-                if self.test is not None:
-                    # self.MPS.load_nodes(self.test)
-                    with open('weights', 'wb') as fp:
-                        pickle.dump(self.test, fp)
                 sess.run(tf.global_variables_initializer())
 
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
-                if self.feed_dict is None:
-                    self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
+                self.feed_dict = self.MPS.create_feed_dict(self.test)
                 self.feed_dict[self._feature] = batch_feature
                 self.feed_dict[self._label] = batch_label
                 train_cost, prediction, self.test, train_accuracy = sess.run([cost, f, test_result, accuracy],
@@ -73,6 +69,8 @@ class MPSOptimizer(object):
                     self.feed_dict[self.MPS.nodes_list[index]] = element
                 if _log_to_tensorboard:
                     writer.add_run_metadata(run_metadata, 'step' + str(i))
+                with open('weights', 'wb') as fp:
+                    pickle.dump(self.test, fp)
             if _log_to_tensorboard:
                 writer.close()
     def _setup_optimization(self):
@@ -406,6 +404,10 @@ if __name__ == '__main__':
     data_source = preprocessing.MNISTData()
 
     # Initialise the model
+    with open('weights', 'rb') as fp:
+        weights = pickle.load(fp)
+        if len(weights) != input_size:
+            weights = None
     network = MPS(bond_dim, d_feature, d_output, input_size)
     optimizer = MPSOptimizer(network, max_size, None, rate_of_change=rate_of_change, cutoff=cutoff)
-    optimizer.train(data_source, batch_size, n_step, log_to_tensorboard=log_to_tensorboard)
+    optimizer.train(data_source, batch_size, n_step, log_to_tensorboard=log_to_tensorboard, initial_weights=weights)
