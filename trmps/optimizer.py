@@ -16,6 +16,7 @@ def list_from(tensorArray, length):
 
 
 class MPSOptimizer(object):
+
     def __init__(self, MPSNetwork, bond_dim, grad_func, rate_of_change=1000, cutoff=10 ** (-5)):
         self.MPS = MPSNetwork
         self.rate_of_change = rate_of_change
@@ -399,21 +400,22 @@ if __name__ == '__main__':
     d_output = 10
     batch_size = 1000
 
-    bond_dim = 3
+    bond_dim = 4
     max_size = 15
     rate_of_change = 1000
     log_to_tensorboard = False
 
     cutoff = 10
-    n_step = 500
+    n_step = 10
 
     data_source = preprocessing.MNISTData()
 
     # Initialise the model
-    with open('weights', 'rb') as fp:
-        weights = pickle.load(fp)
-        if len(weights) != input_size:
-            weights = None
+    # with open('weights', 'rb') as fp:
+    #     weights = pickle.load(fp)
+    #     if len(weights) != input_size:
+    #         weights = None
+    weights = None
     network = MPS(bond_dim, d_feature, d_output, input_size)
     optimizer = MPSOptimizer(network, max_size, None, rate_of_change=rate_of_change, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step, log_to_tensorboard=log_to_tensorboard, initial_weights=weights)

@@ -101,46 +101,14 @@ class MPS(object):
         return tf.stack([vector] * self.d_feature)
 
     def _make_middle_node(self, index):
-        cos = self.averaged_feature[index, 0]
-        sin = self.averaged_feature[index, 1]
         identity = tf.eye(self.d_matrix)
-        return tf.stack([identity * cos, identity * sin])
+        stacked = [identity * self.averaged_feature[index, i] for i in range(self.d_feature)]
+        return tf.stack(stacked)
 
     def _make_special_node(self):
-        cos = self.averaged_feature[self._special_node_loc, 0]
-        sin = self.averaged_feature[self._special_node_loc, 1]
         identity = tf.eye(self.d_matrix)
-        stacked = tf.stack([identity * cos, identity * sin])
-        stacked_identity = tf.stack([identity] * 2)
-        return tf.stack([stacked] + [stacked_identity] * (self.d_output - 1))
-
-    def predict_old(self, feature):
-        self.feature = feature
-
-        # Read in the nodes 
-        node1 = self.nodes.read(0)
-        node1.set_shape([self.d_feature, None])
-        node2 = self.nodes.read(1)
-        # node1 = tf.Print(node1, [node1], message = "mpspredictnode1")
-        node2.set_shape([self.d_output, self.d_feature, None, None])
-        nodelast = self.nodes.read(self.input_size - 1)
-        nodelast.set_shape([self.d_feature, None])
-
-        # Calculate C1 
-        C1 = tf.einsum('ni,tn->ti', node1, feature[0])
-        contracted_node2 = tf.einsum('lnij,tn->tlij', node2, feature[1])
-        C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
-
-        # Calculate C2
-        C2 = tf.einsum('mi,tm->ti', nodelast, feature[self.input_size - 1])
-
-        # counter = tf.Variable(2, dtype=tf.int32)
-        counter = 2
-        cond = lambda c, b: tf.less(c, self.input_size - 1)
-        _, C1 = tf.while_loop(cond=cond, body=self._chain_multiply, loop_vars=[counter, C1],
-                              shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])])
-        f = tf.einsum('tli,ti->tl', C1, C2)
-        return f
+        stacked_identity = tf.stack([identity] * self.d_feature)
+        return tf.stack([stacked_identity] * self.d_output)
 
     def _chain_multiply(self, counter, C1):
         with tf.name_scope("chain_multiply"):
