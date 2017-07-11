@@ -75,7 +75,6 @@ class MPSOptimizer(object):
                     writer.add_run_metadata(run_metadata, 'step' + str(i))
             if _log_to_tensorboard:
                 writer.close()
-
     def _setup_optimization(self):
         '''
         C1s: size = input_size - 2 (as the last one is kept redundant) 
@@ -150,7 +149,7 @@ class MPSOptimizer(object):
 
             # First back-sweep
             self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, 0, 0)
-            self.updated_nodes = self._backwards_sweep()
+            self.updated_nodes = self._sweep_left()
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = 1
             #
@@ -171,7 +170,7 @@ class MPSOptimizer(object):
 
         return accuracy
 
-    def _backwards_sweep(self):
+    def _sweep_left(self):
         # read second from end node
         n1 = self.MPS.nodes.read(self.MPS._special_node_loc)
         n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
@@ -193,7 +192,23 @@ class MPSOptimizer(object):
             self.updated_nodes = self.updated_nodes.write(1, n1)
         return self.updated_nodes
 
+    def _sweep_right(self, from_index, to_index):
+        n1 = self.MPS.nodes.read(from_index)
+        n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
+        cond = lambda counter, b, c, d, e, f: tf.less(counter, to_index)
+        wrapped = [from_index, self.C1s, self.C2s, self.updated_nodes, self.MPS.nodes, n1]
+        shape_invariants = [tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape(None),
+                            tf.TensorShape(None), tf.TensorShape(None), tf.TensorShape([None, None, None, None])]
+
+        _, self.C1s, self.C2s, self.updated_nodes, _, n1 = tf.while_loop(cond=cond, body=self._update_right,
+                                                                         loop_vars=wrapped,
+                                                                         shape_invariants=shape_invariants,
+                                                                         parallel_iterations=1, name="rightSweep")
+        self.updated_nodes = self.updated_nodes.write(to_index, n1)
+        return self.updated_nodes
+
     def _update_left(self, counter, C1s, C2s, updated_nodes, nodes, previous_node):
+
         with tf.name_scope("update_left"):
             # Read in the nodes 
             n1 = previous_node
@@ -211,24 +226,8 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC"):
                 C = tf.einsum('ti,tk,tm,tn->tmnik', C2, C1, self._feature[counter], self._feature[counter - 1])
 
-            # Update the bond 
-            with tf.name_scope("einsumf"):
-                f = tf.einsum('lmnik,tmnik->tl', bond, C)
-            with tf.name_scope("einsumcost"):
-                cost = 0.5 * tf.einsum('tl,tl->', f - self._label, f - self._label)
-
-            with tf.control_dependencies([cost]):
-                with tf.name_scope("einsumgradient"):
-                    gradient = tf.einsum('tl,tmnik->lmnik', self._label - f, C)
-                label_bond = self.rate_of_change * gradient
-
-            label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
-            updated_bond = tf.add(bond, label_bond)
-            with tf.name_scope("einsumsf1cost1"):
-                f1 = tf.einsum('lmnik,tmnik->tl', updated_bond, C)
-                cost1 = 0.5 * tf.einsum('tl,tl->', f1 - self._label, f1 - self._label)
-            cond_change_bond = tf.less(cost1, cost)
-            updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
+            # update the bond 
+            updated_bond = self._update_bond(bond, C)
 
             # Decompose the bond 
             aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
@@ -245,21 +244,6 @@ class MPSOptimizer(object):
             updated_counter = counter - 1
 
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
-
-    def _sweep_right(self, from_index, to_index):
-        n1 = self.MPS.nodes.read(from_index)
-        n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
-        cond = lambda counter, b, c, d, e, f: tf.less(counter, to_index)
-        wrapped = [from_index, self.C1s, self.C2s, self.updated_nodes, self.MPS.nodes, n1]
-        shape_invariants = [tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape(None),
-                            tf.TensorShape(None), tf.TensorShape(None), tf.TensorShape([None, None, None, None])]
-
-        _, self.C1s, self.C2s, self.updated_nodes, _, n1 = tf.while_loop(cond=cond, body=self._update_right,
-                                                                         loop_vars=wrapped,
-                                                                         shape_invariants=shape_invariants,
-                                                                         parallel_iterations=1, name="rightSweep")
-        self.updated_nodes = self.updated_nodes.write(to_index, n1)
-        return self.updated_nodes
 
     def _update_right(self, counter, C1s, C2s, updated_nodes, nodes, previous_node):
 
@@ -280,23 +264,7 @@ class MPSOptimizer(object):
             C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, self._feature[counter], self._feature[counter + 1])
 
         # Update the bond 
-        with tf.name_scope("einsumf"):
-            f = tf.einsum('lmnik,tmnik->tl', bond, C)
-        with tf.name_scope("einsumcost"):
-            cost = 0.5 * tf.einsum('tl,tl->', f - self._label, f - self._label)
-
-        with tf.control_dependencies([cost]):
-            with tf.name_scope("einsumgradient"):
-                gradient = tf.einsum('tl,tmnik->lmnik', self._label - f, C)
-            label_bond = self.rate_of_change * gradient
-
-        label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
-        updated_bond = tf.add(bond, label_bond)
-        with tf.name_scope("einsumsf1cost1"):
-            f1 = tf.einsum('lmnik,tmnik->tl', updated_bond, C)
-            cost1 = 0.5 * tf.einsum('tl,tl->', f1 - self._label, f1 - self._label)
-        cond_change_bond = tf.less(cost1, cost)
-        updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
+        updated_bond = self._update_bond(bond, C)
 
         # Decompose the bond 
         aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
@@ -312,6 +280,32 @@ class MPSOptimizer(object):
         updated_counter = counter + 1
 
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
+
+    def _get_f_and_cost(self, bond, C):
+        with tf.name_scope("einsumf"):
+            f = tf.einsum('lmnik,tmnik->tl', bond, C)
+        with tf.name_scope("einsumcost"):
+            cost = 0.5 * tf.einsum('tl,tl->', f-self._label, f-self._label)
+
+        return f, cost
+
+    def _update_bond(self, bond, C):
+        # obtain the original cost
+        f, cost = self._get_f_and_cost(bond, C)
+
+        # perform gradient descent on the bond 
+        with tf.name_scope("einsumgradient"):
+            gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
+        label_bond = self.rate_of_change * gradient
+        label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
+        updated_bond = tf.add(bond, label_bond)
+        
+        # calculate the cost with the updated bond
+        f1, cost1 = self._get_f_and_cost(updated_bond, C)
+        cond_change_bond = tf.less(cost1, cost)
+        updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
+
+        return updated_bond
 
     def _make_new_nodes(self, nodes):
         size = nodes.size()
@@ -406,8 +400,8 @@ if __name__ == '__main__':
     rate_of_change = 1000
     log_to_tensorboard = False
 
-    cutoff = 10 ** (-1)
-    n_step = 500
+    cutoff = 10
+    n_step = 5
 
     data_source = preprocessing.MNISTData()
 
