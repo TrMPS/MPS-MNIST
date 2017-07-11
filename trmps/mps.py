@@ -97,10 +97,8 @@ class MPS(object):
             self.nodes = self.nodes.write(self.input_size - 1, self.nodes_list[-1])
 
     def _make_end_vector(self, index):
-        cos = self.averaged_feature[index, 0]
-        sin = self.averaged_feature[index, 1]
         vector = tf.ones(self.d_matrix)
-        return tf.stack([vector * cos, vector * sin])
+        return tf.stack([vector] * self.d_feature)
 
     def _make_middle_node(self, index):
         cos = self.averaged_feature[index, 0]
