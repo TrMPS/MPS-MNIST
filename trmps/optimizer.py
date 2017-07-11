@@ -64,7 +64,6 @@ class MPSOptimizer(object):
                                                                              options=run_options,
                                                                              run_metadata=run_metadata)
 
-                print(self.test[0])
                 self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
                 for index, element in enumerate(self.test):
                     self.feed_dict[self.MPS.nodes_list[index]] = element
@@ -74,7 +73,7 @@ class MPSOptimizer(object):
                     pickle.dump(self.test, fp)
                 end = time.time()
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_cost, train_accuracy, end - start))
-                print("prediction:" + str(prediction[0]))
+                #print("prediction:" + str(prediction[0]))
             if _log_to_tensorboard:
                 writer.close()
 
@@ -275,8 +274,9 @@ class MPSOptimizer(object):
             # Transpose the values and add to the new variables 
             updated_nodes = updated_nodes.write(counter, aj)
     
-            with tf.name_scope("einsumcontracted_aj"):
-                contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
+            with tf.name_scope("tensordotcontracted_aj"):
+                #contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
+                contracted_aj = tf.tensordot(self._feature[counter], aj, [[1], [0]])
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             C1s = C1s.write(counter, C1)
@@ -285,7 +285,7 @@ class MPSOptimizer(object):
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
 
     def _get_f_and_cost(self, bond, C):
-        with tf.name_scope("einsumf"):
+        with tf.name_scope("tensordotf"):
             #f = tf.einsum('lmnik,tmnik->tl', bond, C)
             f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
         with tf.name_scope("reduce_sumcost"):
@@ -306,7 +306,7 @@ class MPSOptimizer(object):
         
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
-        cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
+        #cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
 
@@ -403,8 +403,8 @@ if __name__ == '__main__':
     d_output = 10
     batch_size = 1000
 
-    bond_dim = 4
-    max_size = 15
+    bond_dim = 3
+    max_size = 8
     rate_of_change = 1000
     log_to_tensorboard = False
 
