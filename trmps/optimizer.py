@@ -75,6 +75,7 @@ class MPSOptimizer(object):
                 print("prediction:" + str(prediction[0]))
             if _log_to_tensorboard:
                 writer.close()
+
     def _setup_optimization(self):
         '''
         C1s: size = input_size - 2 (as the last one is kept redundant) 
@@ -283,8 +284,9 @@ class MPSOptimizer(object):
 
     def _get_f_and_cost(self, bond, C):
         with tf.name_scope("einsumf"):
-            f = tf.einsum('lmnik,tmnik->tl', bond, C)
-        with tf.name_scope("recude_sumcost"):
+            #f = tf.einsum('lmnik,tmnik->tl', bond, C)
+            f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
+        with tf.name_scope("reduce_sumcost"):
             cost = 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
         return f, cost
