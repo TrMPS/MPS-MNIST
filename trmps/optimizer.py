@@ -66,7 +66,7 @@ class MPSOptimizer(object):
                                                                              feed_dict=self.feed_dict,
                                                                              options=run_options,
                                                                              run_metadata=run_metadata)
-                print(self.test[0])
+
                 rate_of_change = rate_of_change * increment
 
                 self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
@@ -246,8 +246,9 @@ class MPSOptimizer(object):
 
             # Transpose the values and add to the new variables 
             updated_nodes = updated_nodes.write(counter, aj)
-            with tf.name_scope("einsumcontracted_aj"):
-                contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
+            with tf.name_scope("tensordotcontracted_aj"):
+                #contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
+                contracted_aj = tf.tensordot(self._feature[counter], aj, [[1], [0]])
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
             C2s = C2s.write(counter - 2, C2)
@@ -265,6 +266,8 @@ class MPSOptimizer(object):
     
             # Calculate the bond 
             bond = tf.einsum('lmij,njk->lmnik', n1, n2)
+            # bond = tf.transpose(tf.tensordot(n1, n2, [[3],[1]]), [0, 1, 3, 2, 4])
+            # einsum is actually faster in this case
     
             # Calculate the C matrix 
             C2 = C2s.read(counter)
@@ -323,7 +326,8 @@ class MPSOptimizer(object):
 
         # perform gradient descent on the bond 
         with tf.name_scope("einsumgradient"):
-            gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
+            #gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
+            gradient = tf.tensordot(self._label-f, C, [[0],[0]])
         label_bond = self.rate_of_change * gradient
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
         updated_bond = tf.add(bond, label_bond)
@@ -427,14 +431,14 @@ if __name__ == '__main__':
     d_output = 10
     batch_size = 1000
 
-    bond_dim = 5
-    max_size = 10
+    bond_dim = 3
+    max_size = 8
 
     rate_of_change = 1000
     log_to_tensorboard = False
 
-    cutoff = 1000
-    n_step = 5
+    cutoff = 10
+    n_step = 10
 
     data_source = preprocessing.MNISTData()
 
