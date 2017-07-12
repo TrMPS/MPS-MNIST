@@ -28,9 +28,9 @@ def _preprocess_images(data, size):
                           strides=[1, 2, 2, 1], padding='SAME')
     pooled_image = tf.placeholder(tf.float32, shape=[1, 14, 14, 1])
     snaked_image = tf.reshape(pooled_image, shape=[196])
-    sined = tf.sin((np.pi / 2) * snaked_image)
-    cosined = tf.cos((np.pi / 2) * snaked_image)
-    phi = tf.stack([cosined, sined], axis=1)
+
+    ones = tf.ones([196], dtype=tf.float32)
+    phi = tf.stack([ones, snaked_image], axis=1)
 
     print("0 % done", end="")
 
