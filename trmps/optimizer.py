@@ -109,7 +109,7 @@ class MPSOptimizer(object):
             _, _, self.C1s = tf.while_loop(cond=cond, body=self._find_C1, loop_vars=[1, C1, C1s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                              tf.TensorShape(None)],
-                                           parallel_iterations=1,
+                                           parallel_iterations=10,
                                            name="initialFindC1")
 
             nlast = nodes.read(nodes.size() - 1)
@@ -120,7 +120,7 @@ class MPSOptimizer(object):
             cond = lambda counter, *args: tf.less(counter, self.MPS.input_size - special_loc - 2)
             _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[1, C2, C2s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
-                                                             tf.TensorShape(None)], parallel_iterations=1,
+                                                             tf.TensorShape(None)], parallel_iterations=10,
                                            name="initialFindC2")
 
     def _find_C1(self, counter, C1, C1s):
@@ -203,7 +203,7 @@ class MPSOptimizer(object):
         counter, self.C1s, self.C2s, self.updated_nodes, _, n1 = tf.while_loop(cond=cond, body=self._update_left,
                                                                                loop_vars=wrapped,
                                                                                shape_invariants=shape_invariants,
-                                                                               parallel_iterations=1,
+                                                                               parallel_iterations=10,
                                                                                name="backwardsSweep")
         with tf.control_dependencies([counter]):
             self.updated_nodes = self.updated_nodes.write(1, n1)
@@ -220,7 +220,7 @@ class MPSOptimizer(object):
         _, self.C1s, self.C2s, self.updated_nodes, _, n1 = tf.while_loop(cond=cond, body=self._update_right,
                                                                          loop_vars=wrapped,
                                                                          shape_invariants=shape_invariants,
-                                                                         parallel_iterations=1, name="rightSweep")
+                                                                         parallel_iterations=10, name="rightSweep")
         self.updated_nodes = self.updated_nodes.write(to_index, n1)
         return self.updated_nodes
 
@@ -250,7 +250,7 @@ class MPSOptimizer(object):
             # Decompose the bond 
             aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
             aj = tf.transpose(aj, perm=[0, 2, 1])
-            aj1 = tf.transpose(aj1, perm=[0, 1, 3, 2])
+            aj1 = tf.transpose(aj1, perm=[1, 2, 3, 0])
 
             # Transpose the values and add to the new variables 
             updated_nodes = updated_nodes.write(counter, aj)
@@ -291,6 +291,7 @@ class MPSOptimizer(object):
     
             # Decompose the bond 
             aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
+            aj1 = tf.transpose(aj1, perm=[1, 2, 0, 3])
     
             # Transpose the values and add to the new variables 
             updated_nodes = updated_nodes.write(counter, aj)
@@ -426,8 +427,9 @@ class MPSOptimizer(object):
             # make a_ 
             a_prime_j = tf.reshape(u_cropped, [dims[0], dims[1], m])
             sv = tf.matmul(s_mat, v_cropped)
-            a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
-            a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
+            a_prime_j1 = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
+            #a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
+            # will do this in the update_right/update_left functions from now on as else transpose twice for udpate_left
 
         return (a_prime_j, a_prime_j1)
 
