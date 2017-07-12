@@ -4,6 +4,7 @@ import preprocessing
 from mps import MPS
 import pickle
 import utils
+from tensorflow.python.client import timeline
 
 
 def list_from(tensorArray, length):
@@ -29,14 +30,14 @@ class MPSOptimizer(object):
         self._setup_optimization()
         _ = self.train_step()
 
-    def train(self, data_source, batch_size, n_step, rate_of_change=1000, log_to_tensorboard=None, initial_weights=None):
-        _log_to_tensorboard = log_to_tensorboard
-        if log_to_tensorboard is None:
-            _log_to_tensorboard = False
+    def train(self, data_source, batch_size, n_step, rate_of_change=1000, logging_enabled=None, initial_weights=None):
+        _logging_enabled = logging_enabled
+        if logging_enabled is None:
+            _logging_enabled = False
 
         run_options = []
         run_metadata = []
-        if log_to_tensorboard:
+        if _logging_enabled:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
@@ -52,7 +53,7 @@ class MPSOptimizer(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            if _log_to_tensorboard:
+            if _logging_enabled:
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 start = time.time()
@@ -72,14 +73,19 @@ class MPSOptimizer(object):
                 self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
                 for index, element in enumerate(self.test):
                     self.feed_dict[self.MPS.nodes_list[index]] = element
-                if _log_to_tensorboard:
-                    writer.add_run_metadata(run_metadata, 'step' + str(i))
+                if _logging_enabled:
+                    #writer.add_run_metadata(run_metadata, 'step' + str(i))
+                    tl = timeline.Timeline(run_metadata.step_stats)
+                    ctf = tl.generate_chrome_trace_format()
+                    with open("timeline.json", "w") as f:
+                        f.write(ctf)
+                    run_metadata = tf.RunMetadata()
                 with open('weights', 'wb') as fp:
                     pickle.dump(self.test, fp)
                 end = time.time()
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_cost, train_accuracy, end - start))
                 #print("prediction:" + str(prediction[0]))
-            if _log_to_tensorboard:
+            if _logging_enabled:
                 writer.close()
 
     def _setup_optimization(self):
@@ -124,7 +130,8 @@ class MPSOptimizer(object):
         node = self.MPS.nodes.read(counter)
         node.set_shape([self.MPS.d_feature, None, None])
         input_leg = self._feature[counter]
-        contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+        # contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+        contracted_node = tf.tensordot(input_leg, node, [[1], [0]])
         C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
         C1s = C1s.write(counter, C1)
         counter = counter + 1
@@ -137,7 +144,8 @@ class MPSOptimizer(object):
         loc2 = self.MPS.input_size - 1 - counter
         node2 = self.MPS.nodes.read(loc2)
         node2.set_shape([self.MPS.d_feature, None, None])
-        contracted_node2 = tf.einsum('mij,tm->tij', node2, self._feature[loc2])  # CHECK einsum
+        # contracted_node2 = tf.einsum('mij,tm->tij', node2, self._feature[loc2])  # CHECK einsum
+        contracted_node2 = tf.tensordot(self._feature[loc2], node2, [[1], [0]])
         updated_counter = counter + 1
         new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
         C2s = C2s.write(self.MPS.input_size - 3 - counter, new_C2)
@@ -302,12 +310,14 @@ class MPSOptimizer(object):
         d1 = tf.shape(C1)[1]
         d2 = tf.shape(C2)[1]
 
-        with tf.name_scope("einsumC"):
+        with tf.name_scope("calculateC"):
             C1 = tf.reshape(C1, [self.batch_size, 1, 1, d1, 1])
             C2 = tf.reshape(C2, [self.batch_size, 1, 1, 1, d2])
             input1 = tf.reshape(input1, [self.batch_size, self.MPS.d_feature, 1, 1, 1])
             input2 = tf.reshape(input2, [self.batch_size, 1, self.MPS.d_feature, 1, 1])
-            C = C1 * C2 * input1 * input2
+            intermediate_1 = C1 * C2
+            intermediate_2 = input1 * input2
+            C = intermediate_1 * intermediate_2
 
         return C
 
@@ -325,7 +335,7 @@ class MPSOptimizer(object):
         f, cost = self._get_f_and_cost(bond, C)
 
         # perform gradient descent on the bond 
-        with tf.name_scope("einsumgradient"):
+        with tf.name_scope("tensordotgradient"):
             #gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
             gradient = tf.tensordot(self._label-f, C, [[0],[0]])
         label_bond = self.rate_of_change * gradient
@@ -435,7 +445,7 @@ if __name__ == '__main__':
     max_size = 8
 
     rate_of_change = 1000
-    log_to_tensorboard = False
+    logging_enabled = False
 
     cutoff = 10
     n_step = 10
@@ -454,7 +464,7 @@ if __name__ == '__main__':
     optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step, 
                     rate_of_change=rate_of_change, 
-                    log_to_tensorboard=log_to_tensorboard, 
+                    logging_enabled=logging_enabled, 
                     initial_weights=weights)
 
 
