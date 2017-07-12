@@ -41,7 +41,7 @@ class MPSOptimizer(object):
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-        increment = (1/10) ** (1/(n_step))
+        increment = 1 # (1/10) ** (1/(n_step))
 
         self.feed_dict = None
         self.test = None
@@ -344,7 +344,7 @@ class MPSOptimizer(object):
         
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
-        #cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
+        cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
 
@@ -381,21 +381,13 @@ class MPSOptimizer(object):
         index += 1
         return (index, old_nodes, new_nodes)
 
-    def _bond_decomposition(self, bond, max_size, min_size=None, threshold=None):
+    def _bond_decomposition(self, bond, max_size, min_size=3, threshold=10**(-8)):
         """
         Decomposes bond, so that the next step can be done.
         :param bond:
         :param m:
         :return:
         """
-        if threshold is None:
-            _threshold = 10 ** (-8)
-        else:
-            _threshold = threshold
-        if min_size is None:
-            min_size = 3
-        else:
-            min_size = min_size
         with tf.name_scope("bond_decomposition"):
             bond_reshaped = tf.transpose(bond, perm=[1, 3, 0, 2, 4])
 
@@ -407,7 +399,7 @@ class MPSOptimizer(object):
             filtered_u = utils.check_nan(u, 'u', replace_nan=True)
             filtered_v = utils.check_nan(v, 'v', replace_nan=True)
 
-            filtered_s = tf.boolean_mask(s, tf.greater(s, _threshold))
+            filtered_s = tf.boolean_mask(s, tf.greater(s, threshold))
             s_size = tf.size(filtered_s)
 
             case1 = lambda: min_size
@@ -439,16 +431,16 @@ if __name__ == '__main__':
     input_size = 196
     d_feature = 2
     d_output = 10
-    batch_size = 1000
+    batch_size = 10000
 
     bond_dim = 3
-    max_size = 8
+    max_size = 15
 
-    rate_of_change = 1000
+    rate_of_change = 10 ** 6/batch_size # changed from 5 * 10 ** 5
     logging_enabled = False
 
-    cutoff = 10
-    n_step = 10
+    cutoff = 100
+    n_step = 4
 
     data_source = preprocessing.MNISTData()
 
@@ -459,6 +451,10 @@ if __name__ == '__main__':
     #    if len(weights) != input_size:
     #        weights = None
 
+    batch_size = 20000
+    rate_of_change = 50 
+    n_step = 3 
+
     weights = None
     network = MPS(bond_dim, d_feature, d_output, input_size)
     optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
@@ -466,6 +462,11 @@ if __name__ == '__main__':
                     rate_of_change=rate_of_change, 
                     logging_enabled=logging_enabled, 
                     initial_weights=weights)
+
+
+
+
+
 
 
 
