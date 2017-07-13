@@ -122,7 +122,60 @@ class MPSOptimizer(object):
                                                              tf.TensorShape(None)], parallel_iterations=1,
                                            name="initialFindC2")
 
-    def _find_C1(self, counter, C1, C1s):
+    def _set_up_C1_and_L(self):
+        with tf.name_scope('set_up_C1_and_L'):
+            n1 = nodes.read(0)
+            n1.set_shape([None, None])
+
+            # Find the first C1 and L  
+            C1 = tf.einsum('ni,tn->ti', n1, feature[0])
+            L = tf.einsum('mi,mj->ij', n1, n1)
+
+            # Create the C1 and L TensorArray and put in the first value
+            C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size - 2, infer_shape=False, clear_after_read=False)
+            C1s = C1s.write(0, C1)
+            Ls = tf.TensorShape(tf.float32, size=self.MPS.input_size - 2, infer_shape=False, clear_after_read=False)
+            Ls = Ls.write(0, L)
+
+            # loop through to find all the C1s and Ls
+            cond = lambda c, *args: tf.less(c, special_loc)
+            _, _, self.C1s, _, self.Ls = tf.while_loop(cond=cond, body=self._find_C1_and_L, 
+                                                       loop_vars=[1, C1, C1s, L, Ls],
+                                                       shape_invariants=[tf.TensorShape([]), 
+                                                                         tf.TensorShape([None, None]),   
+                                                                         tf.TensorShape(None),
+                                                                         tf.TensorShape([None, None]),
+                                                                         tf.TensorShape(None)],
+                                                       parallel_iterations=2,
+                                                       name="initialFindC1andL")
+
+    def _set_up_C2_and_R(self):
+        with tf.name_scope('set_up_C2_and_R'):
+            nlast = nodes.read(nodes.size() - 1)
+            nlast.set_shape([None, None])
+
+            C2 = tf.einsum('mi,tm->ti', nlast, feature[-1])
+            R = tf.einsum('mi,mj->ij', nlast, nlast)
+
+            C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size - 2, infer_shape=False, clear_after_read=False)
+            C2s = C2s.write(self.MPS.input_size - 3, C2)
+            Rs = tf.TensorArray(tf.float32, size=self.MPS.input_size - 2, infer_shape=False, clear_after_read=False)
+            Rs = Rs.write(self.MPS.input_size - 3, L)
+
+            cond = lambda counter, *args: tf.less(counter, self.MPS.input_size - special_loc - 2)
+            _, _, self.C2s, _, self.Rs = tf.while_loop(cond=cond, body=self._find_C2, 
+                                                       loop_vars=[1, C2, C2s, R, Rs],
+                                                       shape_invariants=[tf.TensorShape([]), 
+                                                                         tf.TensorShape([None, None]),
+                                                                         tf.TensorShape(None), 
+                                                                         tf.TensorShape([None, None]),
+                                                                         tf.TensorShape(None)],  
+                                                       parallel_iterations=1,
+                                                       name="initialFindC2andR")
+
+
+
+    def _find_C1_and_L(self, counter, C1, C1s, L, Ls):
         '''
         finds new C1, and write into C1s[counter]
         '''
@@ -131,24 +184,33 @@ class MPSOptimizer(object):
         input_leg = self._feature[counter]
         # contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
         contracted_node = tf.tensordot(input_leg, node, [[1], [0]])
+
         C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
         C1s = C1s.write(counter, C1)
-        counter = counter + 1
-        return [counter, C1, C1s]
 
-    def _find_C2(self, counter, prev_C2, C2s):
+        L = tf.einsum('ij,mik,mjg->kg', L, node, node)
+        Ls = Ls.write(counter, L)
+        counter = counter + 1
+        return [counter, C1, C1s, L, Ls]
+
+    def _find_C2_and_R(self, counter, C2, C2s, R, Rs):
         '''
         finds new C2, and write into C2s[counter]
         '''
         loc2 = self.MPS.input_size - 1 - counter
         node2 = self.MPS.nodes.read(loc2)
         node2.set_shape([self.MPS.d_feature, None, None])
+
         # contracted_node2 = tf.einsum('mij,tm->tij', node2, self._feature[loc2])  # CHECK einsum
         contracted_node2 = tf.tensordot(self._feature[loc2], node2, [[1], [0]])
-        updated_counter = counter + 1
-        new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
-        C2s = C2s.write(self.MPS.input_size - 3 - counter, new_C2)
-        return [updated_counter, new_C2, C2s]
+        C2 = tf.einsum('tij,tj->ti', contracted_node2, C2)
+        C2s = C2s.write(self.MPS.input_size - 3 - counter, C2)
+
+        R = tf.einsum('ij,mki,mgj->kg', R, node2, node2)
+        Rs = Rs.write(self.MPS.input_size - 3 - counter, C2)
+
+        counter = counter + 1 
+        return [counter, C2, C2s, R, Rs]
 
     def train_step(self):
         self.batch_size = tf.shape(self._feature)[1]
@@ -340,6 +402,7 @@ class MPSOptimizer(object):
         with tf.name_scope("tensordotgradient"):
             #gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
             gradient = tf.tensordot(self._label-f, C, [[0],[0]])
+
         label_bond = self.rate_of_change * gradient
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
         updated_bond = tf.add(bond, label_bond)
@@ -383,7 +446,7 @@ class MPSOptimizer(object):
         index += 1
         return (index, old_nodes, new_nodes)
 
-    def _bond_decomposition(self, bond, max_size, min_size=3, threshold=10**(-8)):
+    def _bond_decomposition(self, bond, max_size, min_size=3, threshold=10**(-5)):
         """
         Decomposes bond, so that the next step can be done.
         :param bond:
@@ -435,9 +498,9 @@ if __name__ == '__main__':
     d_output = 10
     batch_size = 10000
 
-    max_size = 30
+    max_size = 50
 
-    rate_of_change = 10 ** (-7) # was 10 ** (-9)
+    rate_of_change = 4 * 10 ** (-8) # was 10 ** (-7)
     logging_enabled = False
 
     cutoff = 10
