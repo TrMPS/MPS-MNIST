@@ -110,3 +110,5 @@ ENV/
 trmps/weights
 
 trmps/weights
+
+trmps/.vscode/settings.json

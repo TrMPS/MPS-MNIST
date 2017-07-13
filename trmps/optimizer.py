@@ -41,7 +41,8 @@ class MPSOptimizer(object):
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-        increment = (1/10) ** (1/(n_step))
+        #increment = (1/10) ** (1/(n_step))
+        increment = 1.
 
         self.feed_dict = None
         self.test = None
@@ -57,7 +58,6 @@ class MPSOptimizer(object):
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 start = time.time()
-
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
                 self.feed_dict = self.MPS.create_feed_dict(self.test)
                 self.feed_dict[self._feature] = batch_feature
@@ -232,9 +232,6 @@ class MPSOptimizer(object):
             n2 = nodes.read(counter - 1)
             n2.set_shape([self.MPS.d_feature, None, None])
 
-            # Calculate the bond 
-            bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
-
             # Calculate the C matrix 
             C2 = C2s.read(counter - 1)
             C1 = C1s.read(counter - 2)
@@ -242,6 +239,10 @@ class MPSOptimizer(object):
             C2.set_shape([None, None])
             input1 = self._feature[counter-1]
             input2 = self._feature[counter]
+
+            # Calculate the bond 
+            bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
+
             C = self._calculate_C(C2, C1, input2, input1)
 
             # update the bond 
@@ -272,11 +273,6 @@ class MPSOptimizer(object):
             n2 = nodes.read(counter + 1)
             n2.set_shape([self.MPS.d_feature, None, None])
     
-            # Calculate the bond 
-            bond = tf.einsum('lmij,njk->lmnik', n1, n2)
-            # bond = tf.transpose(tf.tensordot(n1, n2, [[3],[1]]), [0, 1, 3, 2, 4])
-            # einsum is actually faster in this case
-    
             # Calculate the C matrix 
             C2 = C2s.read(counter)
             C1 = C1s.read(counter - 1)
@@ -284,6 +280,12 @@ class MPSOptimizer(object):
             C2.set_shape([None, None])
             input1 = self._feature[counter]
             input2 = self._feature[counter+1]
+
+            # Calculate the bond 
+            bond = tf.einsum('lmij,njk->lmnik', n1, n2)
+            # bond = tf.transpose(tf.tensordot(n1, n2, [[3],[1]]), [0, 1, 3, 2, 4])
+            # einsum is actually faster in this case
+
             C = self._calculate_C(C1, C2, input1, input2)
 
             # Update the bond 
