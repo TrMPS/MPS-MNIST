@@ -24,7 +24,7 @@ class MPS(object):
         self.d_matrix = d_output * 2
         self.d_feature = d_feature
         self.d_output = d_output
-        self._special_node_loc = 1 #int(np.floor(self.input_size / 2))
+        self._special_node_loc = int(np.floor(self.input_size / 2))
 
     def prepare(self, data_source):
         self._lin_reg(data_source)

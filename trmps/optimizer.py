@@ -433,11 +433,11 @@ if __name__ == '__main__':
     input_size = 196
     d_feature = 2
     d_output = 10
-    batch_size = 5000
+    batch_size = 10000
 
-    max_size = 20
+    max_size = 30
 
-    rate_of_change = 10 ** (-8) # was 10 ** (-9)
+    rate_of_change = 10 ** (-7) # was 10 ** (-9)
     logging_enabled = False
 
     cutoff = 10
