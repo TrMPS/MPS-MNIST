@@ -103,6 +103,11 @@ class MNISTData(object):
             np.save(self._training_labels_path, self._training_data[1])
         return self._training_data
 
+    def get_test_data(self):
+        data, labels = self.test_data 
+        data = np.transpose(data, (1, 0, 2))
+        return data, labels
+
     def next_training_data_batch(self, batch_size, shuffle=None):
         if batch_size > len(self.training_data[0]):
             print("Probably shouldn't do this; your batch size is greater than the size of the dataset")

@@ -61,7 +61,7 @@ class MPS(object):
 
     def cost(self, f, label):
         with tf.name_scope("cost"):
-            cost = 0.5 * tf.reduce_sum(tf.square(f-label))
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=f)) # 0.5 * tf.reduce_sum(tf.square(f-label))
         return cost
 
     def accuracy(self, f, label):
