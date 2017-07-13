@@ -26,7 +26,6 @@ class MPSOptimizer(object):
         self.cutoff = cutoff
         self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
-        self.MPS._setup_nodes(self._feature)
         self._setup_optimization()
         _ = self.train_step()
 
@@ -291,6 +290,8 @@ class MPSOptimizer(object):
     
             # Decompose the bond 
             aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
+
+
     
             # Transpose the values and add to the new variables 
             updated_nodes = updated_nodes.write(counter, aj)
@@ -325,10 +326,11 @@ class MPSOptimizer(object):
         with tf.name_scope("tensordotf"):
             #f = tf.einsum('lmnik,tmnik->tl', bond, C)
             f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
+            h = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
-            cost = 0.5 * tf.reduce_sum(tf.square(f-self._label))
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f)) # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
-        return f, cost
+        return h, cost
 
     def _update_bond(self, bond, C):
         # obtain the original cost
@@ -431,16 +433,15 @@ if __name__ == '__main__':
     input_size = 196
     d_feature = 2
     d_output = 10
-    batch_size = 10000
+    batch_size = 5000
 
-    bond_dim = 3
-    max_size = 15
+    max_size = 20
 
-    rate_of_change = 10 ** 6/batch_size # changed from 5 * 10 ** 5
+    rate_of_change = 10 ** (-8) # was 10 ** (-9)
     logging_enabled = False
 
-    cutoff = 100
-    n_step = 4
+    cutoff = 10
+    n_step = 5
 
     data_source = preprocessing.MNISTData()
 
@@ -451,12 +452,10 @@ if __name__ == '__main__':
     #    if len(weights) != input_size:
     #        weights = None
 
-    batch_size = 20000
-    rate_of_change = 50 
-    n_step = 3 
-
     weights = None
-    network = MPS(bond_dim, d_feature, d_output, input_size)
+
+    network = MPS(d_feature, d_output, input_size)
+    network.prepare(data_source)
     optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step, 
                     rate_of_change=rate_of_change, 

@@ -21,16 +21,14 @@ class MPS(object):
     def __init__(self, d_feature, d_output, input_size):
         # structure parameters
         self.input_size = input_size
-        self.d_matrix = d_output + 1 
+        self.d_matrix = d_output * 2
         self.d_feature = d_feature
         self.d_output = d_output
         self._special_node_loc = 1 #int(np.floor(self.input_size / 2))
 
-    def prepare(self, feature, label):
-        accuracy = self._lin_reg(feature, label)
+    def prepare(self, data_source):
+        self._lin_reg(data_source)
         self._setup_nodes()
-
-        return accuracy
 
     def test(self, test_feature, test_label):
         '''
@@ -38,16 +36,14 @@ class MPS(object):
         '''
         feature = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.d_output])
-        accuracy = self.prepare(feature, label)
 
         f = self.predict(feature)
         f = tf.Print(f, [f], summarize=190, message="prediction")
         cost = self.cost(f, label)
-        new_accuracy = self.accuracy(f, label)
+        accuracy = self.accuracy(f, label)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            reg_acc, test_cost, test_acc = sess.run([accuracy, cost, new_accuracy], {feature: test_feature, label: test_label})
-            print(reg_acc)
+            test_cost, test_acc = sess.run([cost, accuracy], {feature: test_feature, label: test_label})
             print(test_cost)
             print(test_acc)
 
@@ -76,21 +72,34 @@ class MPS(object):
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return accuracy
 
-    def _lin_reg(self, feature, label):
-        self.weight = tf.Variable(tf.zeros([self.input_size, self.d_output]))
-        self.bias = tf.Variable(tf.zeros([self.d_output]))
+    def _lin_reg(self, data_source):
+        weight = tf.Variable(tf.zeros([self.input_size, self.d_output]))
+        bias = tf.Variable(tf.zeros([self.d_output]))
+
+        feature = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
+        label = tf.placeholder(tf.float32, shape=[None, self.d_output])
 
         x = tf.transpose(feature[:, :, 1])
 
-        prediction = tf.matmul(x, self.weight) + self.bias
+        prediction = tf.matmul(x, weight) + bias
+        #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
         cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction)
         train_step = tf.train.GradientDescentOptimizer(0.05).minimize(cross_entropy)
+        #train_step = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy)
 
         correct_prediction = tf.equal(tf.argmax(label,1), tf.argmax(prediction,1))
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-        return accuracy
-
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            for _ in range(500):    
+                batch_feature, batch_label = data_source.next_training_data_batch(100)
+                sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
+            batch_feature, batch_label = data_source.next_training_data_batch(10000)
+            acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
+            print('Lin regression gives an accuracy of {}'.format(acc))
+            self.weight = sess.run(weight)
+            self.bias = sess.run(bias)
 
     def _setup_nodes(self):
 
@@ -119,43 +128,37 @@ class MPS(object):
             self.nodes = self.nodes.write(self.input_size - 1, self.nodes_list[-1])
 
     def _make_start_vector(self):
-        vector1 = np.ones([self.d_matrix], dtype=np.float32)
-        vector1[0] = 0
-        vector2 = np.zeros([self.d_matrix], dtype=np.float32)
-        v1_t = tf.Variable(vector1)
-        v2_t = tf.Variable(vector2)
-
-        return tf.stack([v1_t, v2_t])
+        start_vector = np.zeros([2, self.d_matrix], dtype=np.float32)
+        start_vector[0, self.d_output:] = 1
+        start_vector[1, 0:self.d_output] = self.weight[0]
+        return tf.Variable(start_vector, dtype=tf.float32)
 
     def _make_end_vector(self):
-        vector1 = tf.constant(1, dtype=tf.float32)
-        b = tf.unstack(self.bias)
-        vector1 = tf.stack([vector1] + b)
-        vector2 = tf.constant(0, dtype=tf.float32)
-        w = tf.unstack(self.weight[-1])
-        vector2 = tf.stack([vector2] + w)
-        return tf.stack([vector1, vector2])
+
+        end_vector = np.zeros([2, self.d_matrix], dtype=np.float32)
+        end_vector[0, 0:self.d_output] = 1 
+        end_vector[0, self.d_output:] = self.bias 
+        end_vector[1, self.d_output:] = self.weight[-1] 
+
+        return tf.Variable(end_vector, dtype=tf.float32)
 
     def _make_middle_node(self, index):
-        identity = tf.eye(self.d_matrix)
-        matrix2 = tf.Variable(np.zeros([self.d_matrix, self.d_matrix], dtype=np.float32))
-        w = self.weight[index]
-        indices = [[i, 0] for i in range(1, self.d_matrix)]
-        matrix2 = tf.scatter_nd_add(matrix2, indices , w)
-        stacked = [identity, matrix2]
-        return tf.stack(stacked)
+
+        middle_node = np.zeros([2, self.d_matrix, self.d_matrix], dtype=np.float32)
+        middle_node[0] = np.identity(self.d_matrix)
+        middle_node[1, self.d_output:, 0:self.d_output] = np.diag(self.weight[index])
+
+        return tf.Variable(middle_node, dtype=tf.float32)
 
     def _make_special_node(self, index):
         
         def _make_matrix(i):
-            m1 = np.zeros([self.d_matrix, self.d_matrix], dtype=np.float32)
-            m1[0, 0] = 1 
-            m1[i+1, i+1] = 1 
-            m1 = tf.Variable(m1)
-            m2 = tf.Variable(np.zeros([self.d_matrix, self.d_matrix], dtype=np.float32))
-            m2 = tf.scatter_nd_add(m2, [[i+1, 0]], tf.reshape(self.weight[index, i], [1]))
+            m = np.zeros([2, self.d_matrix, self.d_matrix], dtype=np.float32)
+            m[0, i, i] = 1 
+            m[0, i+self.d_output, i+self.d_output] = 1
+            m[1, i+self.d_output, i] = self.weight[index, i]
 
-            return tf.stack([m1, m2])
+            return tf.Variable(m)
 
         stacked = [_make_matrix(i) for i in range(self.d_output)]
 
@@ -230,8 +233,10 @@ if __name__ == '__main__':
     batch_size = 1000
 
     data_source = preprocessing.MNISTData()
-    (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
     
     # Initialise the model
     network = MPS(d_feature, d_output, input_size)
-    network.test(batch_feature, batch_label)
+    network.prepare(data_source)
+    feature, label = data_source.next_training_data_batch(1000)
+    network.test(feature, label)
+
