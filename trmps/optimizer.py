@@ -323,16 +323,17 @@ class MPSOptimizer(object):
             n1 = previous_node
             n2 = self.MPS.nodes.read(counter - 1)
             n2.set_shape([self.MPS.d_feature, None, None])
-
+            #counter = tf.Print(counter, [counter], message = "update_left")
             # Calculate the C matrix 
             C2 = C2s.read(counter - 1)
-            C1 = self.C1s.read(counter - 2)
+            C1 = C1s.read(counter - 2)
             C1.set_shape([None, None])
             C2.set_shape([None, None])
             input1 = self._feature[counter-1]
             input2 = self._feature[counter]
 
             # Calculate the bond 
+            n1 = tf.Print(n1, [tf.shape(n1), tf.shape(n2)], summarize = 100, message = "n1shape, n2shape")
             bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
 
             C = self._calculate_C(C2, C1, input2, input1)
@@ -356,6 +357,7 @@ class MPSOptimizer(object):
             C2s = C2s.write(counter - 2, C2)
             
             updated_counter = counter - 1
+            #updated_counter = tf.Print(updated_counter, [counter], message = "ended update_left")
 
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1, special_index]
 
@@ -364,11 +366,12 @@ class MPSOptimizer(object):
         with tf.name_scope("update_right"):
             # Read in the nodes 
             n1 = previous_node
-            n2 = self.MPS.nodes.read(counter + 1)
+            n2 = nodes.read(counter + 1)
             n2.set_shape([self.MPS.d_feature, None, None])
+            #counter = tf.Print(counter, [counter], message = "started update_right")
     
             # Calculate the C matrix 
-            C2 = self.C2s.read(counter)
+            C2 = C2s.read(counter)
             C1 = C1s.read(counter - 1)
             C1.set_shape([None, None])
             C2.set_shape([None, None])
@@ -401,6 +404,7 @@ class MPSOptimizer(object):
             C1s = C1s.write(counter, C1)
             
             updated_counter = counter + 1
+            #updated_counter = tf.Print(updated_counter, [counter], message = "ended update_right")
     
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1, special_index]
 
@@ -426,7 +430,8 @@ class MPSOptimizer(object):
             f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
             h = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
-            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f)) # 0.5 * tf.reduce_sum(tf.square(f-self._label))
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f)) 
+            # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
         return h, cost
 
@@ -444,7 +449,7 @@ class MPSOptimizer(object):
         
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
-        cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
+        #cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
 
