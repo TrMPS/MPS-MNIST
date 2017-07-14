@@ -214,13 +214,13 @@ class MPSOptimizer(object):
             self.updated_nodes_l2, self.C1s_l, self.C2s_l  = self._sweep_right(1, self.MPS._special_node_loc, self.updated_nodes_l2,
                                                             self.C1s_l, self.C2s_l, self.updated_nodes_l, special_index = self.MPS._special_node_loc - 1)
 
-            center = self._choose_centre()
+            center = self._choose_center()
             self.updated_nodes = self.updated_nodes.write(self.MPS._special_node_loc, center)
             self.MPS.nodes = self.updated_nodes
             
-    def _choose_centre(self):
-        C1 = tf.read(self.C1s_l, self.MPS._special_node_loc-1)
-        C2 = tf.read(self.C2s_r, self.MPS._special_node_loc-1)
+    def _choose_center(self):
+        C1 = self.C1s_l.read(self.MPS._special_node_loc-1)
+        C2 = self.C2s_r.read(self.MPS._special_node_loc-1)
 
         def _calculate_f(center):
             center_loc = self.MPS._special_node_loc
