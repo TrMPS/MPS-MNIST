@@ -228,6 +228,7 @@ class MPSOptimizer(object):
             fb = tf.einsum('tli,ti->tl', C1b, C2)
             costa = 0.5 * tf.reduce_sum(tf.square(fa-self._label))
             costb = 0.5 * tf.reduce_sum(tf.square(fb-self._label))
+            costa = tf.Print(costa, [costa, costb], message = "costs")
 
             f, center, cost = tf.cond(tf.less(costa, costb), true_fn = lambda: (fa, centera, costa), false_fn = lambda: (fb, centerb, costb))
 
@@ -508,17 +509,6 @@ class MPSOptimizer(object):
                                             loop_vars=[special_loc+1, nodes2, new_nodes], name="merge_loop2")
         return new_nodes
 
-    def _split_nodes(self, nodes, special_loc):
-        n1 = nodes.read(special_loc)
-        n1.set_shape([None, None, None, None])
-        # n1 = tf.Print(n1, [tf.shape(n1)], message = "n1 shape")
-        l, r, inv_s = self._node_decomposition(n1, self.max_size)
-        new_nodes_l = self._merge_nodes(nodes, nodes, special_loc)
-        new_nodes_r = self._merge_nodes(nodes, nodes, special_loc)
-        new_nodes_l = new_nodes_l.write(special_loc, l)
-        new_nodes_r = new_nodes_r.write(special_loc, r)
-        return new_nodes_l, new_nodes_r, inv_s
-
 
     def _bond_decomposition(self, bond, max_size, min_size=None, threshold=None):
         """
@@ -604,55 +594,6 @@ class MPSOptimizer(object):
 
         return (a_prime_j, a_prime_j1)
 
-    def _node_decomposition(self, node, max_size, min_size=None, threshold=None):
-        if threshold is None:
-            _threshold = 10 ** (-8)
-        else:
-            _threshold = threshold
-        if min_size is None:
-            min_size = 3
-        else:
-            min_size = min_size
-        with tf.name_scope("node_decomposition"):
-            dims = tf.shape(node)
-            l_dim = dims[2]
-            r_dim = dims[3]
-            node_flattened = tf.reshape(node, [dims[0] * dims[1], l_dim, r_dim])
-            s, u, v = tf.svd(node_flattened)
-            filtered_u = utils.check_nan(u, 'u', replace_nan=True)
-            filtered_v = utils.check_nan(v, 'v', replace_nan=True)
-
-            boolean = tf.greater(s, _threshold)
-            boolean = tf.reduce_prod(tf.cast(boolean, tf.int32), 0)
-            s_size = tf.reduce_sum(boolean)
-            # s_size = tf.Print(s_size, [s_size, tf.shape(s)], summarize = 1000, message = "satributes")
-
-            case1 = lambda: min_size
-            case2 = lambda: max_size
-            case3 = lambda: s_size
-            m = tf.case({tf.less(s_size, min_size): case1, tf.greater(s_size, max_size): case2}, default=case3,
-                        exclusive=True)
-
-            # make s into a matrix
-            sliced_s = s[:,0:m]
-            inv_s = tf.divide(1, sliced_s)
-
-            # make u, v into suitable matrices
-            u_cropped = filtered_u[:,:, 0:m]
-            v_cropped = tf.transpose(filtered_v[:,:, 0:m], [0, 2, 1])
-
-            # make a_ 
-            # sliced_s = tf.Print(sliced_s, [tf.shape(sliced_s), tf.shape(u_cropped), tf.shape(v_cropped)], summarize = 1000, message = "shapes of concern")
-            with tf.control_dependencies([sliced_s]):
-               su = tf.einsum('lk,ljk->ljk', sliced_s, u_cropped)
-               a_prime_j = tf.reshape(su, [dims[0], dims[1], l_dim, m])
-               sv = tf.einsum('lm,lmk->lmk', sliced_s, v_cropped)
-               # sv = tf.Print(sv, [tf.shape(a_prime_j), tf.shape(su)], summarize = 1000, message = "svshape")
-               a_prime_j1 = tf.reshape(sv, [dims[0], dims[1], m, r_dim])
-               inv_s = tf.reshape(inv_s, [dims[0], dims[1], m])
-        #return node, sliced_s, inv_s
-        return (a_prime_j, a_prime_j1, inv_s)
-
 
 
 if __name__ == '__main__':
@@ -665,7 +606,7 @@ if __name__ == '__main__':
     bond_dim = 3
     max_size = 8
 
-    rate_of_change = 1000
+    rate_of_change = 0.1
     logging_enabled = False
 
     cutoff = 10
