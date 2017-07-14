@@ -29,6 +29,13 @@ class MPSOptimizer(object):
         self._setup_optimization()
         _ = self.train_step()
 
+        print( "_____   Thomas the Tensor Train    . . . . . o o o o o",
+			   "  __|[_]|__ ___________ _______    ____      o",
+			   " |[] [] []| [] [] [] [] [_____(__  ][]]_n_n__][.",
+			   "_|________|_[_________]_[________]_|__|________)<",
+			   "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
+			   " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
+
     def train(self, data_source, batch_size, n_step, rate_of_change=1000, logging_enabled=None, initial_weights=None):
         _logging_enabled = logging_enabled
         if logging_enabled is None:
@@ -70,14 +77,11 @@ class MPSOptimizer(object):
                 self.feed_dict[self.rate_of_change] = rate_of_change 
                 self.feed_dict[feature] = test_feature
                 self.feed_dict[label] = test_label
-                train_c, self.test, train_acc = sess.run([train_cost, test_result, train_accuracy],
-                                                                             feed_dict=self.feed_dict,
-                                                                             options=run_options,
-                                                                             run_metadata=run_metadata)
-                test_c, test_acc = sess.run([test_cost, test_accuracy],
-                                                     feed_dict=self.feed_dict,
-                                                     options=run_options,
-                                                     run_metadata=run_metadata)
+                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy]
+                train_c, self.test, train_acc, test_c, test_acc = sess.run(to_eval,
+                                                                           feed_dict=self.feed_dict,
+                                                                           options=run_options,
+                                                                           run_metadata=run_metadata)
 
                 rate_of_change = rate_of_change * increment
 
@@ -282,6 +286,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
             C2s = C2s.write(counter - 2, C2)
+            
             updated_counter = counter - 1
 
         return [updated_counter, C2s, updated_nodes, aj1]
@@ -313,8 +318,6 @@ class MPSOptimizer(object):
     
             # Decompose the bond 
             aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
-
-
     
             # Transpose the values and add to the new variables 
             updated_nodes = updated_nodes.write(counter, aj)
@@ -325,6 +328,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             C1s = C1s.write(counter, C1)
+            
             updated_counter = counter + 1
     
         return [updated_counter, C1s, updated_nodes, aj1]
@@ -442,6 +446,7 @@ class MPSOptimizer(object):
 
             # make a_ 
             a_prime_j = tf.reshape(u_cropped, [dims[0], dims[1], m])
+
             sv = tf.matmul(s_mat, v_cropped)
             a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
             a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
@@ -456,15 +461,15 @@ if __name__ == '__main__':
     input_size = 196
     d_feature = 2
     d_output = 10
-    batch_size = 100
+    batch_size = 10000
 
-    max_size = 3
+    max_size = 20
 
-    rate_of_change = 2 * 10 ** (-8) 
+    rate_of_change = 10 ** (-7) 
     logging_enabled = False
 
     cutoff = 10 # change this next
-    n_step = 1
+    n_step = 2
 
     data_source = preprocessing.MNISTData()
 
