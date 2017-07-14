@@ -24,7 +24,7 @@ class MPSOptimizer(object):
         self.max_size = max_size
         self.grad_func = grad_func
         self.cutoff = cutoff
-        self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
+        self._feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self.MPS._setup_nodes(self._feature)
         self._setup_optimization()
@@ -186,24 +186,80 @@ class MPSOptimizer(object):
             self.updated_nodes_l2, self.C1s_l, self.C2s_l  = self._sweep_right(1, original_special_node_loc, self.updated_nodes_l2,
                                                             self.C1s_l, self.C2s_l, self.updated_nodes_l, special_index = self.MPS._special_node_loc - 1)
 
-            center1 = self.updated_nodes_l2.read(original_special_node_loc)
-            center1.set_shape([None, None, None, None])
-            center2 = self.updated_nodes_r2.read(original_special_node_loc)
-            center2.set_shape([None, None, None, None])
-            center = tf.add(center1, center2)/2
+            centera = self.updated_nodes_l2.read(original_special_node_loc)
+            centera.set_shape([None, None, None, None])
+            centerb = self.updated_nodes_r2.read(original_special_node_loc)
+            centerb.set_shape([None, None, None, None])
+            # center = tf.add(center1, center2)/2
             #center1 = tf.Print(center1, [tf.shape(center1), tf.shape(center2)], summarize = 100, message = "shapes")
             self.updated_nodes = self._merge_nodes(self.updated_nodes_l2, self.updated_nodes_r2, original_special_node_loc)
             # center = tf.Print(center, [tf.shape(center), tf.shape(self.updated_nodes.read(original_special_node_loc - 1)),
             #     tf.shape(self.updated_nodes.read(original_special_node_loc + 1))], summarize = 100, message = "center shape")
+
+            node1 = self.updated_nodes.read(0)
+            node1.set_shape([self.MPS.d_feature, None])
+            nodelast = self.updated_nodes.read(self.MPS.input_size - 1)
+            nodelast.set_shape([self.MPS.d_feature, None])
+
+            # Calculate C1 
+            C1 = tf.einsum('ni,tn->ti', node1, self._feature[0])
+            cond = lambda c, b: tf.less(c, original_special_node_loc)
+
+            counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_l, loop_vars=[1, C1],
+                                        shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
+                                        parallel_iterations=1)
+            contracted_nodea = tf.einsum('lnij,tn->tlij', centera, self._feature[original_special_node_loc])
+            contracted_nodeb = tf.einsum('lnij,tn->tlij', centerb, self._feature[original_special_node_loc])
+
+            C1a = tf.einsum('ti,tlij->tlj', C1, contracted_nodea)
+            C1b = tf.einsum('ti,tlij->tlj', C1, contracted_nodeb)
+
+            cond2 = lambda c, b: tf.less(c, self.MPS.input_size - 1)
+            _, C1a = tf.while_loop(cond=cond2, body=self._chain_multiply, loop_vars=[counter + 1, C1a],
+                                  shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None, None])],
+                                  parallel_iterations=10)
+            _, C1b = tf.while_loop(cond=cond2, body=self._chain_multiply, loop_vars=[counter + 1, C1b],
+                                  shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None, None])],
+                                  parallel_iterations=10)
+
+            C2 = tf.einsum('mi,tm->ti', nodelast, self._feature[self.MPS.input_size - 1])
+
+            fa = tf.einsum('tli,ti->tl', C1a, C2)
+            fb = tf.einsum('tli,ti->tl', C1b, C2)
+            costa = 0.5 * tf.reduce_sum(tf.square(fa-self._label))
+            costb = 0.5 * tf.reduce_sum(tf.square(fb-self._label))
+
+            f, center, cost = tf.cond(tf.less(costa, costb), true_fn = lambda: (fa, centera, costa), false_fn = lambda: (fb, centerb, costb))
+
             self.updated_nodes = self.updated_nodes.write(original_special_node_loc, center)
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = original_special_node_loc
             
             # accuracy
-            f = self.MPS.predict(self._feature)
+            # f = self.MPS.predict(self._feature)
             accuracy = self.MPS.accuracy(f, self._label)
 
         return accuracy
+
+    def _chain_multiply(self, counter, C1):
+        with tf.name_scope("chain_multiply"):
+            node = self.updated_nodes.read(counter)
+            node.set_shape([self.MPS.d_feature, None, None])
+            input_leg = self._feature[counter]
+            contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+            C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
+            counter = counter + 1
+        return [counter, C1]
+
+    def _chain_multiply_l(self, counter, C1):
+        with tf.name_scope("chain_multiply_l"):
+            node = self.updated_nodes.read(counter)
+            node.set_shape([self.MPS.d_feature, None, None])
+            input_leg = self._feature[counter]
+            contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+            C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
+            counter = counter + 1
+        return [counter, C1]
 
     def train_step_serial(self):
         self.batch_size = tf.shape(self._feature)[1]
