@@ -28,9 +28,9 @@ def _preprocess_images(data, size):
                           strides=[1, 2, 2, 1], padding='SAME')
     pooled_image = tf.placeholder(tf.float32, shape=[1, 14, 14, 1])
     snaked_image = tf.reshape(pooled_image, shape=[196])
-    sined = tf.sin((np.pi / 2) * snaked_image)
-    cosined = tf.cos((np.pi / 2) * snaked_image)
-    phi = tf.stack([cosined, sined], axis=1)
+
+    ones = tf.ones([196], dtype=tf.float32)
+    phi = tf.stack([ones, snaked_image], axis=1)
 
     print("0 % done", end="")
 
@@ -102,6 +102,11 @@ class MNISTData(object):
             np.save(self._training_data_path, self._training_data[0])
             np.save(self._training_labels_path, self._training_data[1])
         return self._training_data
+
+    def get_test_data(self):
+        data, labels = self.test_data 
+        data = np.transpose(data, (1, 0, 2))
+        return data, labels
 
     def next_training_data_batch(self, batch_size, shuffle=None):
         if batch_size > len(self.training_data[0]):
