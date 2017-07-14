@@ -270,9 +270,10 @@ class MPSOptimizer(object):
             self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, 0, self.MPS._special_node_loc)
             original_special_node_loc = self.MPS._special_node_loc
 
+            loc = self.MPS.input_size + 10
             # First half-sweep
             self.updated_nodes, self.C1s, self.C2s = self._sweep_right(self.MPS._special_node_loc, self.MPS.input_size - 2, self.updated_nodes,
-                                                                        self.C1s, self.C2s, self.MPS.nodes)
+                                                                        self.C1s, self.C2s, self.MPS.nodes, loc)
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = self.MPS.nodes.size() - 2
 
@@ -282,7 +283,7 @@ class MPSOptimizer(object):
             self.C2s = self.C2s.write(self.MPS.input_size - 3, C2)
             self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, 0, 0)
             self.updated_nodes, self.C1s, self.C2s = self._sweep_left(self.MPS.nodes.size() - 2, 1, self.updated_nodes,
-                                                                    self.C1s, self.C2s, self.MPS.nodes)
+                                                                    self.C1s, self.C2s, self.MPS.nodes, loc)
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = 1
             
@@ -294,7 +295,7 @@ class MPSOptimizer(object):
                                       clear_after_read=False)
             self.C1s = self.C1s.write(0, C1)
             self.updated_nodes, self.C1s, self.C2s  = self._sweep_right(1, original_special_node_loc, self.updated_nodes,
-                                                            self.C1s, self.C2s, self.MPS.nodes)
+                                                            self.C1s, self.C2s, self.MPS.nodes, loc)
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = original_special_node_loc
             
@@ -606,7 +607,7 @@ if __name__ == '__main__':
     bond_dim = 3
     max_size = 8
 
-    rate_of_change = 0.1
+    rate_of_change = 1000
     logging_enabled = False
 
     cutoff = 10
