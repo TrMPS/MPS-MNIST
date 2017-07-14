@@ -214,6 +214,7 @@ class MPSOptimizer(object):
             self.updated_nodes_l2, self.C1s_l, self.C2s_l  = self._sweep_right(1, self.MPS._special_node_loc, self.updated_nodes_l2,
                                                             self.C1s_l, self.C2s_l, self.updated_nodes_l, special_index = self.MPS._special_node_loc - 1)
 
+            self.updated_nodes = self._merge_nodes(self.updated_nodes_l2, self.updated_nodes_r2, self.MPS._special_node_loc)
             center = self._choose_center()
             self.updated_nodes = self.updated_nodes.write(self.MPS._special_node_loc, center)
             self.MPS.nodes = self.updated_nodes
@@ -249,7 +250,7 @@ class MPSOptimizer(object):
         with tf.name_scope("train_step"):
             # Create updated_nodes and fill in the first half from current one
             self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, 0, self.MPS._special_node_loc)
-            self.MPS._special_node_loc = self.MPS._special_node_loc
+            original_special_node_loc = self.MPS._special_node_loc
 
             loc = self.MPS.input_size + 10
             # First half-sweep
@@ -269,16 +270,16 @@ class MPSOptimizer(object):
             self.MPS._special_node_loc = 1
             
             # Second half-sweep
-            self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, self.MPS._special_node_loc + 1,
+            self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, original_special_node_loc + 1,
                                                        self.MPS.nodes.size() + 10)
             C1 = self.C1s.read(0)
             self.C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size - 2, dynamic_size=True, infer_shape=False,
                                       clear_after_read=False)
             self.C1s = self.C1s.write(0, C1)
-            self.updated_nodes, self.C1s, self.C2s  = self._sweep_right(1, self.MPS._special_node_loc, self.updated_nodes,
+            self.updated_nodes, self.C1s, self.C2s  = self._sweep_right(1, original_special_node_loc, self.updated_nodes,
                                                             self.C1s, self.C2s, self.MPS.nodes, loc)
             self.MPS.nodes = self.updated_nodes
-            self.MPS._special_node_loc = self.MPS._special_node_loc
+            self.MPS._special_node_loc = original_special_node_loc
             
             # accuracy
             f = self.MPS.predict(self._feature)
@@ -323,9 +324,9 @@ class MPSOptimizer(object):
         with tf.name_scope("update_left"):
             # Read in the nodes 
             n1 = previous_node
-            n2 = self.MPS.nodes.read(counter - 1)
+            n2 = nodes.read(counter - 1)
             n2.set_shape([self.MPS.d_feature, None, None])
-            #counter = tf.Print(counter, [counter], message = "update_left")
+
             # Calculate the C matrix 
             C2 = C2s.read(counter - 1)
             C1 = C1s.read(counter - 2)
@@ -335,7 +336,6 @@ class MPSOptimizer(object):
             input2 = self._feature[counter]
 
             # Calculate the bond 
-            n1 = tf.Print(n1, [tf.shape(n1), tf.shape(n2)], summarize = 100, message = "n1shape, n2shape")
             bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
 
             C = self._calculate_C(C2, C1, input2, input1)
@@ -357,9 +357,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
             C2s = C2s.write(counter - 2, C2)
-            
             updated_counter = counter - 1
-            #updated_counter = tf.Print(updated_counter, [counter], message = "ended update_left")
 
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1, special_index]
 
@@ -370,7 +368,6 @@ class MPSOptimizer(object):
             n1 = previous_node
             n2 = nodes.read(counter + 1)
             n2.set_shape([self.MPS.d_feature, None, None])
-            #counter = tf.Print(counter, [counter], message = "started update_right")
     
             # Calculate the C matrix 
             C2 = C2s.read(counter)
@@ -404,9 +401,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             C1s = C1s.write(counter, C1)
-            
             updated_counter = counter + 1
-            #updated_counter = tf.Print(updated_counter, [counter], message = "ended update_right")
     
         return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1, special_index]
 
