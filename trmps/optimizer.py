@@ -221,12 +221,14 @@ class MPSOptimizer(object):
     def _choose_center(self):
         C1 = self.C1s_l.read(self.MPS._special_node_loc-1)
         C2 = self.C2s_r.read(self.MPS._special_node_loc-1)
+        C1.set_shape([None, None])
+        C2.set_shape([None, None])
 
         def _calculate_f(center):
             center_loc = self.MPS._special_node_loc
             center.set_shape([None, None, None, None])
-            contracted_centre = tf.einsum('lmij,m->lij', center, self._feature[center_loc])
-            f = tf.einsum('ti,lmij,tj->tl', C1, center, C2)
+            contracted_center = tf.einsum('lmij,tm->tlij', center, self._feature[center_loc])
+            f = tf.einsum('ti,tlij,tj->tl', C1, contracted_center, C2)
             cost = self.MPS.cost(f, self._label)
             return cost
 
