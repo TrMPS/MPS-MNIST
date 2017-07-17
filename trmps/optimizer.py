@@ -458,11 +458,14 @@ class MPSOptimizer(object):
 
 if __name__ == '__main__':
     # Model parameters
-    input_size = 196
     d_feature = 2
     d_output = 10
-    batch_size = 10000
+    batch_size = 1000
     permuted = True
+    shrink = False
+    input_size = 784
+    if shrink:
+        input_size = 196
 
     max_size = 30
 
@@ -470,9 +473,9 @@ if __name__ == '__main__':
     logging_enabled = False
 
     cutoff = 10 # change this next
-    n_step = 2
+    n_step = 5
 
-    data_source = preprocessing.MNISTData()
+    data_source = preprocessing.MNISTData(shrink = shrink)
 
     # Initialise the model
 
