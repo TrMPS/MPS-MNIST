@@ -129,6 +129,11 @@ class MNISTData(object):
                 for d in data:
                     permuted_data.append(np.array(d[permutation]))
                 self._training_data = np.array(permuted_data), labels
+                test_data, test_labels = self.test_data
+                permuted_test_data = []
+                for d in test_data:
+                    permuted_test_data.append(np.array(d[permutation]))
+                self._test_data = np.array(permuted_test_data), test_labels
         self._is_first_read = False
         data = None
         labels = None
