@@ -286,7 +286,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
             C2s = C2s.write(counter - 2, C2)
-            
+            counter = tf.Print(counter)
             updated_counter = counter - 1
 
         return [updated_counter, C2s, updated_nodes, aj1]
@@ -328,7 +328,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             C1s = C1s.write(counter, C1)
-            
+            counter = tf.Print(counter)
             updated_counter = counter + 1
     
         return [updated_counter, C1s, updated_nodes, aj1]
@@ -373,7 +373,7 @@ class MPSOptimizer(object):
         
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
-        cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
+        #cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
 
@@ -462,6 +462,7 @@ if __name__ == '__main__':
     d_feature = 2
     d_output = 10
     batch_size = 10000
+    permuted = False
 
     max_size = 20
 
@@ -483,7 +484,7 @@ if __name__ == '__main__':
     weights = None
 
     network = MPS(d_feature, d_output, input_size)
-    network.prepare(data_source)
+    network.prepare(data_source, permuted)
     optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step, 
                     rate_of_change=rate_of_change, 

@@ -75,7 +75,7 @@ class MNISTData(object):
     def __init__(self):
         self._training_data = None
         self._test_data = None
-        self._is_first_read = False
+        self._is_first_read = True
         self._training_data_path = "training_data.npy"
         self._training_labels_path = "training_labels.npy"
         if os.path.isfile(self._training_data_path):
@@ -108,18 +108,27 @@ class MNISTData(object):
         data = np.transpose(data, (1, 0, 2))
         return data, labels
 
-    def next_training_data_batch(self, batch_size, shuffle=None):
+    def next_training_data_batch(self, batch_size, shuffle=None, permuted=False):
         if batch_size > len(self.training_data[0]):
             print("Probably shouldn't do this; your batch size is greater than the size of the dataset")
         if shuffle is None:
             _shuffle = False
         else:
             _shuffle = shuffle
-        if _shuffle == True:
+        if _shuffle:
             if self._is_first_read == True:
                 data, labels = self.training_data
                 permutation = np.random.permutation(len(data))
                 self._training_data = data[permutation], labels[permutation]
+        if permuted:
+            if self._is_first_read == True:
+                print("permuting")
+                data, labels = self.training_data
+                permutation = np.random.permutation(len(data[0]))
+                permuted_data = []
+                for d in data:
+                    permuted_data.append(np.array(d[permutation]))
+                self._training_data = np.array(permuted_data), labels
         self._is_first_read = False
         data = None
         labels = None

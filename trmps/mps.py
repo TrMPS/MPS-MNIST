@@ -26,8 +26,8 @@ class MPS(object):
         self.d_output = d_output
         self._special_node_loc = int(np.floor(self.input_size / 2))
 
-    def prepare(self, data_source):
-        self._lin_reg(data_source)
+    def prepare(self, data_source, permuted=False):
+        self._lin_reg(data_source, permuted)
         self._setup_nodes()
 
     def test(self, test_feature, test_label):
@@ -72,7 +72,7 @@ class MPS(object):
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return accuracy
 
-    def _lin_reg(self, data_source):
+    def _lin_reg(self, data_source, permuted):
         weight = tf.Variable(tf.zeros([self.input_size, self.d_output]))
         bias = tf.Variable(tf.zeros([self.d_output]))
 
@@ -93,7 +93,7 @@ class MPS(object):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             for _ in range(500):    
-                batch_feature, batch_label = data_source.next_training_data_batch(100)
+                batch_feature, batch_label = data_source.next_training_data_batch(100, permuted=permuted)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
             batch_feature, batch_label = data_source.next_training_data_batch(10000)
             acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
@@ -231,12 +231,13 @@ if __name__ == '__main__':
     d_feature = 2
     d_output = 10
     batch_size = 1000
+    permuted = True
 
     data_source = preprocessing.MNISTData()
     
     # Initialise the model
     network = MPS(d_feature, d_output, input_size)
-    network.prepare(data_source)
+    network.prepare(data_source, permuted)
     feature, label = data_source.next_training_data_batch(1000)
     network.test(feature, label)
 
