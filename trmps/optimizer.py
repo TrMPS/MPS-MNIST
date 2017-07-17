@@ -26,9 +26,15 @@ class MPSOptimizer(object):
         self.cutoff = cutoff
         self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
-        self.MPS._setup_nodes(self._feature)
         self._setup_optimization()
         _ = self.train_step()
+
+        print( "_____   Thomas the Tensor Train    . . . . . o o o o o",
+			   "  __|[_]|__ ___________ _______    ____      o",
+			   " |[] [] []| [] [] [] [] [_____(__  ][]]_n_n__][.",
+			   "_|________|_[_________]_[________]_|__|________)<",
+			   "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
+			   " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
 
     def train(self, data_source, batch_size, n_step, rate_of_change=1000, logging_enabled=None, initial_weights=None):
         _logging_enabled = logging_enabled
@@ -45,11 +51,16 @@ class MPSOptimizer(object):
 
         self.feed_dict = None
         self.test = None
-        f = self.MPS.predict(self._feature)
-        cost = self.MPS.cost(f, self._label)
-        accuracy = self.MPS.accuracy(f, self._label)
         test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
         self.test = initial_weights
+
+        train_cost, train_accuracy = self._test_step(self._feature, self._label)
+
+        test_feature, test_label = data_source.get_test_data()
+        
+        feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
+        label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
+        test_cost, test_accuracy = self._test_step(feature, label)
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -59,14 +70,18 @@ class MPSOptimizer(object):
                 start = time.time()
 
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
+
                 self.feed_dict = self.MPS.create_feed_dict(self.test)
                 self.feed_dict[self._feature] = batch_feature
                 self.feed_dict[self._label] = batch_label
                 self.feed_dict[self.rate_of_change] = rate_of_change 
-                train_cost, prediction, self.test, train_accuracy = sess.run([cost, f, test_result, accuracy],
-                                                                             feed_dict=self.feed_dict,
-                                                                             options=run_options,
-                                                                             run_metadata=run_metadata)
+                self.feed_dict[feature] = test_feature
+                self.feed_dict[label] = test_label
+                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy]
+                train_c, self.test, train_acc, test_c, test_acc = sess.run(to_eval,
+                                                                           feed_dict=self.feed_dict,
+                                                                           options=run_options,
+                                                                           run_metadata=run_metadata)
 
                 rate_of_change = rate_of_change * increment
 
@@ -83,10 +98,21 @@ class MPSOptimizer(object):
                 with open('weights', 'wb') as fp:
                     pickle.dump(self.test, fp)
                 end = time.time()
-                print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_cost, train_accuracy, end - start))
+                print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))
+                print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
                 #print("prediction:" + str(prediction[0]))
             if _logging_enabled:
                 writer.close()
+
+
+
+    def _test_step(self, feature, label):
+        f = self.MPS.predict(feature)
+        cost = self.MPS.cost(f, label)
+        accuracy = self.MPS.accuracy(f, label)
+        return cost, accuracy
+
+
 
     def _setup_optimization(self):
         '''
@@ -195,41 +221,41 @@ class MPSOptimizer(object):
         C2 = self.C2s.read(self.MPS.input_size - 3)
         self.C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size - 2, infer_shape=False, clear_after_read=False)
         self.C2s = self.C2s.write(self.MPS.input_size - 3, C2)
-        cond = lambda counter, b, c, d, e, f: tf.greater(counter, 1)
-        wrapped = [self.MPS.nodes.size() - 2, self.C1s, self.C2s, self.updated_nodes, self.MPS.nodes, n1]
+        cond = lambda counter, b, c, d: tf.greater(counter, 1)
+        wrapped = [self.MPS.nodes.size() - 2, self.C2s, self.updated_nodes, n1]
         shape_invariants = [tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape(None),
-                            tf.TensorShape(None), tf.TensorShape(None), tf.TensorShape([None, None, None, None])]
+                            tf.TensorShape([None, None, None, None])]
 
-        counter, self.C1s, self.C2s, self.updated_nodes, _, n1 = tf.while_loop(cond=cond, body=self._update_left,
+        _, self.C2s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_left,
                                                                                loop_vars=wrapped,
                                                                                shape_invariants=shape_invariants,
-                                                                               parallel_iterations=1,
+                                                                               parallel_iterations=5,
                                                                                name="backwardsSweep")
-        with tf.control_dependencies([counter]):
-            self.updated_nodes = self.updated_nodes.write(1, n1)
+        self.updated_nodes = self.updated_nodes.write(1, n1)
         return self.updated_nodes
 
     def _sweep_right(self, from_index, to_index):
         n1 = self.MPS.nodes.read(from_index)
         n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
-        cond = lambda counter, b, c, d, e, f: tf.less(counter, to_index)
-        wrapped = [from_index, self.C1s, self.C2s, self.updated_nodes, self.MPS.nodes, n1]
+        cond = lambda counter, b, c, d: tf.less(counter, to_index)
+        wrapped = [from_index, self.C1s, self.updated_nodes, n1]
         shape_invariants = [tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape(None),
-                            tf.TensorShape(None), tf.TensorShape(None), tf.TensorShape([None, None, None, None])]
+                            tf.TensorShape([None, None, None, None])]
 
-        _, self.C1s, self.C2s, self.updated_nodes, _, n1 = tf.while_loop(cond=cond, body=self._update_right,
+        _, self.C1s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_right,
                                                                          loop_vars=wrapped,
                                                                          shape_invariants=shape_invariants,
-                                                                         parallel_iterations=1, name="rightSweep")
+                                                                         parallel_iterations=5, 
+                                                                         name="rightSweep")
         self.updated_nodes = self.updated_nodes.write(to_index, n1)
         return self.updated_nodes
 
-    def _update_left(self, counter, C1s, C2s, updated_nodes, nodes, previous_node):
+    def _update_left(self, counter, C2s, updated_nodes, previous_node):
 
         with tf.name_scope("update_left"):
             # Read in the nodes 
             n1 = previous_node
-            n2 = nodes.read(counter - 1)
+            n2 = self.MPS.nodes.read(counter - 1)
             n2.set_shape([self.MPS.d_feature, None, None])
 
             # Calculate the bond 
@@ -237,7 +263,7 @@ class MPSOptimizer(object):
 
             # Calculate the C matrix 
             C2 = C2s.read(counter - 1)
-            C1 = C1s.read(counter - 2)
+            C1 = self.C1s.read(counter - 2)
             C1.set_shape([None, None])
             C2.set_shape([None, None])
             input1 = self._feature[counter-1]
@@ -260,16 +286,17 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
             C2s = C2s.write(counter - 2, C2)
+            counter = tf.Print(counter, [counter])
             updated_counter = counter - 1
 
-        return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
+        return [updated_counter, C2s, updated_nodes, aj1]
 
 
-    def _update_right(self, counter, C1s, C2s, updated_nodes, nodes, previous_node):
+    def _update_right(self, counter, C1s, updated_nodes, previous_node):
         with tf.name_scope("update_right"):
             # Read in the nodes 
             n1 = previous_node
-            n2 = nodes.read(counter + 1)
+            n2 = self.MPS.nodes.read(counter + 1)
             n2.set_shape([self.MPS.d_feature, None, None])
     
             # Calculate the bond 
@@ -278,7 +305,7 @@ class MPSOptimizer(object):
             # einsum is actually faster in this case
     
             # Calculate the C matrix 
-            C2 = C2s.read(counter)
+            C2 = self.C2s.read(counter)
             C1 = C1s.read(counter - 1)
             C1.set_shape([None, None])
             C2.set_shape([None, None])
@@ -301,9 +328,10 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             C1s = C1s.write(counter, C1)
+            counter = tf.Print(counter, [counter])
             updated_counter = counter + 1
     
-        return [updated_counter, C1s, C2s, updated_nodes, nodes, aj1]
+        return [updated_counter, C1s, updated_nodes, aj1]
 
     def _calculate_C(self, C1, C2, input1, input2):
         # C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, input1, input2)
@@ -325,10 +353,11 @@ class MPSOptimizer(object):
         with tf.name_scope("tensordotf"):
             #f = tf.einsum('lmnik,tmnik->tl', bond, C)
             f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
+            h = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
-            cost = 0.5 * tf.reduce_sum(tf.square(f-self._label))
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f)) # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
-        return f, cost
+        return h, cost
 
     def _update_bond(self, bond, C):
         # obtain the original cost
@@ -344,7 +373,7 @@ class MPSOptimizer(object):
         
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
-        cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
+        #cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
 
@@ -417,6 +446,7 @@ class MPSOptimizer(object):
 
             # make a_ 
             a_prime_j = tf.reshape(u_cropped, [dims[0], dims[1], m])
+
             sv = tf.matmul(s_mat, v_cropped)
             a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
             a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
@@ -428,21 +458,24 @@ class MPSOptimizer(object):
 
 if __name__ == '__main__':
     # Model parameters
-    input_size = 196
     d_feature = 2
     d_output = 10
-    batch_size = 10000
+    batch_size = 1000
+    permuted = True
+    shrink = False
+    input_size = 784
+    if shrink:
+        input_size = 196
 
-    bond_dim = 3
-    max_size = 15
+    max_size = 30
 
-    rate_of_change = 10 ** 6/batch_size # changed from 5 * 10 ** 5
+    rate_of_change = 10 ** (-7) 
     logging_enabled = False
 
-    cutoff = 100
-    n_step = 4
+    cutoff = 10 # change this next
+    n_step = 5
 
-    data_source = preprocessing.MNISTData()
+    data_source = preprocessing.MNISTData(shrink = shrink)
 
     # Initialise the model
 
@@ -451,12 +484,10 @@ if __name__ == '__main__':
     #    if len(weights) != input_size:
     #        weights = None
 
-    batch_size = 20000
-    rate_of_change = 50 
-    n_step = 3 
-
     weights = None
-    network = MPS(bond_dim, d_feature, d_output, input_size)
+
+    network = MPS(d_feature, d_output, input_size)
+    network.prepare(data_source, permuted)
     optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step, 
                     rate_of_change=rate_of_change, 
