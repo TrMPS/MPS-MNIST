@@ -83,7 +83,7 @@ class MPS(object):
 
         prediction = tf.matmul(x, weight) + bias
         #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
-        cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction)
+        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
         train_step = tf.train.GradientDescentOptimizer(0.05).minimize(cross_entropy)
         #train_step = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy)
 
@@ -92,7 +92,7 @@ class MPS(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            for _ in range(500):    
+            for _ in range(1000):    
                 batch_feature, batch_label = data_source.next_training_data_batch(100, permuted=permuted)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
             batch_feature, batch_label = data_source.next_training_data_batch(10000)
@@ -227,13 +227,16 @@ class MPS(object):
 
 if __name__ == '__main__':
     # Model parameters
-    input_size = 196
+    input_size = 784
+    shrink = False
+    if shrink:
+        input_size = 196
     d_feature = 2
     d_output = 10
     batch_size = 1000
-    permuted = True
+    permuted = False
 
-    data_source = preprocessing.MNISTData()
+    data_source = preprocessing.MNISTData(shrink)
     
     # Initialise the model
     network = MPS(d_feature, d_output, input_size)
