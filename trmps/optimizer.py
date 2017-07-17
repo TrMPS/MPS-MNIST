@@ -18,23 +18,23 @@ def list_from(tensorArray, length):
 
 class MPSOptimizer(object):
 
-    def __init__(self, MPSNetwork, bond_dim, grad_func, cutoff=10 ** (-5)):
+    def __init__(self, MPSNetwork, max_size, grad_func, cutoff=10 ** (-5)):
         self.MPS = MPSNetwork
         self.rate_of_change = tf.placeholder(tf.float32, shape=[])
-        self.bond_dim = bond_dim
+        self.max_size = max_size
         self.grad_func = grad_func
         self.cutoff = cutoff
-        self._feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
+        self._feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
         _ = self.train_step()
 
         print( "_____   Thomas the Tensor Train    . . . . . o o o o o",
-			   "  __|[_]|__ ___________ _______    ____      o",
-			   " |[] [] []| [] [] [] [] [_____(__  ][]]_n_n__][.",
-			   "_|________|_[_________]_[________]_|__|________)<",
-			   "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
-			   " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
+               "  __|[_]|__ ___________ _______    ____      o",
+               " |[] [] []| [] [] [] [] [_____(__  ][]]_n_n__][.",
+               "_|________|_[_________]_[________]_|__|________)<",
+               "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
+               " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
 
     def train(self, data_source, batch_size, n_step, rate_of_change=1000, logging_enabled=None, initial_weights=None):
         _logging_enabled = logging_enabled
@@ -47,7 +47,8 @@ class MPSOptimizer(object):
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-        increment = 1 # (1/10) ** (1/(n_step))
+        #increment = (1/10) ** (1/(n_step))
+        increment = 1.
 
         self.feed_dict = None
         self.test = None
@@ -68,7 +69,6 @@ class MPSOptimizer(object):
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 start = time.time()
-
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
 
                 self.feed_dict = self.MPS.create_feed_dict(self.test)
@@ -135,7 +135,7 @@ class MPSOptimizer(object):
             _, _, self.C1s = tf.while_loop(cond=cond, body=self._find_C1, loop_vars=[1, C1, C1s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                              tf.TensorShape(None)],
-                                           parallel_iterations=1,
+                                           parallel_iterations=10,
                                            name="initialFindC1")
 
             nlast = nodes.read(nodes.size() - 1)
@@ -146,7 +146,7 @@ class MPSOptimizer(object):
             cond = lambda counter, *args: tf.less(counter, self.MPS.input_size - special_loc - 2)
             _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[1, C2, C2s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
-                                                             tf.TensorShape(None)], parallel_iterations=1,
+                                                             tf.TensorShape(None)], parallel_iterations=10,
                                            name="initialFindC2")
 
     def _find_C1(self, counter, C1, C1s):
@@ -221,7 +221,7 @@ class MPSOptimizer(object):
         C2 = self.C2s.read(self.MPS.input_size - 3)
         self.C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size - 2, infer_shape=False, clear_after_read=False)
         self.C2s = self.C2s.write(self.MPS.input_size - 3, C2)
-        cond = lambda counter, b, c, d: tf.greater(counter, 1)
+        cond = lambda counter, *args: tf.greater(counter, 1)
         wrapped = [self.MPS.nodes.size() - 2, self.C2s, self.updated_nodes, n1]
         shape_invariants = [tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape(None),
                             tf.TensorShape([None, None, None, None])]
@@ -229,24 +229,23 @@ class MPSOptimizer(object):
         _, self.C2s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_left,
                                                                                loop_vars=wrapped,
                                                                                shape_invariants=shape_invariants,
-                                                                               parallel_iterations=5,
-                                                                               name="backwardsSweep")
+                                                                               parallel_iterations=10,
+                                                                               name="leftSweep")
         self.updated_nodes = self.updated_nodes.write(1, n1)
         return self.updated_nodes
 
     def _sweep_right(self, from_index, to_index):
         n1 = self.MPS.nodes.read(from_index)
         n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
-        cond = lambda counter, b, c, d: tf.less(counter, to_index)
+
+        cond = lambda counter, *args: tf.less(counter, to_index)
         wrapped = [from_index, self.C1s, self.updated_nodes, n1]
         shape_invariants = [tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape(None),
                             tf.TensorShape([None, None, None, None])]
-
         _, self.C1s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_right,
                                                                          loop_vars=wrapped,
                                                                          shape_invariants=shape_invariants,
-                                                                         parallel_iterations=5, 
-                                                                         name="rightSweep")
+                                                                         parallel_iterations=10, name="rightSweep")
         self.updated_nodes = self.updated_nodes.write(to_index, n1)
         return self.updated_nodes
 
@@ -258,9 +257,6 @@ class MPSOptimizer(object):
             n2 = self.MPS.nodes.read(counter - 1)
             n2.set_shape([self.MPS.d_feature, None, None])
 
-            # Calculate the bond 
-            bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
-
             # Calculate the C matrix 
             C2 = C2s.read(counter - 1)
             C1 = self.C1s.read(counter - 2)
@@ -268,15 +264,19 @@ class MPSOptimizer(object):
             C2.set_shape([None, None])
             input1 = self._feature[counter-1]
             input2 = self._feature[counter]
+
+            # Calculate the bond 
+            bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
+
             C = self._calculate_C(C2, C1, input2, input1)
 
             # update the bond 
             updated_bond = self._update_bond(bond, C)
 
-            # Decompose the bond 
-            aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
+            # Decompose the bond
+            aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
             aj = tf.transpose(aj, perm=[0, 2, 1])
-            aj1 = tf.transpose(aj1, perm=[0, 1, 3, 2])
+            aj1 = tf.transpose(aj1, perm=[1, 2, 3, 0])
 
             # Transpose the values and add to the new variables 
             updated_nodes = updated_nodes.write(counter, aj)
@@ -286,7 +286,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
             C2s = C2s.write(counter - 2, C2)
-            counter = tf.Print(counter, [counter])
+            # counter = tf.Print(counter, [counter])
             updated_counter = counter - 1
 
         return [updated_counter, C2s, updated_nodes, aj1]
@@ -299,11 +299,6 @@ class MPSOptimizer(object):
             n2 = self.MPS.nodes.read(counter + 1)
             n2.set_shape([self.MPS.d_feature, None, None])
     
-            # Calculate the bond 
-            bond = tf.einsum('lmij,njk->lmnik', n1, n2)
-            # bond = tf.transpose(tf.tensordot(n1, n2, [[3],[1]]), [0, 1, 3, 2, 4])
-            # einsum is actually faster in this case
-    
             # Calculate the C matrix 
             C2 = self.C2s.read(counter)
             C1 = C1s.read(counter - 1)
@@ -311,13 +306,20 @@ class MPSOptimizer(object):
             C2.set_shape([None, None])
             input1 = self._feature[counter]
             input2 = self._feature[counter+1]
+
+            # Calculate the bond 
+            bond = tf.einsum('lmij,njk->lmnik', n1, n2)
+            # bond = tf.transpose(tf.tensordot(n1, n2, [[3],[1]]), [0, 1, 3, 2, 4])
+            # einsum is actually faster in this case
+
             C = self._calculate_C(C1, C2, input1, input2)
 
             # Update the bond 
             updated_bond = self._update_bond(bond, C)
     
             # Decompose the bond 
-            aj, aj1 = self._bond_decomposition(updated_bond, self.bond_dim)
+            aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
+            aj1 = tf.transpose(aj1, perm=[1, 2, 0, 3])
     
             # Transpose the values and add to the new variables 
             updated_nodes = updated_nodes.write(counter, aj)
@@ -328,7 +330,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             C1s = C1s.write(counter, C1)
-            counter = tf.Print(counter, [counter])
+            # counter = tf.Print(counter, [counter])
             updated_counter = counter + 1
     
         return [updated_counter, C1s, updated_nodes, aj1]
@@ -355,7 +357,8 @@ class MPSOptimizer(object):
             f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
             h = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
-            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f)) # 0.5 * tf.reduce_sum(tf.square(f-self._label))
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f)) 
+            # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
         return h, cost
 
@@ -419,6 +422,7 @@ class MPSOptimizer(object):
         """
         with tf.name_scope("bond_decomposition"):
             bond_reshaped = tf.transpose(bond, perm=[1, 3, 0, 2, 4])
+            #bond_reshaped = tf.Print(bond_reshaped, [tf.shape(bond_reshaped), tf.shape(bond)], summarize = 1000, message = "bond reshaped, bond")
 
             dims = tf.shape(bond_reshaped)
             l_dim = dims[0] * dims[1]
@@ -448,8 +452,9 @@ class MPSOptimizer(object):
             a_prime_j = tf.reshape(u_cropped, [dims[0], dims[1], m])
 
             sv = tf.matmul(s_mat, v_cropped)
-            a_prime_j1_mixed = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
-            a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
+            a_prime_j1 = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
+            #a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
+            # will do this in the update_right/update_left functions from now on as else transpose twice for udpate_left
 
         return (a_prime_j, a_prime_j1)
 
@@ -461,19 +466,19 @@ if __name__ == '__main__':
     d_feature = 2
     d_output = 10
     batch_size = 1000
-    permuted = True
-    shrink = False
+    permuted = False
+    shrink = True
     input_size = 784
     if shrink:
         input_size = 196
 
-    max_size = 30
+    max_size = 20
 
     rate_of_change = 10 ** (-7) 
     logging_enabled = False
 
     cutoff = 10 # change this next
-    n_step = 5
+    n_step = 10
 
     data_source = preprocessing.MNISTData(shrink = shrink)
 
