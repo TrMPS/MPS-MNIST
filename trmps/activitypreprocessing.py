@@ -135,16 +135,14 @@ class activityDatasource(MPSDatasource):
             self._load_all_data()
         test_index = int(self.training_fraction * len(self._all_data[0]))
         self._test_data = self._all_data[0][:test_index], self._all_data[1][:test_index]
-        np.save(self._test_data_path, self._test_data[0])
-        np.save(self._test_labels_path, self._test_data[1])
+        super()._load_test_data()
         
     def _load_training_data(self):
         if self._all_data is None:
             self._load_all_data()
         test_index = int(self.training_fraction * len(self._all_data[0]))
         self._training_data = self._all_data[0][test_index:], self._all_data[1][test_index:]
-        np.save(self._training_data_path, self._training_data[0])
-        np.save(self._training_labels_path, self._training_data[1])
+        super()._load_training_data()
         
 if __name__ == "__main__":
     data_source = activityDatasource(shuffled = False)

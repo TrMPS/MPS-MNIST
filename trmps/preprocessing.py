@@ -45,9 +45,11 @@ class MPSDatasource(object):
     
     def _load_test_data(self):
         """
-        Get test data (perhaps from remote server) and preprocess in shape [batch, expected shape of element]
+        Get test data (perhaps from remote server) and preprocess in shape [batch, expected shape of element].
+        Remember to call this from a subclass to save the things.
         """
-        return None
+        np.save(self._test_data_path, self._test_data[0])
+        np.save(self._test_labels_path, self._test_data[1])
         
     @property
     def training_data(self):
@@ -60,8 +62,11 @@ class MPSDatasource(object):
     def _load_training_data(self):
         """
         Get training data (perhaps from remote server) and preprocess in shape [batch, expected shape of element]
+        Remember to call this from a subclass to save the things.
         """
-        return None
+        np.save(self._training_data_path, self._training_data[0])
+        np.save(self._training_labels_path, self._training_data[1])
+
         
     def next_training_data_batch(self, batch_size):
         if self._training_data == None:

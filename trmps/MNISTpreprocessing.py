@@ -97,15 +97,12 @@ class MNISTDatasource(MPSDatasource):
             
     def _load_test_data(self):
         self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)
-        np.save(self._test_data_path, self._test_data[0])
-        np.save(self._test_labels_path, self._test_data[1])
+        super()._load_test_data()
     
     def _load_training_data(self):
         self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train,
                                                      size=60000, shrink=self.shrink)
-        np.save(self._training_data_path, self._training_data[0])
-        np.save(self._training_labels_path, self._training_data[1])
-
+        super()._load_training_data()
 
 if __name__ == "__main__":
     # If main, processes the images and also prints the number of images
