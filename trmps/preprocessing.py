@@ -7,8 +7,10 @@ class MPSDatasource(object):
     def __init__(self, _expected_shape = None, shuffled = False):
         self._training_data = None
         self._test_data = None
-        self._training_data_path = "training_data" + type(self).__name__ + ".npy"
-        self._training_labels_path = "training_labels" + type(self).__name__ + ".npy"
+        self._training_data_path = os.path.join(type(self).__name__, "training_data.npy")
+        self._training_labels_path = os.path.join(type(self).__name__, "training_labels.npy")
+        if not os.path.isdir(type(self).__name__):
+            os.mkdir(type(self).__name__)
         self._expected_shape = _expected_shape
         if os.path.isfile(self._training_data_path):
             self._training_data = (np.load(self._training_data_path), np.load(self._training_labels_path))
