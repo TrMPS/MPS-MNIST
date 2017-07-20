@@ -26,8 +26,8 @@ class MPS(object):
         self.d_output = d_output
         self._special_node_loc = int(np.floor(self.input_size / 2))
 
-    def prepare(self, data_source, permuted=False):
-        self._lin_reg(data_source, permuted)
+    def prepare(self, data_source):
+        self._lin_reg(data_source)
         self._setup_nodes()
 
     def test(self, test_feature, test_label):
@@ -72,7 +72,7 @@ class MPS(object):
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return accuracy
 
-    def _lin_reg(self, data_source, permuted):
+    def _lin_reg(self, data_source):
         weight = tf.Variable(tf.zeros([self.input_size, self.d_output]))
         bias = tf.Variable(tf.zeros([self.d_output]))
 
@@ -93,7 +93,7 @@ class MPS(object):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             for _ in range(1000):    
-                batch_feature, batch_label = data_source.next_training_data_batch(100, permuted=permuted)
+                batch_feature, batch_label = data_source.next_training_data_batch(100)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
             batch_feature, batch_label = data_source.next_training_data_batch(10000)
             acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
@@ -228,7 +228,7 @@ class MPS(object):
 if __name__ == '__main__':
     # Model parameters
     input_size = 784
-    shrink = False
+    shrink = True
     if shrink:
         input_size = 196
     d_feature = 2
@@ -236,11 +236,11 @@ if __name__ == '__main__':
     batch_size = 1000
     permuted = False
 
-    data_source = preprocessing.MNISTData(shrink)
+    data_source = preprocessing.MNISTDatasource(shrink, permuted = permuted)
     
     # Initialise the model
     network = MPS(d_feature, d_output, input_size)
-    network.prepare(data_source, permuted)
+    network.prepare(data_source)
     feature, label = data_source.next_training_data_batch(1000)
     network.test(feature, label)
 

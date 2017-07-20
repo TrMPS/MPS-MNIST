@@ -6,7 +6,6 @@ import os
 
 from tensorflow.examples.tutorials.mnist import input_data
 
-
 def _preprocess_images(data, size, shrink = True):
     # Function to process images into format from paper, also currently just returns the images for zeroes and ones,
     # so that we can create a binary classifier first.
@@ -74,84 +73,74 @@ def _preprocess_images(data, size, shrink = True):
     print("\r" + str(100) + " % done")
     return (np.array(data), np.array(labels))
 
-
-class MNISTData(object):
-    def __init__(self, shrink = True):
+class MPSDatasource(object):
+    def __init__(self, _expected_shape = None, shuffled = False):
         self._training_data = None
         self._test_data = None
-        self._is_first_read = True
-        self._training_data_path = "training_data.npy"
-        self._training_labels_path = "training_labels.npy"
-        self.shrink = shrink
+        self._training_data_path = "training_data" + type(self).__name__ + ".npy"
+        self._training_labels_path = "training_labels" + type(self).__name__ + ".npy"
+        self._expected_shape = _expected_shape
         if os.path.isfile(self._training_data_path):
             self._training_data = (np.load(self._training_data_path), np.load(self._training_labels_path))
-            if not shrink and self._training_data[0][0].shape == (196,2):
+            print(self._training_data[0][0].shape)
+            print(self._expected_shape)
+            if self._training_data[0][0].shape != self._expected_shape:
                 self._training_data = None
-            elif shrink and self._training_data[0][0].shape == (784,2):
-                self._training_data = None
-        self._test_data_path = "testing_data.npy"
-        self._test_labels_path = "testing_labels.npy"
+        self._test_data_path = "testing_data" + type(self).__name__ + ".npy"
+        self._test_labels_path = "testing_labels" + type(self).__name__ + ".npy"
         if os.path.isfile(self._test_data_path):
             self._test_data = (np.load(self._test_data_path), np.load(self._test_labels_path))
-            if not shrink and self._test_data[0][0].shape == (196,2):
-                self._test_data = None
-            elif shrink and self._test_data[0][0].shape == (784,2):
+            if self._test_data[0][0].shape != self._expected_shape:
                 self._test_data = None
         self.current_index = 0
-
+        if self._test_data == None:
+            self._load_test_data()
+        if self._training_data == None:
+            self._load_training_data()
+        if shuffled:
+            data, labels = self._training_data
+            permutation = np.random.permutation(len(data))
+            self._training_data = data[permutation], labels[permutation]
+        self._swapped_test_data = None
+        self._swapped_training_data = None
+        
+    
     @property
     def test_data(self):
         if self._test_data is None:
-            self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)
-            np.save(self._test_data_path, self._test_data[0])
-            np.save(self._test_labels_path, self._test_data[1])
-        return self._test_data
-
+            self._load_test_data()
+        if self._swapped_test_data is None:
+            self._swapped_test_data = np.swapaxes(self._test_data[0], 0, 1)
+        return self._swapped_test_data, self._test_data[1]
+    
+    def _load_test_data(self):
+        """
+        Get test data (perhaps from remote server) and preprocess in shape [batch, expected shape of element]
+        """
+        return None
+        
     @property
     def training_data(self):
         if self._training_data is None:
-            self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train,
-                                                     size=60000, shrink=self.shrink)
-            np.save(self._training_data_path, self._training_data[0])
-            np.save(self._training_labels_path, self._training_data[1])
-        return self._training_data
-
-    def get_test_data(self):
-        data, labels = self.test_data 
-        data = np.transpose(data, (1, 0, 2))
-        return data, labels
-
-    def next_training_data_batch(self, batch_size, shuffle=None, permuted=False):
-        if batch_size > len(self.training_data[0]):
+            self._load_training_data()
+        if self._swapped_training_data is None:
+            self._swapped_training_data = np.swapaxes(self._training_data[0], 0, 1)
+        return self._swapped_training_data, self._training_data[1]
+        
+    def _load_training_data(self):
+        """
+        Get training data (perhaps from remote server) and preprocess in shape [batch, expected shape of element]
+        """
+        return None
+        
+    def next_training_data_batch(self, batch_size):
+        if self._training_data == None:
+            self._load_test_data()
+        all_data, all_labels = self._training_data
+        if batch_size > len(all_data):
             print("Probably shouldn't do this; your batch size is greater than the size of the dataset")
-        if shuffle is None:
-            _shuffle = False
-        else:
-            _shuffle = shuffle
-        if _shuffle:
-            if self._is_first_read == True:
-                data, labels = self.training_data
-                permutation = np.random.permutation(len(data))
-                self._training_data = data[permutation], labels[permutation]
-        if permuted:
-            if self._is_first_read == True:
-                print("permuting")
-                data, labels = self.training_data
-                print(len(data[0]))
-                permutation = np.random.permutation(len(data[0]))
-                permuted_data = []
-                for d in data:
-                    permuted_data.append(np.array(d[permutation]))
-                self._training_data = np.array(permuted_data), labels
-                test_data, test_labels = self.test_data
-                permuted_test_data = []
-                for d in test_data:
-                    permuted_test_data.append(np.array(d[permutation]))
-                self._test_data = np.array(permuted_test_data), test_labels
-        self._is_first_read = False
         data = None
         labels = None
-        all_data, all_labels = self.training_data
         while batch_size > 0:
             if len(all_data) - self.current_index < batch_size:
                 # print("A" + str(self.current_index))
@@ -176,18 +165,52 @@ class MNISTData(object):
                 self.current_index += batch_size
                 batch_size = 0
         data = np.array(data)
-        data = np.transpose(data, (1, 0, 2))
+        data = np.swapaxes(data, 0, 1)
         return (data, labels)
+        
+class MNISTDatasource(MPSDatasource):
+    def __init__(self, shrink = True, permuted = False, shuffled = False):
+        expected_size = (784, 2)
+        if shrink:
+            expected_size = (196,2)
+        self.shrink = shrink
+        super().__init__(expected_size, shuffled)
+        if permuted:
+            print("permuting")
+            data, labels = self._training_data
+            print(len(data[0]))
+            permutation = np.random.permutation(len(data[0]))
+            permuted_data = []
+            for d in data:
+                permuted_data.append(np.array(d[permutation]))
+            self._training_data = np.array(permuted_data), labels
+            test_data, test_labels = self._test_data
+            permuted_test_data = []
+            for d in test_data:
+                permuted_test_data.append(np.array(d[permutation]))
+            self._test_data = np.array(permuted_test_data), test_labels
+            
+    def _load_test_data(self):
+        self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)
+        np.save(self._test_data_path, self._test_data[0])
+        np.save(self._test_labels_path, self._test_data[1])
+    
+    def _load_training_data(self):
+        self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train,
+                                                     size=60000, shrink=self.shrink)
+        np.save(self._training_data_path, self._training_data[0])
+        np.save(self._training_labels_path, self._training_data[1])
 
 
 if __name__ == "__main__":
     # If main, processes the images and also prints the number of images
-    data_source = MNISTData(shrink = False)
-    data, labels = data_source.next_training_data_batch(1000, permuted = True)
-    print(len(labels))
-    data, labels = data_source.next_training_data_batch(1000, permuted = True)
+    data_source = MNISTDatasource(shrink = False)
+    data, labels = data_source.next_training_data_batch(1000)
     print(data.shape)
     print(len(labels))
-    data, labels = data_source.next_training_data_batch(1000, permuted = True)
+    data, labels = data_source.next_training_data_batch(1000)
+    print(data.shape)
     print(len(labels))
-    data, labels = data_source.next_training_data_batch(500, permuted = True)
+    data, labels = data_source.next_training_data_batch(1000)
+    print(len(labels))
+    data, labels = data_source.next_training_data_batch(500)
