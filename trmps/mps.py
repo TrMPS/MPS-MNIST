@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-import preprocessing
+import MNISTpreprocessing
 
 '''
 1. Store the C matrix computation cumulatively
@@ -236,7 +236,7 @@ if __name__ == '__main__':
     batch_size = 1000
     permuted = False
 
-    data_source = preprocessing.MNISTDatasource(shrink, permuted = permuted)
+    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted = permuted)
     
     # Initialise the model
     network = MPS(d_feature, d_output, input_size)

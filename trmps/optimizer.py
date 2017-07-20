@@ -1,6 +1,5 @@
 import tensorflow as tf
 import time
-import preprocessing
 from mps import MPS
 import pickle
 import utils
@@ -59,7 +58,7 @@ class MPSOptimizer(object):
 
         test_feature, test_label = data_source.test_data
         
-        feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
+        feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         test_cost, test_accuracy = self._test_step(feature, label)
 
@@ -457,48 +456,6 @@ class MPSOptimizer(object):
             # will do this in the update_right/update_left functions from now on as else transpose twice for udpate_left
 
         return (a_prime_j, a_prime_j1)
-
-
-
-
-if __name__ == '__main__':
-    # Model parameters
-    d_feature = 2
-    d_output = 10
-    batch_size = 1000
-    permuted = False
-    shuffled = False
-    shrink = True
-    input_size = 784
-    if shrink:
-        input_size = 196
-
-    max_size = 20
-
-    rate_of_change = 10 ** (-7) 
-    logging_enabled = False
-
-    cutoff = 10 # change this next
-    n_step = 10
-
-    data_source = preprocessing.MNISTDatasource(shrink = shrink, permuted = permuted, shuffled = shuffled)
-
-    # Initialise the model
-
-    #with open('weights', 'rb') as fp:
-    #    weights = pickle.load(fp)
-    #    if len(weights) != input_size:
-    #        weights = None
-
-    weights = None
-
-    network = MPS(d_feature, d_output, input_size)
-    network.prepare(data_source)
-    optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
-    optimizer.train(data_source, batch_size, n_step, 
-                    rate_of_change=rate_of_change, 
-                    logging_enabled=logging_enabled, 
-                    initial_weights=weights)
 
 
 
