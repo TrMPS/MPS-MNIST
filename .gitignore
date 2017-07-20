@@ -1,6 +1,7 @@
 MNIST_data/
 .DS_Store
 output/
+trmps/aclImdb
 *.npy
 
 # The following is boilerplate gitignore from https://github.com/github/gitignore/blob/master/Python.gitignore
