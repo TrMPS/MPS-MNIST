@@ -97,3 +97,11 @@ class MPSDatasource(object):
         data = np.array(data)
         data = np.swapaxes(data, 0, 1)
         return (data, labels)
+        
+    @property
+    def num_train_samples(self):
+        return len(self._training_data[0])
+        
+    @property
+    def num_test_samples(self):
+        return len(self._test_data[0])
