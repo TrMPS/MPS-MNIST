@@ -57,7 +57,7 @@ class MPSOptimizer(object):
 
         train_cost, train_accuracy = self._test_step(self._feature, self._label)
 
-        test_feature, test_label = data_source.get_test_data()
+        test_feature, test_label = data_source.test_data
         
         feature = tf.placeholder(tf.float32, shape=[input_size, None, self.MPS.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
@@ -467,6 +467,7 @@ if __name__ == '__main__':
     d_output = 10
     batch_size = 1000
     permuted = False
+    shuffled = False
     shrink = True
     input_size = 784
     if shrink:
@@ -480,7 +481,7 @@ if __name__ == '__main__':
     cutoff = 10 # change this next
     n_step = 10
 
-    data_source = preprocessing.MNISTData(shrink = shrink)
+    data_source = preprocessing.MNISTDatasource(shrink = shrink, permuted = permuted, shuffled = shuffled)
 
     # Initialise the model
 
@@ -492,7 +493,7 @@ if __name__ == '__main__':
     weights = None
 
     network = MPS(d_feature, d_output, input_size)
-    network.prepare(data_source, permuted)
+    network.prepare(data_source)
     optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
     optimizer.train(data_source, batch_size, n_step, 
                     rate_of_change=rate_of_change, 
