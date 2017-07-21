@@ -44,8 +44,8 @@ class MPSDatasource(object):
 	            print(self._expected_shape)
 	            if self._training_data[0][0].shape != self._expected_shape:
 	                self._training_data = None
-        self._test_data_path = "testing_data" + type(self).__name__ + ".npy"
-        self._test_labels_path = "testing_labels" + type(self).__name__ + ".npy"
+        self._test_data_path = os.path.join(type(self).__name__, "testing_data.npy")
+        self._test_labels_path = os.path.join(type(self).__name__, "testing_labels.npy")
         if self._test_data is None:
 	        if os.path.isfile(self._test_data_path):
 	            self._test_data = (np.load(self._test_data_path), np.load(self._test_labels_path))

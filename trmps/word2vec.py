@@ -12,10 +12,7 @@ class MovieReviewDatasource(MPSDatasource):
 
     def __init__(self, expected_shape=None, shuffled=False, embedding_size=50, max_doc_length=100):
         self._embedding_size = embedding_size
-        self._embedding_path = os.path.join(type(self).__name__, "embedding.npy")
         self._max_doc_length = max_doc_length
-        if os.path.isfile(self._embedding_path):
-            self._embedding_matrix = np.load(self._embedding_path)
         super().__init__(expected_shape, shuffled)
 
     def _load_all_data(self):
@@ -27,16 +24,10 @@ class MovieReviewDatasource(MPSDatasource):
             utils.getunzipped(url, name)
 
         # read in the training and test data 
-        train_texts_pos, train_labels_pos = self._load_data_to_list('aclImdb/train/pos')
-        train_texts_neg, train_labels_neg = self._load_data_to_list('aclImdb/train/neg')
-        train_texts = train_texts_pos + train_texts_neg
-        train_labels = np.array((train_labels_pos + train_labels_neg), dtype=np.float32)/10
+        train_texts, train_labels = self._extract_data_from_files('train')
+        test_texts, test_labels = self._extract_data_from_files('test')
 
-        test_texts_pos, test_labels_pos = self._load_data_to_list('aclImdb/test/pos')
-        test_texts_neg, test_labels_neg = self._load_data_to_list('aclImdb/test/neg')
-        test_texts = test_texts_pos + test_texts_neg
-        test_labels = np.array((test_labels_pos + test_labels_neg), dtype=np.float32)/10
-
+        # convert the training and test data to vectors 
         train_vecs, test_vecs = self._word2vec(train_texts, test_texts)
         del train_texts, test_texts
         train_vecs = self._reshape_data(train_vecs)
@@ -46,7 +37,6 @@ class MovieReviewDatasource(MPSDatasource):
         self._test_data = (test_vecs, test_labels)
 
         # save the data 
-        np.save(self._embedding_path, self._embedding_matrix)
         super()._load_training_data()
         super()._load_test_data()
 
@@ -56,12 +46,33 @@ class MovieReviewDatasource(MPSDatasource):
     def _load_test_data(self):
         self._load_all_data()
 
+    def _extract_data_from_files(self, tag):
+        '''
+        class: 
+            1, 2, 3, 4, 7, 8, 9, 10
+        '''
+        texts_pos, labels_pos = self._load_data_to_list(os.path.join('aclImdb', tag, 'pos'))
+        texts_neg, labels_neg = self._load_data_to_list(os.path.join('aclImdb', tag, 'neg'))
+        texts = texts_pos + texts_neg
+        labels = np.array((labels_pos + labels_neg), dtype=np.int)
+
+        one_hot_labels = np.zeros([labels.size, 8])
+        one_hot_labels[labels == 1][:, 0] = 1
+        one_hot_labels[labels == 2][:, 1] = 1 
+        one_hot_labels[labels == 3][:, 2] = 1
+        one_hot_labels[labels == 4][:, 3] = 1 
+        one_hot_labels[labels == 7][:, 4] = 1
+        one_hot_labels[labels == 8][:, 5] = 1 
+        one_hot_labels[labels == 9][:, 6] = 1
+        one_hot_labels[labels == 10][:, 7] = 1 
+
+        return texts, one_hot_labels
+
     def _reshape_data(self, data):
         # make the shape into (input_size, num_data, d_feature)
         num_data = data.shape[0]
         data = data.reshape([num_data, self._expected_shape])
-        data = np.transpose(data)
-        ones = np.ones([self._expected_shape, num_data])
+        ones = np.ones([num_data, self._expected_shape])
         data = np.dstack((ones, data))
         return data 
         
