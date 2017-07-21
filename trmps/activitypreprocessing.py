@@ -83,7 +83,7 @@ class activityDatasource(MPSDatasource):
         self._all_data_path = "all_data" + type(self).__name__ + ".npy"
         self._all_labels_path = "all_labels" + type(self).__name__ + ".npy"
         if os.path.isfile(self._all_data_path):
-            self._all_data = (np.load(self._all_data_path), np.load(_all_labels_path))
+            self._all_data = (np.load(self._all_data_path), np.load(self._all_labels_path))
             if self._all_data[0][0].shape != expected_shape:
                 self._all_data = None
         if not os.path.isfile(self._compressed_data_path):
