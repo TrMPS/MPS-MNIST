@@ -31,8 +31,11 @@ class MPSDatasource(object):
         """
         self._training_data = _training_data
         self._test_data = _test_data
-        self._training_data_path = "training_data" + type(self).__name__ + ".npy"
-        self._training_labels_path = "training_labels" + type(self).__name__ + ".npy"
+        self._training_data_path = os.path.join(type(self).__name__, "training_data.npy")
+        self._training_labels_path = os.path.join(type(self).__name__, "training_labels.npy")
+        if not os.path.isdir(type(self).__name__):
+            os.mkdir(type(self).__name__)
+
 
         self._expected_shape = _expected_shape
         if self._training_data is None:
