@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import os
 from preprocessing import *
+from utils import spinner
 
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -48,8 +49,8 @@ def _preprocess_images(data, size, shrink = True):
         snaked_image = image
         ones = tf.ones([784], dtype=tf.float32)
     phi = tf.stack([ones, snaked_image], axis=1)
-
-    print("0 % done", end="")
+    
+    _spinner = spinner(jump = 300)
 
     # Loop through all the elements in the dataset and resize
     with sess.as_default():
@@ -59,8 +60,7 @@ def _preprocess_images(data, size, shrink = True):
         counter = 0
 
         for i in range(20):
-            sys.stdout.flush()
-            print("\r" + str(int((i / 20) * 100)) + " % done", end="")
+            percentage = int((i / 20) * 100)
             batch = mnist.next_batch(int(size / 20), shuffle=False)
             images = batch[0]
             for index, element in enumerate(images):
@@ -69,22 +69,8 @@ def _preprocess_images(data, size, shrink = True):
                 #                                                      feed_dict={image: element})})
                 data.append(np.array(sess.run(phi, feed_dict={image: element})))
                 labels.append(np.array(batch[1][index]))
-                if index % 300 == 0:
-                    # Spinner to show progress 
-                    if counter == 0:
-                        print("\r" + str(int((i / 20) * 100)) + " % done", end="|")
-                        counter += 1
-                    elif counter == 1:
-                        print("\r" + str(int((i / 20) * 100)) + " % done", end="/")
-                        counter += 1
-                    elif counter == 2:
-                        print("\r" + str(int((i / 20) * 100)) + " % done", end="-")
-                        counter += 1
-                    elif counter == 3:
-                        print("\r" + str(int((i / 20) * 100)) + " % done", end="\\")
-                        counter = 0
-    sys.stdout.flush()
-    print("\r" + str(100) + " % done")
+                _spinner.print_spinner(percentage)
+    _spinner.print_spinner(100.0)
     return (np.array(data), np.array(labels))
     
 class MNISTDatasource(MPSDatasource):

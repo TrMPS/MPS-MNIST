@@ -6,6 +6,7 @@ from preprocessing import *
 import urllib.request
 from rarfile import RarFile
 import csv
+from utils import spinner
 from enum import Enum
 
 # Adapted from https://stackoverflow.com/questions/29831489/numpy-1-hot-array
@@ -106,8 +107,12 @@ class activityDatasource(MPSDatasource):
         factor = 2/self.data_length
         new_length = int(self.data_length/2)
         ones = np.ones(new_length)
+        _spinner = spinner()
         for i in range(10):
-            print("\r" + str(int((i / 10) * 100)) + " % done", end="")
+        
+            #_spinner.print_spinner(0.0)
+            percentage = int((i / 10) * 100)
+            
             filename = self._uncompressed_data_path + "Participant_" + str(i+1) +".csv"
             with open(filename, 'r') as f:
                 reader = csv.reader(f)
@@ -119,19 +124,9 @@ class activityDatasource(MPSDatasource):
                 row_label = 0
                 data = []
                 for index, row in enumerate(reader):
-                    if index % 400 == 0:
-                        if counter == 0:
-                            print("\r" + str(int((i / 10) * 100)) + " % done", end="|")
-                            counter += 1
-                        elif counter == 1:
-                            print("\r" + str(int((i / 10) * 100)) + " % done", end="/")
-                            counter += 1
-                        elif counter == 2:
-                            print("\r" + str(int((i / 10) * 100)) + " % done", end="-")
-                            counter += 1
-                        elif counter == 3:
-                            print("\r" + str(int((i / 10) * 100)) + " % done", end="\\")
-                            counter = 0
+                
+                    _spinner.print_spinner(percentage)
+                    
                     if index >= jump_index:
                         if index != 0 and (index) % self.data_length == 0:
                             data = np.abs(np.fft.rfft(data, axis = 0)*factor)[:-1]
@@ -153,8 +148,9 @@ class activityDatasource(MPSDatasource):
         _all_datapoints = _all_datapoints[permutation]
         #_all_datapoints[:,:,1:] = np.tanh(_all_datapoints[:,:,1:])
         _all_labels = _all_labels[permutation]
-        sys.stdout.flush()
-        print("\r" + str(100) + " % done")
+        
+        _spinner.print_spinner(100.0)
+        
         print(_all_datapoints.shape)
         print(_all_labels.shape)
         print(_all_labels[0])
