@@ -76,14 +76,14 @@ class activityDatasource(MPSDatasource):
         """
         self.data_length = 200
         self.training_fraction = 0.2
-        expected_shape = (self.data_length, 4)
+        expected_shape = (int(self.data_length/2), 4)
         self._compressed_data_path = "ActivityData.rar"
         self._uncompressed_data_path = "DataSet/"
         self._all_data = None
         self._all_data_path = "all_data" + type(self).__name__ + ".npy"
         self._all_labels_path = "all_labels" + type(self).__name__ + ".npy"
         if os.path.isfile(self._all_data_path):
-            self._all_data = (np.load(self._all_data_path), np.load(_all_labels_path))
+            self._all_data = (np.load(self._all_data_path), np.load(self._all_labels_path))
             if self._all_data[0][0].shape != expected_shape:
                 self._all_data = None
         if not os.path.isfile(self._compressed_data_path):
@@ -103,6 +103,9 @@ class activityDatasource(MPSDatasource):
         _all_datapoints = []
         _all_labels = []
         counter = 0
+        factor = 2/self.data_length
+        new_length = int(self.data_length/2)
+        ones = np.ones(new_length)
         for i in range(10):
             print("\r" + str(int((i / 10) * 100)) + " % done", end="")
             filename = self._uncompressed_data_path + "Participant_" + str(i+1) +".csv"
@@ -131,11 +134,13 @@ class activityDatasource(MPSDatasource):
                             counter = 0
                     if index >= jump_index:
                         if index != 0 and (index) % self.data_length == 0:
+                            data = np.abs(np.fft.rfft(data, axis = 0)*factor)[:-1]
+                            data = np.column_stack((ones, data))
                             _all_datapoints.append(np.array(data))
                             _all_labels.append(row_label.value)
                             data = []
                             prev_row_label = None
-                        data.append(np.array([1., row[1], row[2], row[3]]))
+                        data.append(np.array([np.float32(row[1]), np.float32(row[2]), np.float32(row[3])]))
                         row_label = activityLabels[row[-1]]
                         if prev_row_label is not None:
                             if row_label != prev_row_label:
@@ -146,6 +151,7 @@ class activityDatasource(MPSDatasource):
         _all_labels = convert_to_onehot(np.array(_all_labels))
         permutation = np.random.permutation(len(_all_datapoints))
         _all_datapoints = _all_datapoints[permutation]
+        #_all_datapoints[:,:,1:] = np.tanh(_all_datapoints[:,:,1:])
         _all_labels = _all_labels[permutation]
         sys.stdout.flush()
         print("\r" + str(100) + " % done")
