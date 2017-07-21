@@ -40,6 +40,11 @@ def convert_to_onehot(vector, num_classes=None):
     return result.astype(int)
     
 class activityLabels(Enum):
+    """
+	An enum to hold the different types of activity available in the activity dataset:
+	http://ps.ewi.utwente.nl/Blog/Sensors_Activity_Recognition_DataSet_Shoaib.rar
+	Includes an element "upsatirs" because the authors of the dataset spelt it wrong -_-
+    """
     walking = 0
     standing = 1
     jogging = 2
@@ -51,7 +56,24 @@ class activityLabels(Enum):
 
 
 class activityDatasource(MPSDatasource):
+    """
+	activityDatasource is a subclass of MPSDatasource which implements data loading for the
+	Dataset of walking, running, sitting, standing, jogging, biking, walking upstairs and walking downstairs activities
+	as found on
+	http://ps.ewi.utwente.nl/Datasets.php
+	
+	Use as you would use any subclass of MPSDatasource.
+	This class requires that unrar and rarfile are installed.
+    """
     def __init__(self, shuffled = False):
+        """
+		As the data needs to be downloaded from the website, the initialiser handles that as well,
+		then calls _load_all_data to handle loading the contents of the downloaded data.
+        :param shuffled: boolean
+        	Pass true to shuffle the dataset.
+        	This parameter is not very meaningful in this case because _load_all_data shuffles
+        	the data anyway.
+        """
         self.data_length = 200
         self.training_fraction = 0.2
         expected_shape = (self.data_length, 3)
@@ -73,6 +95,11 @@ class activityDatasource(MPSDatasource):
         super().__init__(expected_shape, shuffled)
         
     def _load_all_data(self):
+        """
+		_load_all_data is responsible for reading the .csv files downloaded in the initialisation.
+		The results are saved into _all_data
+        :return: nothing
+        """
         _all_datapoints = []
         _all_labels = []
         counter = 0
@@ -131,6 +158,11 @@ class activityDatasource(MPSDatasource):
     
     
     def _load_test_data(self):
+        """
+		Takes part of _all_data (non-overlapping with training data)
+		and uses that as the test data
+        :return: nothing
+        """
         if self._all_data is None:
             self._load_all_data()
         test_index = int(self.training_fraction * len(self._all_data[0]))
@@ -138,6 +170,11 @@ class activityDatasource(MPSDatasource):
         super()._load_test_data()
         
     def _load_training_data(self):
+        """
+		Takes part of _all_data (non-overlapping with test data)
+		and uses that as the training data
+        :return: nothing
+        """
         if self._all_data is None:
             self._load_all_data()
         test_index = int(self.training_fraction * len(self._all_data[0]))

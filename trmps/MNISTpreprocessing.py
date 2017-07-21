@@ -7,12 +7,26 @@ from preprocessing import *
 from tensorflow.examples.tutorials.mnist import input_data
 
 def _preprocess_images(data, size, shrink = True):
-    # Function to process images into format from paper, also currently just returns the images for zeroes and ones,
-    # so that we can create a binary classifier first.
-    # Returned as a list of [images, classifications]
+    """
+	This function preprocesses images into format from the paper
+	Supervised learning with quantum-inspired tensor networks
+
+    :param data: tensorflow dataset
+    	The tensorflow dataset we are reading from
+    :param size: integer
+    	The size of the dataset we wish to extract
+    :param shrink: boolean
+    	Whether the image is shrunk using max pooling or not.
+    	If true, then the image is shrunk to 14x14 before being flattened.
+    	If false, the image is not shrunk.
+    :return: (numpy array, numpy array)
+    	Returns (data points, results) in the format
+    	([batch, MPS input size, other dimensions], [batch, classifications])
+    """
 
 
     # written this way because originally, this was the only function and would read directly.
+    # TODO: change all references to "mnist" with data
     mnist = data
 
     sess = tf.Session()
@@ -74,7 +88,25 @@ def _preprocess_images(data, size, shrink = True):
     return (np.array(data), np.array(labels))
     
 class MNISTDatasource(MPSDatasource):
+	"""
+	MNISTDatasource is a subclass of MPSDatasource which implements data loading for the
+	well known MNIST dataset.
+	
+	Use as you would use any subclass of MPSDatasource.
+	This class can also permute the MNIST images pixel-by-pixel.
+	This class requires the use of tensorflow to load data.
+	"""
     def __init__(self, shrink = True, permuted = False, shuffled = False):
+        """
+		Initialises the dataset, and can also permute/shuffle the dataset.
+        :param shrink: boolean
+        	Pass true to shrink the image to 14x14.
+        	If false, image will be kept at 28x28.
+        :param permuted: boolean
+        	Pass true to have the image pixel-by-pixel permuted.
+        :param shuffled: boolean
+        	Pass true to shuffle the dataset.
+        """
         expected_shape = (784, 2)
         if shrink:
             expected_shape = (196,2)
@@ -96,10 +128,18 @@ class MNISTDatasource(MPSDatasource):
             self._test_data = np.array(permuted_test_data), test_labels
             
     def _load_test_data(self):
+        """
+		Loads test data of the appropriate size.
+        :return: nothing
+        """
         self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)
         super()._load_test_data()
     
     def _load_training_data(self):
+        """
+		Loads training data of the appropriate size.
+        :return: nothing
+        """
         self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train,
                                                      size=60000, shrink=self.shrink)
         super()._load_training_data()
