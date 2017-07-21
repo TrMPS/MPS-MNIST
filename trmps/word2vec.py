@@ -10,53 +10,86 @@ import collections
 
 class MovieReviewDatasource(MPSDatasource):
 
-    def __init__(self, expected_shape=None, shuffled=False, embedding_size=50):
-        self.embedding_size = embedding_size
+    def __init__(self, expected_shape=None, shuffled=False, embedding_size=50, max_doc_length=100):
+        self._embedding_size = embedding_size
         self._embedding_path = os.path.join(type(self).__name__, "embedding.npy")
+        self._max_doc_length = max_doc_length
+        if os.path.isfile(self._embedding_path):
+            self._embedding_matrix = np.load(self._embedding_path)
         super().__init__(expected_shape, shuffled)
 
-    def _load_training_data(self):
+    def _load_all_data(self):
 
+        # download the data from url if necessary
         if not os.path.isdir('aclImdb'):
             url = 'http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz'
             name = 'aclImdb_v1.tar.gz'
             utils.getunzipped(url, name)
 
+        # read in the training and test data 
         train_texts_pos, train_labels_pos = self._load_data_to_list('aclImdb/train/pos')
         train_texts_neg, train_labels_neg = self._load_data_to_list('aclImdb/train/neg')
-        train_texts = train_texts_pos + train_texts_neg 
-        train_labels = np.array((train_labels_pos + train_labels_neg), dtype=np.float32)
+        train_texts = train_texts_pos + train_texts_neg
+        train_labels = np.array((train_labels_pos + train_labels_neg), dtype=np.float32)/10
 
-        data, embedding = self._train_word2vec(train_texts)
-        del train_texts
+        test_texts_pos, test_labels_pos = self._load_data_to_list('aclImdb/test/pos')
+        test_texts_neg, test_labels_neg = self._load_data_to_list('aclImdb/test/neg')
+        test_texts = test_texts_pos + test_texts_neg
+        test_labels = np.array((test_labels_pos + test_labels_neg), dtype=np.float32)/10
 
-        self._training_data = (data, train_labels)
-        np.save(self._embedding_path, embedding)
+        train_vecs, test_vecs = self._word2vec(train_texts, test_texts)
+        del train_texts, test_texts
+        train_vecs = self._reshape_data(train_vecs)
+        test_vecs = self._reshape_data(test_vecs)
+
+        self._training_data = (train_vecs, train_labels)
+        self._test_data = (test_vecs, test_labels)
+
+        # save the data 
+        np.save(self._embedding_path, self._embedding_matrix)
         super()._load_training_data()
+        super()._load_test_data()
+
+    def _load_training_data(self):
+        self._load_all_data()
 
     def _load_test_data(self):
-    	print('loading test data not implemented')
+        self._load_all_data()
 
-    def _train_word2vec(self, train_texts):
+    def _reshape_data(self, data):
+        # make the shape into (input_size, num_data, d_feature)
+        num_data = data.shape[0]
+        data = data.reshape([num_data, self._expected_shape])
+        data = np.transpose(data)
+        ones = np.ones([self._expected_shape, num_data])
+        data = np.dstack((ones, data))
+        return data 
+        
+    def _word2vec(self, train_texts, test_texts):
 
         # convert the words to ids from most frequent to least 
-        self._preprocessor = tf.contrib.learn.preprocessing.VocabularyProcessor(self._expected_shape, 
+        self._preprocessor = tf.contrib.learn.preprocessing.VocabularyProcessor(self._max_doc_length, 
                                                                                 min_frequency=3)
-        data = np.array(list(self._preprocessor.fit_transform(train_texts)))
+        train_ids = np.array(list(self._preprocessor.fit_transform(train_texts)))
+        test_ids = np.array(list(self._preprocessor.transform(test_texts)))
         vocab_size = len(self._preprocessor.vocabulary_)
 
         self._data_index = 0 
-        batch_size = 128
-        num_steps = 10000
+        batch_size = 100
         num_skips = 2
+        num_steps = int(np.floor(train_ids.size*num_skips/batch_size))
         skip_window = 1 
-        data_for_skip_gram = data.flatten()
+        data_for_skip_gram = train_ids.flatten()
         data_for_skip_gram = data_for_skip_gram[data_for_skip_gram > 0] # filter out zeros
+        
 
         skip_gram = SkipGramModel(batch_size, num_skips, skip_window, 
-                                         self.embedding_size, vocab_size)
-        embedding_matrix = skip_gram.train_model(data_for_skip_gram, num_steps)
-        return data, embedding_matrix
+                                         self._embedding_size, vocab_size)
+        self._embedding_matrix = skip_gram.train_model(data_for_skip_gram, num_steps)
+        train_vecs, test_vecs = self._embedding_look_up(train_ids, test_ids)
+
+        del train_ids, test_ids
+        return train_vecs[0], test_vecs[0]
 
 
     def plot_with_tsne(plot_only=200, filename='tsne.png'):
@@ -66,7 +99,7 @@ class MovieReviewDatasource(MPSDatasource):
 
         plot_only = 200
         low_dim_embs = tsne.fit_transform(self.embedding_matrix[:plot_only, :])
-        words = next(self._preprocessor.reverse([range(plot_only)]))
+        words = next(self._preprocessor.reverse([list(range(plot_only))]))
 
         plt.figure(figsize=(18, 18))  # in inches
         for i, word in enumerate(words):
@@ -81,6 +114,21 @@ class MovieReviewDatasource(MPSDatasource):
 
         plt.savefig(filename)
 
+    def _embedding_look_up(self, train_ids, test_ids):
+
+        graph = tf.Graph()
+        with graph.as_default(), tf.device('/cpu:0'):
+            with tf.name_scope('embedding_lookup'):
+                embedding = tf.constant(self._embedding_matrix, dtype=tf.float32)
+                ids = tf.placeholder(tf.int32, shape=[None, self._max_doc_length],)
+                word_vectors = tf.nn.embedding_lookup(embedding, ids) 
+
+        with tf.Session(graph=graph) as session:
+
+            train_vecs = session.run([word_vectors], feed_dict={ids: train_ids})
+            test_vecs = session.run([word_vectors], feed_dict={ids: test_ids})
+
+        return train_vecs, test_vecs
 
 
     def _load_data_to_list(self, directory):
@@ -102,14 +150,15 @@ class MovieReviewDatasource(MPSDatasource):
 
 class SkipGramModel(object):
 
-    def __init__(self, batch_size, num_skips, skip_window, embedding_size, vocab_size):
+    def __init__(self, batch_size, num_skips, skip_window, _embedding_size, vocab_size):
         self.batch_size = batch_size
         self.num_skips = num_skips
         self.skip_window = skip_window
-        self.embedding_size = embedding_size
+        self._embedding_size = _embedding_size
         self.vocab_size = vocab_size
 
     def train_model(self, train_data, num_steps):
+        print('Training a skipgram model')
         self._train_data = train_data
         num_sampled = 64    # Number of negative examples to sample.
 
@@ -125,13 +174,13 @@ class SkipGramModel(object):
             with tf.device('/cpu:0'): 
                 # Look up embeddings for inputs.
                 embeddings = tf.Variable(
-                        tf.random_uniform([self.vocab_size, self.embedding_size], -1.0, 1.0))
+                        tf.random_uniform([self.vocab_size, self._embedding_size], -1.0, 1.0))
                 embed = tf.nn.embedding_lookup(embeddings, train_inputs)
 
                 # Construct the variables for the NCE loss
                 nce_weights = tf.Variable(
-                        tf.truncated_normal([self.vocab_size, self.embedding_size],
-                                             stddev=1.0 / np.sqrt(self.embedding_size)))
+                        tf.truncated_normal([self.vocab_size, self._embedding_size],
+                                             stddev=1.0 / np.sqrt(self._embedding_size)))
                 nce_biases = tf.Variable(tf.zeros([self.vocab_size]))
 
             # Compute the average NCE loss for the batch.
@@ -174,9 +223,9 @@ class SkipGramModel(object):
                 _, loss_val = session.run([optimizer, loss], feed_dict=feed_dict)
                 average_loss += loss_val
 
-                if step % 100 == 0:
+                if step % 1000 == 0:
                     if step > 0:
-                        average_loss /= 100
+                        average_loss /= 1000
                         # The average loss is an estimate of the loss over the last 2000 batches.
                         print('Average loss at step ', step, ': ', average_loss)
                         average_loss = 0
@@ -186,7 +235,7 @@ class SkipGramModel(object):
 
 
     def _generate_batch(self, batch_size, num_skips, skip_window):
-
+        
         assert batch_size % num_skips == 0
         assert num_skips <= 2 * skip_window
         batch = np.ndarray(shape=(batch_size), dtype=np.int32)
@@ -202,12 +251,12 @@ class SkipGramModel(object):
             targets_to_avoid = [skip_window]
             for j in range(num_skips):
                 while target in targets_to_avoid:
-                    target = np.random.randint(0, span - 1)
-                    targets_to_avoid.append(target)
-                    batch[i * num_skips + j] = queue[skip_window]
-                    labels[i * num_skips + j, 0] = queue[target]
+                    target = np.random.randint(0, span)
+                targets_to_avoid.append(target)
+                batch[i * num_skips + j] = queue[skip_window]
+                labels[i * num_skips + j, 0] = queue[target]
             if self._data_index == len(self._train_data):
-                queue[:] = self._train_data[:span]
+                queue.extend(self._train_data[:span])
                 self._data_index = span
             else:
                 queue.append(self._train_data[self._data_index])
@@ -216,12 +265,15 @@ class SkipGramModel(object):
         # Backtrack a little bit to avoid skipping words in the end of a batch
         self._data_index = (self._data_index + len(self._train_data) - span) % len(self._train_data)
 
+        
         return batch, labels
 
 if __name__ == '__main__':
     max_size = 100
     embedding_size = 30 
-    datasource = MovieReviewDatasource(expected_shape=max_size, embedding_size= embedding_size)
+    datasource = MovieReviewDatasource(expected_shape=max_size*embedding_size, 
+                                       embedding_size=embedding_size, 
+                                       max_doc_length=max_size)
 
 
 
