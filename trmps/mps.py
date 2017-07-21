@@ -38,7 +38,6 @@ class MPS(object):
         label = tf.placeholder(tf.float32, shape=[None, self.d_output])
 
         f = self.predict(feature)
-        f = tf.Print(f, [f], summarize=190, message="prediction")
         cost = self.cost(f, label)
         accuracy = self.accuracy(f, label)
         with tf.Session() as sess:
@@ -73,22 +72,35 @@ class MPS(object):
         return accuracy
 
     def _lin_reg(self, data_source):
-        weight = tf.Variable(tf.zeros([self.input_size, self.d_output]))
-        bias = tf.Variable(tf.zeros([self.d_output]))
 
-        feature = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
-        label = tf.placeholder(tf.float32, shape=[None, self.d_output])
+        x_dim = self.input_size * (self.d_feature - 1)
 
-        x = tf.transpose(feature[:, :, 1])
+        with tf.name_scope('model_params'):
+            weight = tf.Variable(tf.zeros([x_dim, self.d_output]))
+            bias = tf.Variable(tf.zeros([self.d_output]))
 
-        prediction = tf.matmul(x, weight) + bias
-        #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
-        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
-        train_step = tf.train.GradientDescentOptimizer(0.05).minimize(cross_entropy)
-        #train_step = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy)
+        with tf.name_scope('data'):
+            feature = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
+            label = tf.placeholder(tf.float32, shape=[None, self.d_output])
+
+        with tf.name_scope('lin_model'):
+            x = tf.transpose(feature[:, :, 1:], perm=[1, 0, 2])
+            x = tf.contrib.layers.flatten(x) # flatten out everything except the first dim
+
+
+            prediction = tf.matmul(x, weight) + bias
+            #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
+            cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
+            train_step = tf.train.GradientDescentOptimizer(0.05).minimize(cross_entropy)
+            #train_step = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy)
 
         correct_prediction = tf.equal(tf.argmax(label,1), tf.argmax(prediction,1))
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+        reshaped_weight = tf.transpose(weight)
+        reshaped_weight = tf.reshape(reshaped_weight, [self.d_output, self.input_size, self.d_feature-1])
+        reshaped_weight = tf.transpose(reshaped_weight, perm=[1, 2, 0])
+
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -98,7 +110,7 @@ class MPS(object):
             batch_feature, batch_label = data_source.next_training_data_batch(10000)
             acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
             print('Lin regression gives an accuracy of {}'.format(acc))
-            self.weight = sess.run(weight)
+            self.weight = sess.run(reshaped_weight)
             self.bias = sess.run(bias)
 
     def _setup_nodes(self):
@@ -128,35 +140,36 @@ class MPS(object):
             self.nodes = self.nodes.write(self.input_size - 1, self.nodes_list[-1])
 
     def _make_start_vector(self):
-        start_vector = np.zeros([2, self.d_matrix], dtype=np.float32)
+        start_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
         start_vector[0, self.d_output:] = 1
-        start_vector[1, 0:self.d_output] = self.weight[0]
+        start_vector[1:, 0:self.d_output] = self.weight[0]
         return tf.Variable(start_vector, dtype=tf.float32)
 
     def _make_end_vector(self):
 
-        end_vector = np.zeros([2, self.d_matrix], dtype=np.float32)
+        end_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
         end_vector[0, 0:self.d_output] = 1 
         end_vector[0, self.d_output:] = self.bias 
-        end_vector[1, self.d_output:] = self.weight[-1] 
+        end_vector[1:, self.d_output:] = self.weight[-1] 
 
         return tf.Variable(end_vector, dtype=tf.float32)
 
     def _make_middle_node(self, index):
 
-        middle_node = np.zeros([2, self.d_matrix, self.d_matrix], dtype=np.float32)
+        middle_node = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
         middle_node[0] = np.identity(self.d_matrix)
-        middle_node[1, self.d_output:, 0:self.d_output] = np.diag(self.weight[index])
+        for i in range(1, self.d_feature):
+            middle_node[i:, self.d_output:, 0:self.d_output] = np.diag(self.weight[index, i-1])
 
         return tf.Variable(middle_node, dtype=tf.float32)
 
     def _make_special_node(self, index):
         
         def _make_matrix(i):
-            m = np.zeros([2, self.d_matrix, self.d_matrix], dtype=np.float32)
+            m = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
             m[0, i, i] = 1 
             m[0, i+self.d_output, i+self.d_output] = 1
-            m[1, i+self.d_output, i] = self.weight[index, i]
+            m[1:, i+self.d_output, i] = self.weight[index, :, i]
 
             return tf.Variable(m)
 
