@@ -70,6 +70,12 @@ class MPS(object):
             correct_prediction = tf.equal(prediction, true_value)
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return accuracy
+        
+    def confusion_matrix(self, f, label):
+        predictions = tf.argmax(f, axis=1)
+        true_values = tf.argmax(label, axis=1)
+        confusion_mat = tf.confusion_matrix(true_values, predictions, num_classes = self.d_output)
+        return confusion_mat
 
     def _lin_reg(self, data_source):
 
