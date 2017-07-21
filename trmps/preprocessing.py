@@ -36,7 +36,6 @@ class MPSDatasource(object):
         if not os.path.isdir(type(self).__name__):
             os.mkdir(type(self).__name__)
 
-
         self._expected_shape = _expected_shape
         if self._training_data is None:
 	        if os.path.isfile(self._training_data_path):

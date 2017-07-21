@@ -114,7 +114,7 @@ class MPS(object):
                 batch_feature, batch_label = data_source.next_training_data_batch(100)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
             batch_feature, batch_label = data_source.test_data
-            #batch_feature, batch_label = data_source.next_training_data_batch(1000)
+            
             acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
             print('Lin regression gives an accuracy of {}'.format(acc))
             self.weight = sess.run(reshaped_weight)
