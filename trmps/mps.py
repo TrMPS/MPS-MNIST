@@ -70,6 +70,12 @@ class MPS(object):
             correct_prediction = tf.equal(prediction, true_value)
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return accuracy
+        
+    def confusion_matrix(self, f, label):
+        predictions = tf.argmax(f, axis=1)
+        true_values = tf.argmax(label, axis=1)
+        confusion_mat = tf.confusion_matrix(true_values, predictions, num_classes = self.d_output)
+        return confusion_mat
 
     def _lin_reg(self, data_source):
 
@@ -104,10 +110,11 @@ class MPS(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            for _ in range(1000):    
+            for _ in range(100):
                 batch_feature, batch_label = data_source.next_training_data_batch(100)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
             batch_feature, batch_label = data_source.test_data
+            
             acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
             print('Lin regression gives an accuracy of {}'.format(acc))
             self.weight = sess.run(reshaped_weight)
