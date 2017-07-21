@@ -31,9 +31,11 @@ class MovieReviewDatasource(MPSDatasource):
         del train_texts
 
         self._training_data = (data, train_labels)
-        np.save(self._training_data_path, self._training_data[0])
-        np.save(self._training_labels_path, self._training_data[1])
         np.save(self._embedding_path, embedding)
+        super()._load_training_data()
+
+    def _load_test_data(self):
+    	print('loading test data not implemented')
 
     def _train_word2vec(self, train_texts):
 
@@ -45,6 +47,7 @@ class MovieReviewDatasource(MPSDatasource):
 
         self._data_index = 0 
         batch_size = 128
+        num_steps = 10000
         num_skips = 2
         skip_window = 1 
         data_for_skip_gram = data.flatten()
@@ -52,7 +55,7 @@ class MovieReviewDatasource(MPSDatasource):
 
         skip_gram = SkipGramModel(batch_size, num_skips, skip_window, 
                                          self.embedding_size, vocab_size)
-        embedding_matrix = skip_gram.train_model(data_for_skip_gram)
+        embedding_matrix = skip_gram.train_model(data_for_skip_gram, num_steps)
         return data, embedding_matrix
 
 
@@ -106,7 +109,7 @@ class SkipGramModel(object):
         self.embedding_size = embedding_size
         self.vocab_size = vocab_size
 
-    def train_model(self, train_data):
+    def train_model(self, train_data, num_steps):
         self._train_data = train_data
         num_sampled = 64    # Number of negative examples to sample.
 
@@ -152,8 +155,6 @@ class SkipGramModel(object):
             # Add variable initializer.
             init = tf.global_variables_initializer()
 
-        num_steps = 10000
-
         with tf.Session(graph=graph) as session:
 
             # We must initialize all variables before we use them.
@@ -173,9 +174,9 @@ class SkipGramModel(object):
                 _, loss_val = session.run([optimizer, loss], feed_dict=feed_dict)
                 average_loss += loss_val
 
-                if step % 2000 == 0:
+                if step % 100 == 0:
                     if step > 0:
-                        average_loss /= 2000
+                        average_loss /= 100
                         # The average loss is an estimate of the loss over the last 2000 batches.
                         print('Average loss at step ', step, ': ', average_loss)
                         average_loss = 0
@@ -220,7 +221,6 @@ class SkipGramModel(object):
 if __name__ == '__main__':
     max_size = 100
     embedding_size = 30 
-    print('hi')
     datasource = MovieReviewDatasource(expected_shape=max_size, embedding_size= embedding_size)
 
 
