@@ -41,9 +41,9 @@ def convert_to_onehot(vector, num_classes=None):
     
 class activityLabels(Enum):
     """
-	An enum to hold the different types of activity available in the activity dataset:
-	http://ps.ewi.utwente.nl/Blog/Sensors_Activity_Recognition_DataSet_Shoaib.rar
-	Includes an element "upsatirs" because the authors of the dataset spelt it wrong -_-
+    An enum to hold the different types of activity available in the activity dataset:
+    http://ps.ewi.utwente.nl/Blog/Sensors_Activity_Recognition_DataSet_Shoaib.rar
+    Includes an element "upsatirs" because the authors of the dataset spelt it wrong -_-
     """
     walking = 0
     standing = 1
@@ -57,31 +57,31 @@ class activityLabels(Enum):
 
 class activityDatasource(MPSDatasource):
     """
-	activityDatasource is a subclass of MPSDatasource which implements data loading for the
-	Dataset of walking, running, sitting, standing, jogging, biking, walking upstairs and walking downstairs activities
-	as found on
-	http://ps.ewi.utwente.nl/Datasets.php
-	
-	Use as you would use any subclass of MPSDatasource.
-	This class requires that unrar and rarfile are installed.
+    activityDatasource is a subclass of MPSDatasource which implements data loading for the
+    Dataset of walking, running, sitting, standing, jogging, biking, walking upstairs and walking downstairs activities
+    as found on
+    http://ps.ewi.utwente.nl/Datasets.php
+    
+    Use as you would use any subclass of MPSDatasource.
+    This class requires that unrar and rarfile are installed.
     """
     def __init__(self, shuffled = False):
         """
-		As the data needs to be downloaded from the website, the initialiser handles that as well,
-		then calls _load_all_data to handle loading the contents of the downloaded data.
+        As the data needs to be downloaded from the website, the initialiser handles that as well,
+        then calls _load_all_data to handle loading the contents of the downloaded data.
         :param shuffled: boolean
-        	Pass true to shuffle the dataset.
-        	This parameter is not very meaningful in this case because _load_all_data shuffles
-        	the data anyway.
+            Pass true to shuffle the dataset.
+            This parameter is not very meaningful in this case because _load_all_data shuffles
+            the data anyway.
         """
         self.data_length = 200
         self.training_fraction = 0.2
-        expected_shape = (self.data_length, 3)
+        expected_shape = (self.data_length, 4)
         self._compressed_data_path = "ActivityData.rar"
         self._uncompressed_data_path = "DataSet/"
         self._all_data = None
         self._all_data_path = "all_data" + type(self).__name__ + ".npy"
-        _all_labels_path = "all_labels" + type(self).__name__ + ".npy"
+        self._all_labels_path = "all_labels" + type(self).__name__ + ".npy"
         if os.path.isfile(self._all_data_path):
             self._all_data = (np.load(self._all_data_path), np.load(_all_labels_path))
             if self._all_data[0][0].shape != expected_shape:
@@ -96,8 +96,8 @@ class activityDatasource(MPSDatasource):
         
     def _load_all_data(self):
         """
-		_load_all_data is responsible for reading the .csv files downloaded in the initialisation.
-		The results are saved into _all_data
+        _load_all_data is responsible for reading the .csv files downloaded in the initialisation.
+        The results are saved into _all_data
         :return: nothing
         """
         _all_datapoints = []
@@ -135,7 +135,7 @@ class activityDatasource(MPSDatasource):
                             _all_labels.append(row_label.value)
                             data = []
                             prev_row_label = None
-                        data.append(np.array([row[1], row[2], row[3]]))
+                        data.append(np.array([1., row[1], row[2], row[3]]))
                         row_label = activityLabels[row[-1]]
                         if prev_row_label is not None:
                             if row_label != prev_row_label:
@@ -154,13 +154,13 @@ class activityDatasource(MPSDatasource):
         print(_all_labels[0])
         self._all_data = (_all_datapoints, _all_labels)
         np.save(self._all_data_path, _all_datapoints)
-        np.save(_all_labels_path, _all_labels)
+        np.save(self._all_labels_path, _all_labels)
     
     
     def _load_test_data(self):
         """
-		Takes part of _all_data (non-overlapping with training data)
-		and uses that as the test data
+        Takes part of _all_data (non-overlapping with training data)
+        and uses that as the test data
         :return: nothing
         """
         if self._all_data is None:
@@ -171,8 +171,8 @@ class activityDatasource(MPSDatasource):
         
     def _load_training_data(self):
         """
-		Takes part of _all_data (non-overlapping with test data)
-		and uses that as the training data
+        Takes part of _all_data (non-overlapping with test data)
+        and uses that as the training data
         :return: nothing
         """
         if self._all_data is None:

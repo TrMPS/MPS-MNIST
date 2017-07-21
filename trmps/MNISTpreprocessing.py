@@ -8,20 +8,20 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 def _preprocess_images(data, size, shrink = True):
     """
-	This function preprocesses images into format from the paper
-	Supervised learning with quantum-inspired tensor networks
+    This function preprocesses images into format from the paper
+    Supervised learning with quantum-inspired tensor networks
 
     :param data: tensorflow dataset
-    	The tensorflow dataset we are reading from
+        The tensorflow dataset we are reading from
     :param size: integer
-    	The size of the dataset we wish to extract
+        The size of the dataset we wish to extract
     :param shrink: boolean
-    	Whether the image is shrunk using max pooling or not.
-    	If true, then the image is shrunk to 14x14 before being flattened.
-    	If false, the image is not shrunk.
+        Whether the image is shrunk using max pooling or not.
+        If true, then the image is shrunk to 14x14 before being flattened.
+        If false, the image is not shrunk.
     :return: (numpy array, numpy array)
-    	Returns (data points, results) in the format
-    	([batch, MPS input size, other dimensions], [batch, classifications])
+        Returns (data points, results) in the format
+        ([batch, MPS input size, other dimensions], [batch, classifications])
     """
 
 
@@ -88,24 +88,25 @@ def _preprocess_images(data, size, shrink = True):
     return (np.array(data), np.array(labels))
     
 class MNISTDatasource(MPSDatasource):
-	"""
-	MNISTDatasource is a subclass of MPSDatasource which implements data loading for the
-	well known MNIST dataset.
-	
-	Use as you would use any subclass of MPSDatasource.
-	This class can also permute the MNIST images pixel-by-pixel.
-	This class requires the use of tensorflow to load data.
-	"""
+    """
+    MNISTDatasource is a subclass of MPSDatasource which implements data loading for the
+    well known MNIST dataset.
+    
+    Use as you would use any subclass of MPSDatasource.
+    This class can also permute the MNIST images pixel-by-pixel.
+    This class requires the use of tensorflow to load data.
+    """
+    
     def __init__(self, shrink = True, permuted = False, shuffled = False):
         """
-		Initialises the dataset, and can also permute/shuffle the dataset.
+        Initialises the dataset, and can also permute/shuffle the dataset.
         :param shrink: boolean
-        	Pass true to shrink the image to 14x14.
-        	If false, image will be kept at 28x28.
+            Pass true to shrink the image to 14x14.
+            If false, image will be kept at 28x28.
         :param permuted: boolean
-        	Pass true to have the image pixel-by-pixel permuted.
+            Pass true to have the image pixel-by-pixel permuted.
         :param shuffled: boolean
-        	Pass true to shuffle the dataset.
+            Pass true to shuffle the dataset.
         """
         expected_shape = (784, 2)
         if shrink:
@@ -129,7 +130,7 @@ class MNISTDatasource(MPSDatasource):
             
     def _load_test_data(self):
         """
-		Loads test data of the appropriate size.
+        Loads test data of the appropriate size.
         :return: nothing
         """
         self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)
@@ -137,7 +138,7 @@ class MNISTDatasource(MPSDatasource):
     
     def _load_training_data(self):
         """
-		Loads training data of the appropriate size.
+        Loads training data of the appropriate size.
         :return: nothing
         """
         self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train,

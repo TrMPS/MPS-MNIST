@@ -2,7 +2,7 @@ from optimizer import *
 import activitypreprocessing as ap
 
 # Model parameters
-d_feature = 3
+d_feature = 4
 d_output = 7
 batch_size = 1000
 permuted = False
