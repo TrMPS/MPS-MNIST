@@ -4,6 +4,7 @@ import sys
 import os
 
 class MPSDatasource(object):
+  
     """
 	MPSDatasource offers the interfaces for the MPS class and the MPSOptimiser class to get data.
 	Can be used directly by using passing in the training data and test data, or can be subclassed
@@ -32,6 +33,7 @@ class MPSDatasource(object):
         self._test_data = _test_data
         self._training_data_path = "training_data" + type(self).__name__ + ".npy"
         self._training_labels_path = "training_labels" + type(self).__name__ + ".npy"
+
         self._expected_shape = _expected_shape
         if self._training_data is None:
 	        if os.path.isfile(self._training_data_path):
