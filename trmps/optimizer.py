@@ -54,13 +54,13 @@ class MPSOptimizer(object):
         test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
         self.test = initial_weights
 
-        train_cost, train_accuracy = self._test_step(self._feature, self._label)
+        train_cost, train_accuracy, train_confusion = self._test_step(self._feature, self._label)
 
         test_feature, test_label = data_source.test_data
         
         feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
-        test_cost, test_accuracy = self._test_step(feature, label)
+        test_cost, test_accuracy, test_confusion = self._test_step(feature, label)
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -76,17 +76,14 @@ class MPSOptimizer(object):
                 self.feed_dict[self.rate_of_change] = rate_of_change 
                 self.feed_dict[feature] = test_feature
                 self.feed_dict[label] = test_label
-                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy]
-                train_c, self.test, train_acc, test_c, test_acc = sess.run(to_eval,
+                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion]
+                train_c, self.test, train_acc, test_c, test_acc, test_conf = sess.run(to_eval,
                                                                            feed_dict=self.feed_dict,
                                                                            options=run_options,
                                                                            run_metadata=run_metadata)
 
                 rate_of_change = rate_of_change * increment
 
-                self.feed_dict = {self._feature: batch_feature, self._label: batch_label}
-                for index, element in enumerate(self.test):
-                    self.feed_dict[self.MPS.nodes_list[index]] = element
                 if _logging_enabled:
                     #writer.add_run_metadata(run_metadata, 'step' + str(i))
                     tl = timeline.Timeline(run_metadata.step_stats)
@@ -99,6 +96,7 @@ class MPSOptimizer(object):
                 end = time.time()
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))
                 print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
+                print('confusion matrix: \n' + str(test_conf))
                 #print("prediction:" + str(prediction[0]))
             if _logging_enabled:
                 writer.close()
@@ -109,7 +107,8 @@ class MPSOptimizer(object):
         f = self.MPS.predict(feature)
         cost = self.MPS.cost(f, label)
         accuracy = self.MPS.accuracy(f, label)
-        return cost, accuracy
+        confusion = self.MPS.confusion_matrix(f, label)
+        return cost, accuracy, confusion
 
 
 
