@@ -57,9 +57,7 @@ class MPSDatasource(object):
         if self._training_data is None:
             self._load_training_data()
         if shuffled:
-            data, labels = self._training_data
-            permutation = np.random.permutation(len(data))
-            self._training_data = data[permutation], labels[permutation]
+            self.shuffle()
         self._swapped_test_data = None
         self._swapped_training_data = None
         
@@ -127,7 +125,7 @@ class MPSDatasource(object):
         np.save(self._training_data_path, self._training_data[0])
         np.save(self._training_labels_path, self._training_data[1])
 
-    def reshuffle(self):
+    def shuffle(self):
         data, labels = self._training_data
         permutation = np.random.permutation(len(data))
         self._training_data = data[permutation], labels[permutation]

@@ -10,9 +10,14 @@ import collections
 
 class MovieReviewDatasource(MPSDatasource):
 
-    def __init__(self, expected_shape=None, shuffled=False, embedding_size=50, max_doc_length=100):
+    def __init__(self, expected_shape=None, shuffled=False, embedding_size=50, 
+    			 max_length_for_skip_gram=200, 
+    			 max_length_for_mps=50):
+        assert max_length_for_skip_gram > max_length_for_mps
+        assert expected_shape[0] == max_length_for_mps * embedding_size
         self._embedding_size = embedding_size
-        self._max_doc_length = max_doc_length
+        self._max_length_for_skip_gram = max_length_for_skip_gram
+        self._max_length_for_mps = max_length_for_mps
         super().__init__(expected_shape, shuffled)
 
     def _load_all_data(self):
@@ -79,7 +84,7 @@ class MovieReviewDatasource(MPSDatasource):
     def _word2vec(self, train_texts, test_texts):
 
         # convert the words to ids from most frequent to least 
-        self._preprocessor = tf.contrib.learn.preprocessing.VocabularyProcessor(self._max_doc_length, 
+        self._preprocessor = tf.contrib.learn.preprocessing.VocabularyProcessor(self._max_length_for_skip_gram, 
                                                                                 min_frequency=3)
         train_ids = np.array(list(self._preprocessor.fit_transform(train_texts)))
         test_ids = np.array(list(self._preprocessor.transform(test_texts)))
@@ -97,7 +102,8 @@ class MovieReviewDatasource(MPSDatasource):
         skip_gram = SkipGramModel(batch_size, num_skips, skip_window, 
                                          self._embedding_size, vocab_size)
         self._embedding_matrix = skip_gram.train_model(data_for_skip_gram, num_steps)
-        train_vecs, test_vecs = self._embedding_look_up(train_ids, test_ids)
+        train_vecs, test_vecs = self._embedding_look_up(train_ids[:, :self._max_length_for_mps], 
+        												test_ids[:, :self._max_length_for_mps])
 
         del train_ids, test_ids
         return train_vecs[0], test_vecs[0]
@@ -131,7 +137,7 @@ class MovieReviewDatasource(MPSDatasource):
         with graph.as_default(), tf.device('/cpu:0'):
             with tf.name_scope('embedding_lookup'):
                 embedding = tf.constant(self._embedding_matrix, dtype=tf.float32)
-                ids = tf.placeholder(tf.int32, shape=[None, self._max_doc_length],)
+                ids = tf.placeholder(tf.int32, shape=[None, self._max_length_for_mps],)
                 word_vectors = tf.nn.embedding_lookup(embedding, ids) 
 
         with tf.Session(graph=graph) as session:
@@ -152,7 +158,7 @@ class MovieReviewDatasource(MPSDatasource):
             _, label = f_name[:-4].split('_')
             label_list.append(label) 
 
-            file = open(f_name, 'r')
+            file = open(f_name, 'r', encoding='utf-8')
             text_list.append(file.read())
             file.close()
 
@@ -234,9 +240,9 @@ class SkipGramModel(object):
                 _, loss_val = session.run([optimizer, loss], feed_dict=feed_dict)
                 average_loss += loss_val
 
-                if step % 1000 == 0:
+                if step % 2000 == 0:
                     if step > 0:
-                        average_loss /= 1000
+                        average_loss /= 2000
                         # The average loss is an estimate of the loss over the last 2000 batches.
                         print('Average loss at step ', step, ': ', average_loss)
                         average_loss = 0
@@ -280,12 +286,14 @@ class SkipGramModel(object):
         return batch, labels
 
 if __name__ == '__main__':
-    max_size = 100
-    embedding_size = 30 
-    expected_shape = (max_size*embedding_size, 2)
+    max_length_for_skip_gram = 200
+    max_length_for_mps = 50 
+    embedding_size = 80
+    expected_shape = (max_length_for_mps*embedding_size, 2)
     datasource = MovieReviewDatasource(expected_shape=expected_shape, 
                                        embedding_size=embedding_size, 
-                                       max_doc_length=max_size)
+                                       max_length_for_skip_gram=max_length_for_skip_gram,
+                                       max_length_for_mps=max_length_for_mps)
 
 
 
