@@ -26,8 +26,8 @@ class MPS(object):
         self.d_output = d_output
         self._special_node_loc = int(np.floor(self.input_size / 2))
 
-    def prepare(self, data_source, iterations = 1000):
-        self._lin_reg(data_source, iterations)
+    def prepare(self, data_source, iterations=1000, learning_rate=0.05):
+        self._lin_reg(data_source, iterations, learning_rate)
         self._setup_nodes()
 
     def test(self, test_feature, test_label):
@@ -77,7 +77,7 @@ class MPS(object):
         confusion_mat = tf.confusion_matrix(true_values, predictions, num_classes = self.d_output)
         return confusion_mat
 
-    def _lin_reg(self, data_source, iterations):
+    def _lin_reg(self, data_source, iterations, learning_rate):
 
         x_dim = self.input_size * (self.d_feature - 1)
 
@@ -97,7 +97,7 @@ class MPS(object):
             prediction = tf.matmul(x, weight) + bias
             #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
             cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
-            train_step = tf.train.GradientDescentOptimizer(0.02).minimize(cross_entropy) 
+            train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy) 
             #train_step = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy)
 
         correct_prediction = tf.equal(tf.argmax(label,1), tf.argmax(prediction,1))

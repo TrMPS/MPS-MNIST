@@ -12,8 +12,11 @@ embedding_size = 30
 input_size = max_doc_length * embedding_size
 expected_shape = (input_size, d_feature)
 
-max_size = 18
+max_size = 16
 
+
+lin_reg_iterations = 250 
+lin_reg_lr = 0.02
 rate_of_change = 5 * 10 ** (-5) 
 logging_enabled = False
 
@@ -25,10 +28,10 @@ data_source = MovieReviewDatasource(shuffled=shuffled,
 									expected_shape=expected_shape)
 weights = None
 network = MPS(d_feature, d_output, input_size)
-network.prepare(data_source)
+network.prepare(data_source, lin_reg_iterations, lin_reg_lr)
 optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
 
-data_source.reshuffle()
+data_source.shuffle()
 optimizer.train(data_source, batch_size, n_step, 
                 rate_of_change=rate_of_change, 
                 logging_enabled=logging_enabled, 
