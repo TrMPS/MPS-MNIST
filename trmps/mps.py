@@ -285,12 +285,6 @@ class MPS(object):
                 tf.placeholder_with_default(self._make_end_vector(), [self.d_feature, None]))
             self.nodes = self.nodes.write(self.input_size - 1, self.nodes_list[-1])
 
-    def _set_up_simple_node_list(self, no):
-        with tf.name_scope("simple_node_list"):
-            self.simple_node_list = [] 
-            self.node_list.append()
-
-
     def _make_start_vector(self):
         """
 
@@ -324,7 +318,7 @@ class MPS(object):
         middle_node = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
         middle_node[0] = np.identity(self.d_matrix)
         for i in range(1, self.d_feature):
-            middle_node[i:, self.d_output:, 0:self.d_output] = np.diag(self.weight[index, i-1])
+            middle_node[i, self.d_output:, 0:self.d_output] = np.diag(self.weight[index, i-1])
 
         return tf.Variable(middle_node, dtype=tf.float32)
 
