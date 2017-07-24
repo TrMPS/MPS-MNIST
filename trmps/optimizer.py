@@ -7,6 +7,17 @@ from tensorflow.python.client import timeline
 
 
 def list_from(tensorArray, length):
+    """
+    list_from is a helper function that produces a list from a tensorArray.
+    It is used to extract the results of training in MPSOptimizer.
+    :param tensorArray: tensorflow TensorArray
+        The tensor array that is to be converted to a list
+    :param length: integer
+        The length of the TensorArray/the list that is to be created
+    :return: list of tensorflow Tensors
+        A list containing all the values of the TensorArray as Tensors.
+        This has to then be evaluated to get actual values.
+    """
     arr = tensorArray
     result_list = []
     with tf.name_scope("createlist"):
@@ -16,8 +27,61 @@ def list_from(tensorArray, length):
 
 
 class MPSOptimizer(object):
+    """
+    MPSOptimizer is used to optimize the MPS class for a dataset.
+    Implements the DMRG method, as detailed in the paper
+    Supervised learning with Quantum-Inspired Tensor Networks
+    by E.Miles Stoudenmire and David J.Schwab
+    Example usage using the MNIST dataset:
+    
+    from optimizer import *
+    import MNISTpreprocessing
+    
+    # Model parameters
+    d_feature = 2
+    d_output = 10
+    batch_size = 1000
+    permuted = False
+    shuffled = False
+    shrink = True
+    input_size = 784
+    if shrink:
+        input_size = 196
+    
+    max_size = 20
+    
+    rate_of_change = 10 ** (-7) 
+    logging_enabled = False
+    
+    cutoff = 10 # change this next
+    n_step = 10
+    
+    data_source = MNISTpreprocessing.MNISTDatasource(shrink = shrink, permuted = permuted, shuffled = shuffled)
+    
+    weights = None
+    
+    network = MPS(d_feature, d_output, input_size)
+    network.prepare(data_source)
+    optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
+    optimizer.train(data_source, batch_size, n_step, 
+                    rate_of_change=rate_of_change, 
+                    logging_enabled=logging_enabled, 
+                    initial_weights=weights)
+    """
 
-    def __init__(self, MPSNetwork, max_size, grad_func, cutoff=10 ** (-5)):
+    def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=10 ** (-5)):
+        """
+        Initialises the optimiser.
+        :param MPSNetwork: MPS
+            The matrix product state network that will be optimised.
+        :param max_size: integer
+            The maximum size the tensors composing the MPS can grow to.
+        :param grad_func: a function that returns the gradient. Yet to be implemented
+            Yet to be implemented. just pass None. Currently, the gradient function
+            corresponding to the cross entropy cost function is implemented
+        :param cutoff: float
+            The cutoff value for the gradient. Anything above this is clipped off.
+        """
         self.MPS = MPSNetwork
         self.rate_of_change = tf.placeholder(tf.float32, shape=[])
         self.max_size = max_size
@@ -35,10 +99,36 @@ class MPSOptimizer(object):
                "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
                " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
 
-    def train(self, data_source, batch_size, n_step, rate_of_change=1000, logging_enabled=None, initial_weights=None):
-        _logging_enabled = logging_enabled
-        if logging_enabled is None:
-            _logging_enabled = False
+    def train(self, data_source, batch_size, n_step, rate_of_change=1000, initial_weights=None, _logging_enabled=False):
+        """
+        Trains the network. 
+        If it is required to chain the training with other tensorflow steps, do not use this function.
+        However, it may be helpful to base it on the way this function is implemented,
+        as the way the MPS works is quite unique, so the way things will have to be done is 
+        somewhat different from how it is usually done in tensorflow.
+        
+        :param data_source: (some subclass of) MPSDatasource
+            The data/labels that the MPS will be trained on.
+        :param batch_size: integer
+            The batch size to be used when feeding in data for the sweeps.
+        :param n_step: integer
+            The number of steps of training that should be performed.
+            A step of training consists of a full sweep 'forward' and 'backward'
+            such that the output leg is attached to a node at the same position as at the start.
+            Typically, (if the batch size is all of the data), then a couple of steps should
+            be enough to fully optimise the MPS.
+        :param rate_of_change: float
+            The rate of change for the optimisation. 
+            Different values should be tried, as there is no 'right answer' that works for
+            all situations, and depending on the data set, the same value can cause
+            overshooting, or make the optimisation slower than it should be.
+        :param initial_weights: list
+            The initial weights for the network, if it is desired to override the default values
+            from mps.prepare(self, data_source, iterations = 1000)
+        :param _logging_enabled: boolean
+            Whether certain things are logged to Tensorboard/ to a Chrome timeline.
+        :return: nothing
+        """
 
         run_options = []
         run_metadata = []
@@ -104,6 +194,13 @@ class MPSOptimizer(object):
 
 
     def _test_step(self, feature, label):
+        """
+        A single step of training
+        :param self:
+        :param feature:
+        :param label:
+        :return:
+        """
         f = self.MPS.predict(feature)
         cost = self.MPS.cost(f, label)
         accuracy = self.MPS.accuracy(f, label)
@@ -113,6 +210,10 @@ class MPSOptimizer(object):
 
 
     def _setup_optimization(self):
+        """
+        :param self:
+        :return:
+        """
         '''
         C1s: size = input_size - 2 (as the last one is kept redundant) 
         C2s: size = input_size - 2 (first one redundant)
@@ -148,6 +249,14 @@ class MPSOptimizer(object):
                                            name="initialFindC2")
 
     def _find_C1(self, counter, C1, C1s):
+        """
+
+        :param self:
+        :param counter:
+        :param C1:
+        :param C1s:
+        :return:
+        """
         '''
         finds new C1, and write into C1s[counter]
         '''
@@ -162,6 +271,14 @@ class MPSOptimizer(object):
         return [counter, C1, C1s]
 
     def _find_C2(self, counter, prev_C2, C2s):
+        """
+
+        :param self:
+        :param counter:
+        :param prev_C2:
+        :param C2s:
+        :return:
+        """
         '''
         finds new C2, and write into C2s[counter]
         '''
@@ -176,6 +293,12 @@ class MPSOptimizer(object):
         return [updated_counter, new_C2, C2s]
 
     def train_step(self):
+        """
+        A single step of training. Interface with this if you need to chain training with other tensorflow operations.
+        If not, it is recommended to just use the train function.
+
+        :return: the accuracy as calculated at the end of a training step.
+        """
         self.batch_size = tf.shape(self._feature)[1]
 
         with tf.name_scope("train_step"):
@@ -212,6 +335,11 @@ class MPSOptimizer(object):
         return accuracy
 
     def _sweep_left(self):
+        """
+
+        :param self:
+        :return:
+        """
         # read second from end node
         n1 = self.MPS.nodes.read(self.MPS._special_node_loc)
         n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
@@ -233,6 +361,13 @@ class MPSOptimizer(object):
         return self.updated_nodes
 
     def _sweep_right(self, from_index, to_index):
+        """
+
+        :param self:
+        :param from_index:
+        :param to_index:
+        :return:
+        """
         n1 = self.MPS.nodes.read(from_index)
         n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
 
@@ -248,6 +383,15 @@ class MPSOptimizer(object):
         return self.updated_nodes
 
     def _update_left(self, counter, C2s, updated_nodes, previous_node):
+        """
+
+        :param self:
+        :param counter:
+        :param C2s:
+        :param updated_nodes:
+        :param previous_node:
+        :return:
+        """
 
         with tf.name_scope("update_left"):
             # Read in the nodes 
@@ -291,6 +435,15 @@ class MPSOptimizer(object):
 
 
     def _update_right(self, counter, C1s, updated_nodes, previous_node):
+        """
+
+        :param self:
+        :param counter:
+        :param C1s:
+        :param updated_nodes:
+        :param previous_node:
+        :return:
+        """
         with tf.name_scope("update_right"):
             # Read in the nodes 
             n1 = previous_node
@@ -334,6 +487,15 @@ class MPSOptimizer(object):
         return [updated_counter, C1s, updated_nodes, aj1]
 
     def _calculate_C(self, C1, C2, input1, input2):
+        """
+
+        :param self:
+        :param C1:
+        :param C2:
+        :param input1:
+        :param input2:
+        :return:
+        """
         # C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, input1, input2)
         d1 = tf.shape(C1)[1]
         d2 = tf.shape(C2)[1]
@@ -350,6 +512,13 @@ class MPSOptimizer(object):
         return C
 
     def _get_f_and_cost(self, bond, C):
+        """
+
+        :param self:
+        :param bond:
+        :param C:
+        :return:
+        """
         with tf.name_scope("tensordotf"):
             #f = tf.einsum('lmnik,tmnik->tl', bond, C)
             f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
@@ -381,6 +550,12 @@ class MPSOptimizer(object):
         return updated_bond
 
     def _make_new_nodes(self, nodes):
+        """
+
+        :param self:
+        :param nodes:
+        :return:
+        """
         size = nodes.size()
         new_nodes = tf.TensorArray(tf.float32, size=size, infer_shape=False, clear_after_read=False)
         new_nodes = new_nodes.write(0, nodes.read(size - 1))
@@ -388,6 +563,14 @@ class MPSOptimizer(object):
         return new_nodes
 
     def _duplicate_nodes(self, nodes, from_index, to_index):
+        """
+
+        :param self:
+        :param nodes:
+        :param from_index:
+        :param to_index:
+        :return:
+        """
         '''
         duplicate the nodes in the range (from_index, to_index)
         '''
@@ -406,12 +589,29 @@ class MPSOptimizer(object):
         return new_nodes
 
     def _transfer_to_array(self, index, old_nodes, new_nodes):
+        """
+
+        :param self:
+        :param index:
+        :param old_nodes:
+        :param new_nodes:
+        :return:
+        """
         old_node = old_nodes.read(index)
         new_nodes = new_nodes.write(index, old_node)
         index += 1
         return (index, old_nodes, new_nodes)
 
     def _bond_decomposition(self, bond, max_size, min_size=3, threshold=10**(-8)):
+        """
+        
+        :param self:
+        :param bond:
+        :param max_size:
+        :param min_size:
+        :param threshold:
+        :return:
+        """
         """
         Decomposes bond, so that the next step can be done.
         :param bond:
