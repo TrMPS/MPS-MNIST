@@ -12,6 +12,7 @@ max_length_for_mps = 50
 embedding_size = 80
 expected_shape = (max_length_for_mps*embedding_size, 2)
 
+
 max_size = 16
 
 
@@ -38,3 +39,4 @@ optimizer.train(data_source, batch_size, n_step,
                 rate_of_change=rate_of_change, 
                 logging_enabled=logging_enabled, 
                 initial_weights=weights)
+
