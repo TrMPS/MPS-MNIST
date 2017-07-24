@@ -97,7 +97,7 @@ class MPS(object):
             prediction = tf.matmul(x, weight) + bias
             #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
             cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
-            train_step = tf.train.GradientDescentOptimizer(0.05).minimize(cross_entropy)
+            train_step = tf.train.GradientDescentOptimizer(0.02).minimize(cross_entropy) 
             #train_step = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy)
 
         correct_prediction = tf.equal(tf.argmax(label,1), tf.argmax(prediction,1))
@@ -110,15 +110,19 @@ class MPS(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
+
             for _ in range(iterations):
+
                 batch_feature, batch_label = data_source.next_training_data_batch(100)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
+            train_acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
+            print('Lin regression gives a training accuracy of {}'.format(train_acc))
             batch_feature, batch_label = data_source.test_data
-            
-            acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
-            print('Lin regression gives an accuracy of {}'.format(acc))
+            test_acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
+            print('Lin regression gives a test accuracy of {}'.format(test_acc))
             self.weight = sess.run(reshaped_weight)
             self.bias = sess.run(bias)
+            del batch_feature, batch_label
 
     def _setup_nodes(self):
 
