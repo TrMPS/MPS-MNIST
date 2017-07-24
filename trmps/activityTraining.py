@@ -34,7 +34,7 @@ feature, label = data_source.next_training_data_batch(1000)
 optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
 optimizer.train(data_source, batch_size, n_step, 
                 rate_of_change=rate_of_change, 
-                logging_enabled=logging_enabled, 
+                _logging_enabled=logging_enabled, 
                 initial_weights=weights)
                 
 # Testing
