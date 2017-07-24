@@ -225,8 +225,8 @@ class MPS(object):
             cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
             train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy) 
 
-        correct_prediction = tf.equal(tf.argmax(label,1), tf.argmax(prediction,1))
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        accuracy = self.accuracy(prediction, label)
+        confusion_matrix = self.confusion_matrix(prediction, label)
 
         reshaped_weight = tf.transpose(weight)
         reshaped_weight = tf.reshape(reshaped_weight, [self.d_output, self.input_size, self.d_feature-1])
@@ -238,13 +238,19 @@ class MPS(object):
 
             for _ in range(iterations):
 
+                print()
                 batch_feature, batch_label = data_source.next_training_data_batch(100)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
-            train_acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
+
+            train_acc, train_conf = sess.run([accuracy, confusion_matrix], feed_dict={feature: batch_feature, label: batch_label})
             print('Lin regression gives a training accuracy of {}'.format(train_acc))
+            print(train_conf)
+
             batch_feature, batch_label = data_source.test_data
-            test_acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
+            test_acc, test_conf = sess.run([accuracy, confusion_matrix], feed_dict={feature: batch_feature, label: batch_label})
             print('Lin regression gives a test accuracy of {}'.format(test_acc))
+            print(test_conf)
+
             self.weight = sess.run(reshaped_weight)
             self.bias = sess.run(bias)
             del batch_feature, batch_label

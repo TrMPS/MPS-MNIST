@@ -61,15 +61,9 @@ class MovieReviewDatasource(MPSDatasource):
         texts = texts_pos + texts_neg
         labels = np.array((labels_pos + labels_neg), dtype=np.int)
 
-        one_hot_labels = np.zeros([labels.size, 8])
-        one_hot_labels[labels == 1, 0] = 1
-        one_hot_labels[labels == 2, 1] = 1 
-        one_hot_labels[labels == 3, 2] = 1
-        one_hot_labels[labels == 4, 3] = 1 
-        one_hot_labels[labels == 7, 4] = 1
-        one_hot_labels[labels == 8, 5] = 1 
-        one_hot_labels[labels == 9, 6] = 1
-        one_hot_labels[labels == 10, 7] = 1 
+        one_hot_labels = np.zeros([labels.size, 2])
+        one_hot_labels[:len(labels_pos), 0] = 1
+        one_hot_labels[len(labels_pos):, 1] = 1 
 
         return texts, one_hot_labels
 
