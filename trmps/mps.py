@@ -26,8 +26,8 @@ class MPS(object):
         self.d_output = d_output
         self._special_node_loc = int(np.floor(self.input_size / 2))
 
-    def prepare(self, data_source, iterations = 1000):
-        self._lin_reg(data_source, iterations)
+    def prepare(self, data_source, iterations=1000, learning_rate=0.05):
+        self._lin_reg(data_source, iterations, learning_rate)
         self._setup_nodes()
 
     def test(self, test_feature, test_label):
@@ -77,7 +77,7 @@ class MPS(object):
         confusion_mat = tf.confusion_matrix(true_values, predictions, num_classes = self.d_output)
         return confusion_mat
 
-    def _lin_reg(self, data_source, iterations):
+    def _lin_reg(self, data_source, iterations, learning_rate):
 
         x_dim = self.input_size * (self.d_feature - 1)
 
@@ -97,7 +97,7 @@ class MPS(object):
             prediction = tf.matmul(x, weight) + bias
             #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
             cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
-            train_step = tf.train.GradientDescentOptimizer(0.05).minimize(cross_entropy)
+            train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy) 
             #train_step = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy)
 
         correct_prediction = tf.equal(tf.argmax(label,1), tf.argmax(prediction,1))
@@ -110,15 +110,19 @@ class MPS(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
+
             for _ in range(iterations):
+
                 batch_feature, batch_label = data_source.next_training_data_batch(100)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
+            train_acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
+            print('Lin regression gives a training accuracy of {}'.format(train_acc))
             batch_feature, batch_label = data_source.test_data
-            
-            acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
-            print('Lin regression gives an accuracy of {}'.format(acc))
+            test_acc = accuracy.eval(feed_dict={feature: batch_feature, label: batch_label})
+            print('Lin regression gives a test accuracy of {}'.format(test_acc))
             self.weight = sess.run(reshaped_weight)
             self.bias = sess.run(bias)
+            del batch_feature, batch_label
 
     def _setup_nodes(self):
 
@@ -184,57 +188,59 @@ class MPS(object):
 
         return tf.stack(stacked)
 
-    def _chain_multiply(self, counter, C1):
-        with tf.name_scope("chain_multiply"):
+    def _chain_multiply_r(self, counter, C1):
+        with tf.name_scope('chain_multiply_right'):
             node = self.nodes.read(counter)
             node.set_shape([self.d_feature, None, None])
-            input_leg = self.feature[counter]
-            contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
-            C1 = tf.einsum('tli,tij->tlj', C1, contracted_node)
-            counter = counter + 1
-        return [counter, C1]
-
-    def _chain_multiply_l(self, counter, C1):
-        with tf.name_scope("chain_multiply_l"):
-            node = self.nodes.read(counter)
-            node.set_shape([self.d_feature, None, None])
-            input_leg = self.feature[counter]
-            contracted_node = tf.einsum('mij,tm->tij', node, input_leg)
+            contracted_node = tf.tensordot(self.feature[counter], node, 
+                                            [[1], [0]])
             C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
             counter = counter + 1
         return [counter, C1]
+
+    def _chain_multiply_l(self, counter, C2):
+        with tf.name_scope('chain_multiply_left'):
+            node = self.nodes.read(counter)
+            node.set_shape([self.d_feature, None, None])
+            contracted_node = tf.tensordot(self.feature[counter], node, 
+                                            [[1], [0]])
+            C2 = tf.einsum('tij,tj->ti', contracted_node, C2)
+            counter = counter - 1
+        
+        return [counter, C2]
+        
 
     def predict(self, feature):
         with tf.name_scope("MPS_predict"):
             # Read in feature 
             self.feature = feature
 
-            # Read in the nodes 
-            node1 = self.nodes.read(0)
-            node1.set_shape([self.d_feature, None])
+            with tf.name_scope('calculate_C1'):
+                node1 = self.nodes.read(0)
+                node1.set_shape([self.d_feature, None])
+                C1 = tf.matmul(feature[0], node1)
+                cond = lambda c, b: tf.less(c, self._special_node_loc)
+                counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_r, loop_vars=[1, C1],
+                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
+                                            parallel_iterations=5)
+
+            with tf.name_scope('calculate_C2'):
+                nodelast = self.nodes.read(self.input_size - 1)
+                nodelast.set_shape([self.d_feature, None])
+                C2 = tf.matmul(feature[self.input_size-1], nodelast)
+                cond2 = lambda c, b: tf.greater(c, self._special_node_loc)
+                _, C2 = tf.while_loop(cond=cond2, body=self._chain_multiply_l, loop_vars=[self.input_size-2, C2],
+                                      shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
+                                      parallel_iterations=5)
+
+
+            # contract special node with C1 
             sp_node = self.nodes.read(self._special_node_loc)
             sp_node.set_shape([self.d_output, self.d_feature, None, None])
-            nodelast = self.nodes.read(self.input_size - 1)
-            nodelast.set_shape([self.d_feature, None])
-
-            # Calculate C1 
-            C1 = tf.einsum('ni,tn->ti', node1, feature[0])
-            cond = lambda c, b: tf.less(c, self._special_node_loc)
-
-            counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_l, loop_vars=[1, C1],
-                                        shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
-                                        parallel_iterations=1)
-            contracted_node2 = tf.einsum('lnij,tn->tlij', sp_node, feature[self._special_node_loc])
-
-            C1 = tf.einsum('ti,tlij->tlj', C1, contracted_node2)
-
-            cond2 = lambda c, b: tf.less(c, self.input_size - 1)
-            _, C1 = tf.while_loop(cond=cond2, body=self._chain_multiply, loop_vars=[counter + 1, C1],
-                                  shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, self.d_output, None])],
-                                  parallel_iterations=1)
-
-            C2 = tf.einsum('mi,tm->ti', nodelast, feature[self.input_size - 1])
+            contracted_sp_node = tf.einsum('lnij,tn->tlij', sp_node, feature[self._special_node_loc])
+            C1 = tf.einsum('ti,tlij->tlj', C1, contracted_sp_node)
             f = tf.einsum('tli,ti->tl', C1, C2)
+
         return f
 
     def create_feed_dict(self, weights):

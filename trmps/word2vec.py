@@ -10,12 +10,8 @@ import collections
 
 class MovieReviewDatasource(MPSDatasource):
 
-    def __init__(self, expected_shape=None, shuffled=False, embedding_size=50, max_doc_length=100):
-        self._embedding_size = embedding_size
-        self._embedding_path = os.path.join(type(self).__name__, "embedding.npy")
-        self._max_doc_length = max_doc_length
-        if os.path.isfile(self._embedding_path):
-            self._embedding_matrix = np.load(self._embedding_path)
+    def __init__(self, expected_shape=None, shuffled=False, embedding_size=50):
+        self.embedding_size = embedding_size
         super().__init__(expected_shape, shuffled)
 
     def _load_all_data(self):
