@@ -18,6 +18,7 @@ cutoff = 10 # change this next
 n_step = 10
 
 data_source = ap.activityDatasource(shuffled = shuffled)
+batch_size = data_source.num_train_samples
 network = MPS(d_feature, d_output, input_size)
 
 print(data_source.num_train_samples, data_source.num_test_samples)

@@ -26,7 +26,6 @@ def convert_to_onehot(vector, num_classes=None):
          [1 0 0 0 0]
          [0 0 0 0 1]]
     """
-
     assert isinstance(vector, np.ndarray)
     assert len(vector) > 0
 
@@ -145,9 +144,9 @@ class activityDatasource(MPSDatasource):
         _all_datapoints = np.array(_all_datapoints)
         _all_labels = convert_to_onehot(np.array(_all_labels))
         permutation = np.random.permutation(len(_all_datapoints))
-        _all_datapoints = _all_datapoints[permutation]
+        #_all_datapoints = _all_datapoints[permutation]
+        #_all_labels = _all_labels[permutation]
         #_all_datapoints[:,:,1:] = np.tanh(_all_datapoints[:,:,1:])
-        _all_labels = _all_labels[permutation]
         
         _spinner.print_spinner(100.0)
         
