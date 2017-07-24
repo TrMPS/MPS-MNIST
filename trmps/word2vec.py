@@ -57,22 +57,22 @@ class MovieReviewDatasource(MPSDatasource):
         labels = np.array((labels_pos + labels_neg), dtype=np.int)
 
         one_hot_labels = np.zeros([labels.size, 8])
-        one_hot_labels[labels == 1][:, 0] = 1
-        one_hot_labels[labels == 2][:, 1] = 1 
-        one_hot_labels[labels == 3][:, 2] = 1
-        one_hot_labels[labels == 4][:, 3] = 1 
-        one_hot_labels[labels == 7][:, 4] = 1
-        one_hot_labels[labels == 8][:, 5] = 1 
-        one_hot_labels[labels == 9][:, 6] = 1
-        one_hot_labels[labels == 10][:, 7] = 1 
+        one_hot_labels[labels == 1, 0] = 1
+        one_hot_labels[labels == 2, 1] = 1 
+        one_hot_labels[labels == 3, 2] = 1
+        one_hot_labels[labels == 4, 3] = 1 
+        one_hot_labels[labels == 7, 4] = 1
+        one_hot_labels[labels == 8, 5] = 1 
+        one_hot_labels[labels == 9, 6] = 1
+        one_hot_labels[labels == 10, 7] = 1 
 
         return texts, one_hot_labels
 
     def _reshape_data(self, data):
         # make the shape into (input_size, num_data, d_feature)
         num_data = data.shape[0]
-        data = data.reshape([num_data, self._expected_shape])
-        ones = np.ones([num_data, self._expected_shape])
+        data = data.reshape([num_data, self._expected_shape[0]])
+        ones = np.ones([num_data, self._expected_shape[0]])
         data = np.dstack((ones, data))
         return data 
         
@@ -282,7 +282,8 @@ class SkipGramModel(object):
 if __name__ == '__main__':
     max_size = 100
     embedding_size = 30 
-    datasource = MovieReviewDatasource(expected_shape=max_size*embedding_size, 
+    expected_shape = (max_size*embedding_size, 2)
+    datasource = MovieReviewDatasource(expected_shape=expected_shape, 
                                        embedding_size=embedding_size, 
                                        max_doc_length=max_size)
 

@@ -127,6 +127,11 @@ class MPSDatasource(object):
         np.save(self._training_data_path, self._training_data[0])
         np.save(self._training_labels_path, self._training_data[1])
 
+    def reshuffle(self):
+        data, labels = self._training_data
+        permutation = np.random.permutation(len(data))
+        self._training_data = data[permutation], labels[permutation]
+        self._swapped_training_data = None 
         
     def next_training_data_batch(self, batch_size):
         """
@@ -140,7 +145,7 @@ class MPSDatasource(object):
 	        ([MPS input size, batch, other dimensions], [batch, classifications])
         """
         if self._training_data == None:
-            self._load_test_data()
+            self._load_training_data()
         all_data, all_labels = self._training_data
         if batch_size > len(all_data):
             print("Probably shouldn't do this; your batch size is greater than the size of the dataset")
