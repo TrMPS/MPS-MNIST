@@ -8,6 +8,7 @@ batch_size = 2000
 permuted = False
 shuffled = False
 input_size = 100
+lin_reg_iterations = 1000
 
 max_size = 15
 
@@ -19,7 +20,6 @@ n_step = 10
 
 data_source = ap.activityDatasource(shuffled = shuffled)
 batch_size = data_source.num_train_samples
-network = MPS(d_feature, d_output, input_size)
 
 print(data_source.num_train_samples, data_source.num_test_samples)
 
@@ -28,7 +28,7 @@ print(data_source.num_train_samples, data_source.num_test_samples)
 weights = None
 
 network = MPS(d_feature, d_output, input_size)
-network.prepare(data_source)
+network.prepare(data_source, lin_reg_iterations)
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)
 optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)

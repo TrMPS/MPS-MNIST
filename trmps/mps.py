@@ -26,8 +26,8 @@ class MPS(object):
         self.d_output = d_output
         self._special_node_loc = int(np.floor(self.input_size / 2))
 
-    def prepare(self, data_source):
-        self._lin_reg(data_source)
+    def prepare(self, data_source, iterations = 1000):
+        self._lin_reg(data_source, iterations)
         self._setup_nodes()
 
     def test(self, test_feature, test_label):
@@ -77,7 +77,7 @@ class MPS(object):
         confusion_mat = tf.confusion_matrix(true_values, predictions, num_classes = self.d_output)
         return confusion_mat
 
-    def _lin_reg(self, data_source):
+    def _lin_reg(self, data_source, iterations):
 
         x_dim = self.input_size * (self.d_feature - 1)
 
@@ -110,7 +110,7 @@ class MPS(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            for _ in range(100):
+            for _ in range(iterations):
                 batch_feature, batch_label = data_source.next_training_data_batch(100)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
             batch_feature, batch_label = data_source.test_data
