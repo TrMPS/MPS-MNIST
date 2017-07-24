@@ -152,7 +152,7 @@ class MovieReviewDatasource(MPSDatasource):
             _, label = f_name[:-4].split('_')
             label_list.append(label) 
 
-            file = open(f_name, 'r')
+            file = open(f_name, 'r', encoding='utf-8')
             text_list.append(file.read())
             file.close()
 
@@ -281,8 +281,8 @@ class SkipGramModel(object):
 
 if __name__ == '__main__':
     max_size = 100
-    embedding_size = 30 
-    expected_shape = (max_size*embedding_size, 2)
+    embedding_size = 30
+    expected_shape = (max_size*embedding_size, 3)
     datasource = MovieReviewDatasource(expected_shape=expected_shape, 
                                        embedding_size=embedding_size, 
                                        max_doc_length=max_size)
