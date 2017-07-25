@@ -38,9 +38,9 @@ class SGDOptimizer(object):
             test_feature, test_label = data_source.test_data
             feed_dict = {features: test_feature, labels: test_label}
             to_eval = [accuracy, cost, conf_mat]
-            test_acc, test_cost, test_conf_max = sess.run(to_eval, feed_dict=feed_dict)
-            print('testing accuracy {}'.format(i,  test_acc))
-            print('testing cost {}'.format(i, test_cost))
+            test_acc, test_cost, test_conf_mat = sess.run(to_eval, feed_dict=feed_dict)
+            print('testing accuracy {}'.format(test_acc))
+            print('testing cost {}'.format(test_cost))
             print(test_conf_mat)
 
 if __name__ == '__main__':
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     rate_of_change = 0.0001
     feature_reg=1.1
     reg=0.001
-    n_step = 100
+    n_step = 10
 
     data_source = MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
 
