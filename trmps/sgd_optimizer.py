@@ -4,6 +4,7 @@ from mps_sgd import SimpleMPS
 import utils
 from tensorflow.python.client import timeline
 from MNISTpreprocessing import MNISTDatasource
+import pickle
 
 class SGDOptimizer(object):
 
@@ -25,15 +26,21 @@ class SGDOptimizer(object):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
 
+            start = time.time()
             for i in range(n_steps):
+                
                 batch_feature, batch_label = data_source.next_training_data_batch(batch_size)
                 feed_dict = {features: batch_feature, labels: batch_label}
                 _ = sess.run(trainer, feed_dict=feed_dict)
-                if i % 10 == 0:
+
+                if i % 100 == 0:
+                    end = time.time()
                     train_acc, train_cost, train_conf_mat = sess.run(to_eval, feed_dict=feed_dict)
                     print('step {}, accuracy {}'.format(i, train_acc))
                     print('step {}, training cost {}'.format(i, train_cost))
                     print(train_conf_mat)
+                    print('each step takes {}s on average'.format(end-start))
+                    start = time.time()
 
             test_feature, test_label = data_source.test_data
             feed_dict = {features: test_feature, labels: test_label}
@@ -61,7 +68,7 @@ if __name__ == '__main__':
     rate_of_change = 0.001
     feature_reg=1.1
     reg=0.001
-    n_step = 1000
+    n_step = 10
 
     data_source = MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
 
