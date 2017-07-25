@@ -26,7 +26,7 @@ class cardioDatasource(MPSDatasource):
     def __init__(self, shuffled = False):
         if not os.path.isdir(type(self).__name__):
             os.mkdir(type(self).__name__)
-        self.data_length = 1200
+        self.data_length = 1800
         self.training_fraction = 0.2
         expected_shape = (int(self.data_length/2), 4)
         self._compressed_data_path = "CardioData.zip"
@@ -49,28 +49,48 @@ class cardioDatasource(MPSDatasource):
         _all_datapoints = []
         _all_labels = []
         counter = 0
-        factor = 2/self.data_length
         new_length = int(self.data_length/2)
         ones = np.ones(new_length)
-        _spinner = spinner()
+        _spinner = spinner(200)
+        counter = np.array([0, 0, 0, 0])
         csv_filename = self._uncompressed_data_path + "REFERENCE.csv"
         with open(csv_filename, 'r') as f:
             reader = csv.reader(f)
             for index, row in enumerate(reader):
+                current_loc = self.data_length
                 percentage = int(100 * index/8528.0)
                 _spinner.print_spinner(percentage)
                 record = self._uncompressed_data_path + row[0] + ".mat"
                 mat_data = scipy.io.loadmat(record)
-                data = mat_data["val"]
-                data = data.flatten()
-                data = data[:self.data_length]
-                data = np.abs(np.fft.rfft(data)*factor)[:-1]
+                samples = mat_data["val"]
+                samples = samples.flatten()
+                len_left = len(samples)
+                data = samples[:self.data_length]
+                data = np.abs(np.fft.rfft(data))[:-1]
+                factor = 1/np.amax(data)
+                data = data * factor
                 data = np.column_stack((ones, data))
-                label = cardioLabels.other
+                label = cardioLabels.noisy
                 if row[1] != "~":
                     label = cardioLabels[row[1]]
                 _all_labels.append(label.value)
                 _all_datapoints.append(data)
+                counter[label.value] = counter[label.value] + 1
+                len_left -= self.data_length
+                while len_left > self.data_length and counter[label.value]<np.amax(counter):
+                    data = samples[current_loc:current_loc+self.data_length]
+                    data = np.abs(np.fft.rfft(data))[:-1]
+                    factor = 1/np.amax(data)
+                    data = data * factor
+                    data = np.column_stack((ones, data))
+                    label = cardioLabels.noisy
+                    if row[1] != "~":
+                        label = cardioLabels[row[1]]
+                    _all_labels.append(label.value)
+                    _all_datapoints.append(data)
+                    counter[label.value] = counter[label.value] + 1
+                    current_loc += self.data_length + 1
+                    len_left -= self.data_length
         _all_datapoints = np.array(_all_datapoints)
         _all_labels = convert_to_onehot(np.array(_all_labels))
         
