@@ -38,13 +38,16 @@ class SGDOptimizer(object):
             test_feature, test_label = data_source.test_data
             feed_dict = {features: test_feature, labels: test_label}
             to_eval = [accuracy, cost, conf_mat]
-            sess.run(to_eval, feed_dict=feed_dict)
+            test_acc, test_cost, test_conf_max = sess.run(to_eval, feed_dict=feed_dict)
+            print('testing accuracy {}'.format(i,  test_acc))
+            print('testing cost {}'.format(i, test_cost))
+            print(test_conf_mat)
 
 if __name__ == '__main__':
     # Model parameters
     d_feature = 2
     d_output = 10
-    batch_size = 100
+    batch_size = 1000
     permuted = False
     shuffled = True
     shrink = True
@@ -53,13 +56,17 @@ if __name__ == '__main__':
             input_size = 196
 
     rate_of_change = 0.0001
-    n_step = 1000
+    feature_reg=1.1
+    reg=0.001
+    n_step = 100
 
     data_source = MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
 
     weights = None
 
-    network = SimpleMPS(d_feature, d_output, input_size)
+    network = SimpleMPS(d_feature, d_output, input_size, 
+                        feature_reg=feature_reg, 
+                        reg=reg)
     network.prepare(data_source)
     optimizer = SGDOptimizer(network)
     optimizer.train(data_source, batch_size, n_step, 
