@@ -78,7 +78,7 @@ class SimpleMPS(MPS):
                     penalty_left = tf.einsum('ij,kilj->kl', penalty_left, contracted_node)
 
             special_node = self.nodes[self._special_node_loc]
-            reg_node = tf.einsum('lnij,n->lnij', self.nodes[i], reg_weights)
+            reg_node = tf.einsum('lnij,n->lnij', special_node, reg_weights)
             contracted_node = tf.tensordot(reg_node, reg_node, [[0, 1], [0, 1]])
 
             penalty_left = tf.einsum('ij,ikjl->kl', penalty_left, contracted_node)
@@ -90,8 +90,8 @@ class SimpleMPS(MPS):
 
     def cost(self, f, label):
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=f)) #tf.reduce_mean((f - label)**2)
-        #reg_penalty = self.regularisation() 
-        return loss #+ reg_penalty
+        reg_penalty = self.regularisation() 
+        return loss + reg_penalty
 
     def _setup_nodes(self):
         """
