@@ -126,3 +126,5 @@ trmps/CardioData.zip
 *.hea
 
 *.mat
+
+trmps/weights
