@@ -28,32 +28,70 @@ class SimpleMPS(MPS):
         super().__init__(d_feature, d_output, input_size)
 
     def predict(self, feature):
-        C1 = tf.matmul(feature[0], self.nodes[0])
-        for i in range(1, self.input_size-1):
-            node = self.nodes[i] 
-            contracted_node = tf.einsum('tn,nij->tij', feature[i], node)
-            C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
-        C2 = tf.einsum('tn,njl->tjl', feature[-1], self.nodes[-1])
-        return tf.einsum('ti,til->tl', C1, C2)
+
+        with tf.name_scope('predict'):
+            with tf.name_scope('calculate_C1'):
+                C1 = tf.matmul(feature[0], self.nodes[0])
+                for i in range(1, self._special_node_loc):
+                    node = self.nodes[i] 
+                    contracted_node = tf.einsum('tn,nij->tij', feature[i], node)
+                    C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
+
+            with tf.name_scope('calculate_C2'):
+                C2 = tf.matmul(feature[-1], self.nodes[-1])
+                for i in range(self.input_size-2, self._special_node_loc, -1):
+                    node = self.nodes[i]
+                    contracted_node = tf.einsum('tn,nij->tij', feature[i], node)
+                    C2 = tf.einsum('tij,tj->ti', contracted_node, C2)
+
+            special_node = self.nodes[self._special_node_loc]
+            contracted_node = tf.einsum('tn,lnij->tlij', 
+                                        feature[self._special_node_loc], 
+                                        special_node)
+            C2 = tf.einsum('tlij,tj->tli', contracted_node, C2)
+            f = tf.einsum('ti,tli->tl', C1, C2)
+        return f
 
     def regularisation(self):
         reg_weights = tf.constant([1] + [self.feature_reg] * (self.d_feature - 1),
                                   dtype=tf.float32)
-        reg_node = tf.einsum('ni,n->ni', self.nodes[0], reg_weights)
-        penalty = tf.tensordot(reg_node, reg_node, [[0], [0]])
 
-        for i in range(1, self.input_size-1):
-            node = self.nodes[i]
-            reg_node = tf.einsum('nij,n->nij', self.nodes[i], reg_weights)
-            contracted_node = tf.tensordot(reg_node, reg_node, [[0], [0]])
-            penalty = tf.einsum('ij,ikjl->kl', penalty, contracted_node)
-        penalty = tf.reduce_sum(tf.multiply(penalty, penalty))
-        return self.reg * tf.squeeze(penalty)
+        with tf.name_scope('penalty'):
+            with tf.name_scope('penalty_left'):
+                reg_node = tf.einsum('ni,n->ni', self.nodes[0], reg_weights)
+                penalty_left = tf.tensordot(reg_node, reg_node, [[0], [0]])
+
+                for i in range(1, self._special_node_loc):
+                    node = self.nodes[i]
+                    reg_node = tf.einsum('nij,n->nij', self.nodes[i], reg_weights)
+                    contracted_node = tf.tensordot(reg_node, reg_node, [[0], [0]])
+                    penalty_left = tf.einsum('ij,ikjl->kl', penalty_left, contracted_node)
+
+            with tf.name_scope('penalty_right'):
+                reg_node = tf.einsum('ni,n->ni', self.nodes[-1], reg_weights)
+                penalty_right = tf.tensordot(reg_node, reg_node, [[0], [0]])
+
+                for i in range(self.input_size-2, self._special_node_loc, -1):
+                    node = self.nodes[i]
+                    reg_node = tf.einsum('nij,n->nij', self.nodes[i], reg_weights)
+                    contracted_node = tf.tensordot(reg_node, reg_node, [[0], [0]])
+                    penalty_left = tf.einsum('ij,kilj->kl', penalty_left, contracted_node)
+
+            special_node = self.nodes[self._special_node_loc]
+            reg_node = tf.einsum('lnij,n->lnij', self.nodes[i], reg_weights)
+            contracted_node = tf.tensordot(reg_node, reg_node, [[0, 1], [0, 1]])
+
+            penalty_left = tf.einsum('ij,ikjl->kl', penalty_left, contracted_node)
+            penalty = tf.tensordot(penalty_left, penalty_right, [[0, 1], [0, 1]])
+
+        return penalty
+
+       
 
     def cost(self, f, label):
-        loss = tf.reduce_mean((f - label)**2)
-        reg_penalty = self.regularisation() 
-        return loss + reg_penalty
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=f)) #tf.reduce_mean((f - label)**2)
+        #reg_penalty = self.regularisation() 
+        return loss #+ reg_penalty
 
     def _setup_nodes(self):
         """
@@ -65,7 +103,10 @@ class SimpleMPS(MPS):
             self.nodes.append(self._make_start_vector())
 
             for i in range(1, self.input_size - 1):
-                self.nodes.append(self._make_middle_node(i))
+                if i == self._special_node_loc:
+                    self.nodes.append(self._make_special_node(i))
+                else:
+                    self.nodes.append(self._make_middle_node(i))
                                                                    
             self.nodes.append(self._make_end_vector())
     
@@ -86,14 +127,27 @@ class SimpleMPS(MPS):
         :return:
         """
 
-        end_vector = np.zeros([self.d_feature, self.d_matrix, self.d_output], dtype=np.float32)
-
-
-        end_vector[0, 0:self.d_output, :] = np.identity(self.d_output)
-        end_vector[0, self.d_output:, :] = np.diag(self.bias)
-        end_vector[1:, self.d_output:, :] = np.diag(self.weight[-1])
+        end_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
+        end_vector[0, 0:self.d_output] = 1 
+        end_vector[0, self.d_output:] = self.bias 
+        end_vector[1:, self.d_output:] = self.weight[-1] 
 
         return tf.Variable(end_vector, dtype=tf.float32, trainable=True, name='end')
+
+    def _make_special_node(self, index):
+        def _make_matrix(i):
+            m = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
+            m[0, i, i] = 1 
+            m[0, i+self.d_output, i+self.d_output] = 1
+            m[1:, i+self.d_output, i] = self.weight[index, :, i]
+
+            return m 
+
+        stacked = [_make_matrix(i) for i in range(self.d_output)]
+        node = np.stack(stacked, axis=0)
+
+        return tf.Variable(node, dtype=tf.float32, trainable=True, name='special')
+
 
     def _make_middle_node(self, index):
         """
@@ -107,7 +161,7 @@ class SimpleMPS(MPS):
         for i in range(1, self.d_feature):
             middle_node[i, self.d_output:, 0:self.d_output] = np.diag(self.weight[index, i-1])
 
-        return tf.Variable(middle_node, dtype=tf.float32, trainable=True, name='G_{}'.format(i))
+        return tf.Variable(middle_node, dtype=tf.float32, trainable=True, name='G_{}'.format(index))
 
 if __name__ == '__main__':
     # Model parameters
