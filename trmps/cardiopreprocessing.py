@@ -77,7 +77,8 @@ class cardioDatasource(MPSDatasource):
                 _all_datapoints.append(data)
                 counter[label.value] = counter[label.value] + 1
                 len_left -= self.data_length
-                while len_left > self.data_length and counter[label.value]<np.amax(counter):
+                sorted_indices = counter.argsort()
+                while len_left>self.data_length and counter[label.value]<counter[sorted_indices[-2]]:
                     data = samples[current_loc:current_loc+self.data_length]
                     data = np.abs(np.fft.rfft(data))[:-1]
                     factor = 1/np.amax(data)

@@ -8,18 +8,18 @@ batch_size = 5000
 permuted = False
 shuffled = False
 input_size = 900
-lin_reg_iterations = 1000
+lin_reg_iterations = 500
 
 max_size = 10
 
-rate_of_change = 10**(-6)
+rate_of_change = 10**(-8)
 logging_enabled = False
 
 cutoff = 10 # change this next
 n_step = 100
 
 data_source = cardiopreprocessing.cardioDatasource(shuffled = shuffled)
-batch_size = int(data_source.num_train_samples)
+batch_size = int(data_source.num_train_samples/3)
 
 print(data_source.num_train_samples, data_source.num_test_samples)
 
