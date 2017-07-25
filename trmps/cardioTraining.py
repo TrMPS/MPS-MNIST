@@ -8,9 +8,9 @@ batch_size = 3000
 permuted = False
 shuffled = False
 input_size = 600
-lin_reg_iterations = 1000
+lin_reg_iterations = 10000
 
-max_size = 10
+max_size = 20
 
 rate_of_change = 10**(-7)
 logging_enabled = False

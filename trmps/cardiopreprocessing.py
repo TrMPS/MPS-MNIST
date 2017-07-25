@@ -13,10 +13,13 @@ import scipy.io
 from pathlib import Path
 
 class cardioLabels(Enum):
-    other = 0
+    noisy = 0
     N = 1
+    normal = 1
     O = 2
+    other = 2
     A = 3
+    AF = 3
     
 class cardioDatasource(MPSDatasource):
     

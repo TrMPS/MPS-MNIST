@@ -237,8 +237,6 @@ class MPS(object):
             sess.run(tf.global_variables_initializer())
 
             for _ in range(iterations):
-
-                print()
                 batch_feature, batch_label = data_source.next_training_data_batch(100)
                 sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
 
