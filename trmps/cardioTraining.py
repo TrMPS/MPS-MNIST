@@ -1,5 +1,7 @@
 from optimizer import *
 import cardiopreprocessing
+from sgd_optimizer import SGDOptimizer
+from mps_sgd import SimpleMPS
 
 # Model parameters
 d_feature = 2
@@ -16,10 +18,10 @@ rate_of_change = 10**(-6)
 logging_enabled = False
 
 cutoff = 10 # change this next
-n_step = 100
+n_step = 1000
 
 data_source = cardiopreprocessing.cardioDatasource(shuffled = shuffled)
-batch_size = int(data_source.num_train_samples)
+batch_size = int(data_source.num_train_samples/10)
 
 print(data_source.num_train_samples, data_source.num_test_samples)
 
@@ -27,15 +29,21 @@ print(data_source.num_train_samples, data_source.num_test_samples)
 
 weights = None
 
-network = MPS(d_feature, d_output, input_size)
+# DMRG optimizer
+# network = MPS(d_feature, d_output, input_size)
+# network.prepare(data_source, lin_reg_iterations)
+# optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
+# optimizer.train(data_source, batch_size, n_step, 
+#                 rate_of_change=rate_of_change, 
+#                 _logging_enabled=logging_enabled, 
+#                 initial_weights=weights)
+
+# SGD optimizer
+network = SimpleMPS(d_feature, d_output, input_size)
 network.prepare(data_source, lin_reg_iterations)
-feature, label = data_source.next_training_data_batch(1000)
-# network.test(feature, label)
-optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
-optimizer.train(data_source, batch_size, n_step, 
-                rate_of_change=rate_of_change, 
-                _logging_enabled=logging_enabled, 
-                initial_weights=weights)
+optimizer = SGDOptimizer(network)
+optimizer.train(data_source, batch_size, n_step,
+                rate_of_change = rate_of_change)
                 
 # Testing
 
