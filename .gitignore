@@ -2,6 +2,7 @@ MNIST_data/
 .DS_Store
 output/
 trmps/aclImdb
+cardioDatasource/
 *.npy
 
 # The following is boilerplate gitignore from https://github.com/github/gitignore/blob/master/Python.gitignore
@@ -119,3 +120,9 @@ trmps/DataSet
 trmps/ActivityData.rar
 
 trmps/aclImdb_v1.tar.gz
+
+trmps/CardioData.zip
+
+*.hea
+
+*.mat
