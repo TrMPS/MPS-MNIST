@@ -60,38 +60,39 @@ class cardioDatasource(MPSDatasource):
                 current_loc = self.data_length
                 percentage = int(100 * index/8528.0)
                 _spinner.print_spinner(percentage)
-                record = self._uncompressed_data_path + row[0] + ".mat"
-                mat_data = scipy.io.loadmat(record)
-                samples = mat_data["val"]
-                samples = samples.flatten()
-                len_left = len(samples)
-                data = samples[:self.data_length]
-                data = np.abs(np.fft.rfft(data))[:-1]
-                factor = 1/np.amax(data)
-                data = data * factor
-                data = np.column_stack((ones, data))
                 label = cardioLabels.noisy
                 if row[1] != "~":
                     label = cardioLabels[row[1]]
-                _all_labels.append(label.value)
-                _all_datapoints.append(data)
-                counter[label.value] = counter[label.value] + 1
-                len_left -= self.data_length
                 sorted_indices = counter.argsort()
-                while len_left>self.data_length and counter[label.value]<counter[sorted_indices[-2]]:
-                    data = samples[current_loc:current_loc+self.data_length]
+                if label.value == sorted_indices[0] or label.value == 0:
+                    record = self._uncompressed_data_path + row[0] + ".mat"
+                    mat_data = scipy.io.loadmat(record)
+                    samples = mat_data["val"]
+                    samples = samples.flatten()
+                    len_left = len(samples)
+                    data = samples[:self.data_length]
                     data = np.abs(np.fft.rfft(data))[:-1]
                     factor = 1/np.amax(data)
                     data = data * factor
                     data = np.column_stack((ones, data))
-                    label = cardioLabels.noisy
-                    if row[1] != "~":
-                        label = cardioLabels[row[1]]
                     _all_labels.append(label.value)
                     _all_datapoints.append(data)
                     counter[label.value] = counter[label.value] + 1
-                    current_loc += self.data_length + 1
                     len_left -= self.data_length
+                    while len_left>self.data_length:
+                        data = samples[current_loc:current_loc+self.data_length]
+                        data = np.abs(np.fft.rfft(data))[:-1]
+                        factor = 1/np.amax(data)
+                        data = data * factor
+                        data = np.column_stack((ones, data))
+                        label = cardioLabels.noisy
+                        if row[1] != "~":
+                            label = cardioLabels[row[1]]
+                        _all_labels.append(label.value)
+                        _all_datapoints.append(data)
+                        counter[label.value] = counter[label.value] + 1
+                        current_loc += self.data_length + 1
+                        len_left -= self.data_length
         _all_datapoints = np.array(_all_datapoints)
         _all_labels = convert_to_onehot(np.array(_all_labels))
         
@@ -101,6 +102,7 @@ class cardioDatasource(MPSDatasource):
         print(_all_labels.shape)
         print(_all_labels[0])
         self._all_data = (_all_datapoints, _all_labels)
+        print("datapoints by class:", counter)
         np.save(self._all_data_path, _all_datapoints)
         np.save(self._all_labels_path, _all_labels)
     

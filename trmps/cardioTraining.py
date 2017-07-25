@@ -10,7 +10,7 @@ shuffled = False
 input_size = 900
 lin_reg_iterations = 500
 
-max_size = 20
+max_size = 25
 
 rate_of_change = 10**(-6)
 logging_enabled = False
