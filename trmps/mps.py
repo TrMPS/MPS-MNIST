@@ -202,6 +202,18 @@ class MPS(object):
         true_values = tf.argmax(labels, axis=1)
         confusion_mat = tf.confusion_matrix(true_values, predictions, num_classes = self.d_output)
         return confusion_mat
+        
+    def f1score(self, f, labels, _confusion_matrix = None):
+        confusion_matrix = _confusion_matrix
+        if confusion_matrix is None:
+            confusion_matrix = self.confusion_matrix(f, labels)
+        f1_score_sum = 0
+        diag_elements = tf.diag_part(confusion_matrix)
+        row_reduced = tf.reduce_sum(confusion_matrix, 0)
+        column_reduced = tf.reduce_sum(confusion_matrix, 1)
+        f1_scores = 2*diag_elements/(row_reduced + column_reduced)
+        f1_score = tf.reduce_sum(f1_scores)/self.d_output
+        return f1_score
 
     def _lin_reg(self, data_source, iterations, learning_rate):
 
