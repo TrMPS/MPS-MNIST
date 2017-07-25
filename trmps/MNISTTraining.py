@@ -6,7 +6,7 @@ d_feature = 2
 d_output = 10
 batch_size = 1000
 permuted = False
-shuffled = False
+shuffled = True
 shrink = True
 input_size = 784
 if shrink:
@@ -14,7 +14,7 @@ if shrink:
 
 max_size = 20
 
-rate_of_change = 10 ** (-7) 
+rate_of_change = 10 ** (-7)
 logging_enabled = False
 
 cutoff = 10 # change this next
@@ -24,12 +24,11 @@ data_source = MNISTpreprocessing.MNISTDatasource(shrink = shrink, permuted = per
 
 # Initialise the model
 
-#with open('weights', 'rb') as fp:
-#    weights = pickle.load(fp)
-#    if len(weights) != input_size:
-#        weights = None
+with open('weights_sgd', 'rb') as fp:
+   weights = pickle.load(fp)
+   if len(weights) != input_size:
+       weights = None
 
-weights = None
 
 network = MPS(d_feature, d_output, input_size)
 network.prepare(data_source)
