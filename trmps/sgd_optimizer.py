@@ -10,6 +10,12 @@ class SGDOptimizer(object):
 
     def __init__(self, network):
         self.MPS = network
+        print( "_____   Thomas the Tensor Train    . . . . . o o o o o",
+           "  __|[_]|__ ___________ _______    ____      o",
+           " |[] [] []| [] [] [] [] [_____(__  ][]]_n_n__][.",
+           "_|________|_[_________]_[________]_|__|________)<",
+           "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
+           " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
 
     def train(self, data_source, batch_size, n_steps, rate_of_change=0.001):
         features = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
@@ -68,7 +74,7 @@ if __name__ == '__main__':
     rate_of_change = 0.001
     feature_reg=1.1
     reg=0.001
-    n_step = 10
+    n_step = 600
 
     data_source = MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
 
