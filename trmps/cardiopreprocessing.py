@@ -28,7 +28,8 @@ class cardioDatasource(MPSDatasource):
             os.mkdir(type(self).__name__)
         self.data_length = 1800
         self.training_fraction = 0.2
-        expected_shape = (int(self.data_length/2), 4)
+        self.result_length = 400
+        expected_shape = (self.result_length, 2)
         self._compressed_data_path = "CardioData.zip"
         self._uncompressed_data_path = os.path.join(type(self).__name__, "training2017/")
         self._all_data = None
@@ -50,7 +51,8 @@ class cardioDatasource(MPSDatasource):
         _all_labels = []
         counter = 0
         new_length = int(self.data_length/2)
-        ones = np.ones(new_length)
+        result_length = self.result_length
+        ones = np.ones(result_length)
         _spinner = spinner(200)
         counter = np.array([0, 0, 0, 0])
         csv_filename = self._uncompressed_data_path + "REFERENCE.csv"
@@ -72,7 +74,7 @@ class cardioDatasource(MPSDatasource):
                     samples = samples.flatten()
                     len_left = len(samples)
                     data = samples[:self.data_length]
-                    data = np.abs(np.fft.rfft(data))[:-1]
+                    data = np.abs(np.fft.rfft(data))[5:result_length+5]
                     factor = 1/np.amax(data)
                     data = data * factor
                     data = np.column_stack((ones, data))
@@ -84,7 +86,7 @@ class cardioDatasource(MPSDatasource):
                     while (len_left>self.data_length and (label.value == 0 or label.value == sorted_indices[0])
                            and label.value != 3):
                         data = samples[current_loc:current_loc+self.data_length]
-                        data = np.abs(np.fft.rfft(data))[:-1]
+                        data = np.abs(np.fft.rfft(data))[5:result_length+5]
                         factor = 1/np.amax(data)
                         data = data * factor
                         data = np.column_stack((ones, data))
