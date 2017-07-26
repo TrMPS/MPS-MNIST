@@ -128,3 +128,5 @@ trmps/CardioData.zip
 *.mat
 
 trmps/weights
+
+trmps/weights_sgd
