@@ -5,6 +5,7 @@ import pickle
 import utils
 from tensorflow.python.client import timeline
 
+
 def list_from(tensorArray, length):
     """
     list_from is a helper function that produces a list from a tensorArray.
@@ -91,12 +92,12 @@ class MPSOptimizer(object):
         self._setup_optimization()
         _ = self.train_step()
 
-        print( "_____   Thomas the Tensor Train    . . . . . o o o o o",
-               "  __|[_]|__ ___________ _______    ____      o",
-               " |[] [] []| [] [] [] [] [_____(__  ][]]_n_n__][.",
-               "_|________|_[_________]_[________]_|__|________)<",
-               "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
-               " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
+        print("_____   Thomas the Tensor Train    . . . . . o o o o o",
+              "  __|[_]|__ ___________ _______    ____      o",
+              " |[] [] []| [] [] [] [] [_____(__  ][]]_n_n__][.",
+              "_|________|_[_________]_[________]_|__|________)<",
+              "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
+              " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
 
     def train(self, data_source, batch_size, n_step, rate_of_change=1000, initial_weights=None, _logging_enabled=False):
         """
@@ -135,7 +136,7 @@ class MPSOptimizer(object):
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-        #increment = (1/10) ** (1/(n_step))
+        # increment = (1/10) ** (1/(n_step))
         increment = 1.
 
         self.feed_dict = None
@@ -167,14 +168,14 @@ class MPSOptimizer(object):
                 self.feed_dict[label] = test_label
                 to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1]
                 train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score = sess.run(to_eval,
-                                                                           feed_dict=self.feed_dict,
-                                                                           options=run_options,
-                                                                           run_metadata=run_metadata)
+                                                                                                    feed_dict=self.feed_dict,
+                                                                                                    options=run_options,
+                                                                                                    run_metadata=run_metadata)
 
                 rate_of_change = rate_of_change * increment
 
                 if _logging_enabled:
-                    #writer.add_run_metadata(run_metadata, 'step' + str(i))
+                    # writer.add_run_metadata(run_metadata, 'step' + str(i))
                     tl = timeline.Timeline(run_metadata.step_stats)
                     ctf = tl.generate_chrome_trace_format()
                     with open("timeline.json", "w") as f:
@@ -187,11 +188,9 @@ class MPSOptimizer(object):
                 print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
                 print('f1 score: ', test_f1score)
                 print('confusion matrix: \n' + str(test_conf))
-                #print("prediction:" + str(prediction[0]))
+                # print("prediction:" + str(prediction[0]))
             if _logging_enabled:
                 writer.close()
-
-
 
     def _test_step(self, feature, label):
         """
@@ -207,8 +206,6 @@ class MPSOptimizer(object):
         confusion = self.MPS.confusion_matrix(f, label)
         f1 = self.MPS.f1score(f, label, confusion)
         return cost, accuracy, confusion, f1
-
-
 
     def _setup_optimization(self):
         """
@@ -354,10 +351,10 @@ class MPSOptimizer(object):
                             tf.TensorShape([None, None, None, None])]
 
         _, self.C2s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_left,
-                                                                               loop_vars=wrapped,
-                                                                               shape_invariants=shape_invariants,
-                                                                               parallel_iterations=10,
-                                                                               name="leftSweep")
+                                                            loop_vars=wrapped,
+                                                            shape_invariants=shape_invariants,
+                                                            parallel_iterations=10,
+                                                            name="leftSweep")
         self.updated_nodes = self.updated_nodes.write(1, n1)
         return self.updated_nodes
 
@@ -377,9 +374,9 @@ class MPSOptimizer(object):
         shape_invariants = [tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape(None),
                             tf.TensorShape([None, None, None, None])]
         _, self.C1s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_right,
-                                                                         loop_vars=wrapped,
-                                                                         shape_invariants=shape_invariants,
-                                                                         parallel_iterations=10, name="rightSweep")
+                                                            loop_vars=wrapped,
+                                                            shape_invariants=shape_invariants,
+                                                            parallel_iterations=10, name="rightSweep")
         self.updated_nodes = self.updated_nodes.write(to_index, n1)
         return self.updated_nodes
 
@@ -405,7 +402,7 @@ class MPSOptimizer(object):
             C1 = self.C1s.read(counter - 2)
             C1.set_shape([None, None])
             C2.set_shape([None, None])
-            input1 = self._feature[counter-1]
+            input1 = self._feature[counter - 1]
             input2 = self._feature[counter]
 
             # Calculate the bond
@@ -424,7 +421,7 @@ class MPSOptimizer(object):
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
             with tf.name_scope("tensordotcontracted_aj"):
-                #contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
+                # contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
                 contracted_aj = tf.tensordot(self._feature[counter], aj, [[1], [0]])
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
@@ -433,7 +430,6 @@ class MPSOptimizer(object):
             updated_counter = counter - 1
 
         return [updated_counter, C2s, updated_nodes, aj1]
-
 
     def _update_right(self, counter, C1s, updated_nodes, previous_node):
         """
@@ -457,7 +453,7 @@ class MPSOptimizer(object):
             C1.set_shape([None, None])
             C2.set_shape([None, None])
             input1 = self._feature[counter]
-            input2 = self._feature[counter+1]
+            input2 = self._feature[counter + 1]
 
             # Calculate the bond
             bond = tf.einsum('lmij,njk->lmnik', n1, n2)
@@ -521,8 +517,8 @@ class MPSOptimizer(object):
         :return:
         """
         with tf.name_scope("tensordotf"):
-            #f = tf.einsum('lmnik,tmnik->tl', bond, C)
-            f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
+            # f = tf.einsum('lmnik,tmnik->tl', bond, C)
+            f = tf.tensordot(C, bond, [[1, 2, 3, 4], [1, 2, 3, 4]])
             h = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
             cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f))
@@ -536,8 +532,8 @@ class MPSOptimizer(object):
 
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):
-            #gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
-            gradient = tf.tensordot(self._label-f, C, [[0],[0]])
+            # gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
+            gradient = tf.tensordot(self._label - f, C, [[0], [0]])
         label_bond = self.rate_of_change * gradient
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
         updated_bond = tf.add(bond, label_bond)
@@ -621,7 +617,7 @@ class MPSOptimizer(object):
         """
         with tf.name_scope("bond_decomposition"):
             bond_reshaped = tf.transpose(bond, perm=[1, 3, 0, 2, 4])
-            #bond_reshaped = tf.Print(bond_reshaped, [tf.shape(bond_reshaped), tf.shape(bond)], summarize = 1000, message = "bond reshaped, bond")
+            # bond_reshaped = tf.Print(bond_reshaped, [tf.shape(bond_reshaped), tf.shape(bond)], summarize = 1000, message = "bond reshaped, bond")
 
             dims = tf.shape(bond_reshaped)
             l_dim = dims[0] * dims[1]
@@ -656,13 +652,3 @@ class MPSOptimizer(object):
             # will do this in the update_right/update_left functions from now on as else transpose twice for udpate_left
 
         return (a_prime_j, a_prime_j1)
-
-
-
-
-
-
-
-
-
-

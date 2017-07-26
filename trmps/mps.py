@@ -211,7 +211,6 @@ class MPS(object):
         confusion_matrix = _confusion_matrix
         if confusion_matrix is None:
             confusion_matrix = self.confusion_matrix(f, labels)
-        f1_score_sum = 0
         diag_elements = tf.diag_part(confusion_matrix)
         row_reduced = tf.reduce_sum(confusion_matrix, 0)
         column_reduced = tf.reduce_sum(confusion_matrix, 1)
@@ -238,7 +237,7 @@ class MPS(object):
             x = tf.contrib.layers.flatten(x)
 
             prediction = tf.matmul(x, weight) + bias
-            #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
+            # cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
             cross_entropy = tf.reduce_mean(
                 tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
             train_step = tf.train.GradientDescentOptimizer(
@@ -457,7 +456,7 @@ class MPS(object):
             Edit this dictionary for any other things you want to pass in the feed_dict.
         """
         feed_dict = {}
-        if weights != None:
+        if weights is not None:
             for index, element in enumerate(weights):
                 feed_dict[self.nodes_list[index]] = element
         return feed_dict
