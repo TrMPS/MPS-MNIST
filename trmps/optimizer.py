@@ -69,7 +69,7 @@ class MPSOptimizer(object):
                     initial_weights=weights)
     """
 
-    def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=10 ** (-5)):
+    def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=10 ** (-5), verbose = 0):
         """
         Initialises the optimiser.
         :param MPSNetwork: MPS
@@ -90,6 +90,7 @@ class MPSOptimizer(object):
         self._feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
+        self.verbose = verbose
         _ = self.train_step()
 
         print("_____   Thomas the Tensor Train    . . . . . o o o o o",
@@ -540,7 +541,9 @@ class MPSOptimizer(object):
 
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
-        # cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
+        if self.verbose != 0:
+            cost1 = tf.Print(cost1, [cost, cost1], first_n=self.verbose,
+                             message='cost and updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
 

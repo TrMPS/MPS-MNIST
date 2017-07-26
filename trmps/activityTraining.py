@@ -12,11 +12,12 @@ lin_reg_iterations = 1000
 
 max_size = 15
 
-rate_of_change = 10**(-7)
+rate_of_change = 10**(-9)
 logging_enabled = False
 
 cutoff = 10 # change this next
 n_step = 10
+verbose = -10
 
 data_source = ap.activityDatasource(shuffled = shuffled)
 batch_size = data_source.num_train_samples
@@ -31,7 +32,8 @@ network = MPS(d_feature, d_output, input_size)
 network.prepare(data_source, lin_reg_iterations)
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)
-optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
+optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff,
+                         verbose=verbose)
 optimizer.train(data_source, batch_size, n_step,
                 rate_of_change=rate_of_change,
                 _logging_enabled=logging_enabled,

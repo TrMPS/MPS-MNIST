@@ -9,19 +9,20 @@ d_output = 4
 batch_size = 5000
 permuted = False
 shuffled = False
-input_size = 900
+input_size = 400
 lin_reg_iterations = 10000
 
 max_size = 25
 
-rate_of_change = 10**(-8)
+rate_of_change = 10**(-9)
 logging_enabled = False
+verbose = -10
 
-cutoff = 10 # change this next
+cutoff = 10  # change this next
 n_step = 300
 
 data_source = cardiopreprocessing.cardioDatasource(shuffled=shuffled)
-batch_size = int(data_source.num_train_samples/10)
+batch_size = int(data_source.num_train_samples)
 
 print(data_source.num_train_samples, data_source.num_test_samples)
 
@@ -34,9 +35,10 @@ weights = None
 #     if len(weights) != input_size:
 #         weights = None
 
-network = MPS(d_feature, d_output, input_size)
+network = MPS(d_feature, d_output, input_size, special_node_loc=2)
 network.prepare(data_source, lin_reg_iterations)
-optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
+optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff,
+                         verbose=verbose)
 optimizer.train(data_source, batch_size, n_step,
                 rate_of_change=rate_of_change,
                 _logging_enabled=logging_enabled,
@@ -44,6 +46,7 @@ optimizer.train(data_source, batch_size, n_step,
 
 # SGD optimizer
 
+# batch_size = int(data_source.num_train_samples/10)
 # network = SimpleMPS(d_feature, d_output, input_size)
 # network.prepare(data_source, lin_reg_iterations)
 # optimizer = SGDOptimizer(network)

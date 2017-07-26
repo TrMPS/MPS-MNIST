@@ -79,7 +79,7 @@ class MPS(object):
     print("\n\n\n\n" + str(conf))
     """
 
-    def __init__(self, d_feature, d_output, input_size):
+    def __init__(self, d_feature, d_output, input_size, special_node_loc=None):
         """
         Initialises the MPS. Currently, the prepare method must be called immediately
         after this before anything else can be done.
@@ -99,7 +99,10 @@ class MPS(object):
         self.d_matrix = d_output * 2
         self.d_feature = d_feature
         self.d_output = d_output
-        self._special_node_loc = int(np.floor(self.input_size / 2))
+        if special_node_loc is None:
+            self._special_node_loc = int(np.floor(self.input_size / 2))
+        else:
+            self._special_node_loc = special_node_loc
 
     def prepare(self, data_source, iterations=1000, learning_rate=0.05):
         """
