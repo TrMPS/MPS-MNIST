@@ -130,3 +130,5 @@ trmps/CardioData.zip
 trmps/weights
 
 trmps/weights_sgd
+
+*.ipynb
