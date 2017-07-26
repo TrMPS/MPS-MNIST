@@ -5,7 +5,6 @@ import pickle
 import utils
 from tensorflow.python.client import timeline
 
-
 def list_from(tensorArray, length):
     """
     list_from is a helper function that produces a list from a tensorArray.
@@ -33,10 +32,10 @@ class MPSOptimizer(object):
     Supervised learning with Quantum-Inspired Tensor Networks
     by E.Miles Stoudenmire and David J.Schwab
     Example usage using the MNIST dataset:
-    
+
     from optimizer import *
     import MNISTpreprocessing
-    
+
     # Model parameters
     d_feature = 2
     d_output = 10
@@ -47,25 +46,25 @@ class MPSOptimizer(object):
     input_size = 784
     if shrink:
         input_size = 196
-    
+
     max_size = 20
-    
-    rate_of_change = 10 ** (-7) 
+
+    rate_of_change = 10 ** (-7)
     logging_enabled = False
-    
+
     cutoff = 10 # change this next
     n_step = 10
-    
+
     data_source = MNISTpreprocessing.MNISTDatasource(shrink = shrink, permuted = permuted, shuffled = shuffled)
-    
+
     weights = None
-    
+
     network = MPS(d_feature, d_output, input_size)
     network.prepare(data_source)
     optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
-    optimizer.train(data_source, batch_size, n_step, 
-                    rate_of_change=rate_of_change, 
-                    logging_enabled=logging_enabled, 
+    optimizer.train(data_source, batch_size, n_step,
+                    rate_of_change=rate_of_change,
+                    logging_enabled=logging_enabled,
                     initial_weights=weights)
     """
 
@@ -101,12 +100,12 @@ class MPSOptimizer(object):
 
     def train(self, data_source, batch_size, n_step, rate_of_change=1000, initial_weights=None, _logging_enabled=False):
         """
-        Trains the network. 
+        Trains the network.
         If it is required to chain the training with other tensorflow steps, do not use this function.
         However, it may be helpful to base it on the way this function is implemented,
-        as the way the MPS works is quite unique, so the way things will have to be done is 
+        as the way the MPS works is quite unique, so the way things will have to be done is
         somewhat different from how it is usually done in tensorflow.
-        
+
         :param data_source: (some subclass of) MPSDatasource
             The data/labels that the MPS will be trained on.
         :param batch_size: integer
@@ -118,7 +117,7 @@ class MPSOptimizer(object):
             Typically, (if the batch size is all of the data), then a couple of steps should
             be enough to fully optimise the MPS.
         :param rate_of_change: float
-            The rate of change for the optimisation. 
+            The rate of change for the optimisation.
             Different values should be tried, as there is no 'right answer' that works for
             all situations, and depending on the data set, the same value can cause
             overshooting, or make the optimisation slower than it should be.
@@ -147,7 +146,7 @@ class MPSOptimizer(object):
         train_cost, train_accuracy, train_confusion, _ = self._test_step(self._feature, self._label)
 
         test_feature, test_label = data_source.test_data
-        
+
         feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         test_cost, test_accuracy, test_confusion, test_f1 = self._test_step(feature, label)
@@ -163,7 +162,7 @@ class MPSOptimizer(object):
                 self.feed_dict = self.MPS.create_feed_dict(self.test)
                 self.feed_dict[self._feature] = batch_feature
                 self.feed_dict[self._label] = batch_label
-                self.feed_dict[self.rate_of_change] = rate_of_change 
+                self.feed_dict[self.rate_of_change] = rate_of_change
                 self.feed_dict[feature] = test_feature
                 self.feed_dict[label] = test_label
                 to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1]
@@ -217,10 +216,10 @@ class MPSOptimizer(object):
         :return:
         """
         '''
-        C1s: size = input_size - 2 (as the last one is kept redundant) 
+        C1s: size = input_size - 2 (as the last one is kept redundant)
         C2s: size = input_size - 2 (first one redundant)
 
-        writes C1 from 0 to special_loc-1 
+        writes C1 from 0 to special_loc-1
         writes C2 from special_loc to size-3 (corresponds to special_loc+2 to size-1 the nodes)
         '''
         feature = self._feature
@@ -318,7 +317,7 @@ class MPSOptimizer(object):
             self.updated_nodes = self._sweep_left()
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = 1
-            
+
             # Second half-sweep
             self.updated_nodes = self._duplicate_nodes(self.MPS.nodes, original_special_node_loc + 1,
                                                        self.MPS.nodes.size() + 10)
@@ -329,7 +328,7 @@ class MPSOptimizer(object):
             self.updated_nodes = self._sweep_right(1, original_special_node_loc)
             self.MPS.nodes = self.updated_nodes
             self.MPS._special_node_loc = original_special_node_loc
-            
+
             # accuracy
             f = self.MPS.predict(self._feature)
             accuracy = self.MPS.accuracy(f, self._label)
@@ -396,12 +395,12 @@ class MPSOptimizer(object):
         """
 
         with tf.name_scope("update_left"):
-            # Read in the nodes 
+            # Read in the nodes
             n1 = previous_node
             n2 = self.MPS.nodes.read(counter - 1)
             n2.set_shape([self.MPS.d_feature, None, None])
 
-            # Calculate the C matrix 
+            # Calculate the C matrix
             C2 = C2s.read(counter - 1)
             C1 = self.C1s.read(counter - 2)
             C1.set_shape([None, None])
@@ -409,12 +408,12 @@ class MPSOptimizer(object):
             input1 = self._feature[counter-1]
             input2 = self._feature[counter]
 
-            # Calculate the bond 
+            # Calculate the bond
             bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
 
             C = self._calculate_C(C2, C1, input2, input1)
 
-            # update the bond 
+            # update the bond
             updated_bond = self._update_bond(bond, C)
 
             # Decompose the bond
@@ -422,7 +421,7 @@ class MPSOptimizer(object):
             aj = tf.transpose(aj, perm=[0, 2, 1])
             aj1 = tf.transpose(aj1, perm=[1, 2, 3, 0])
 
-            # Transpose the values and add to the new variables 
+            # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
             with tf.name_scope("tensordotcontracted_aj"):
                 #contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
@@ -447,12 +446,12 @@ class MPSOptimizer(object):
         :return:
         """
         with tf.name_scope("update_right"):
-            # Read in the nodes 
+            # Read in the nodes
             n1 = previous_node
             n2 = self.MPS.nodes.read(counter + 1)
             n2.set_shape([self.MPS.d_feature, None, None])
-    
-            # Calculate the C matrix 
+
+            # Calculate the C matrix
             C2 = self.C2s.read(counter)
             C1 = C1s.read(counter - 1)
             C1.set_shape([None, None])
@@ -460,23 +459,23 @@ class MPSOptimizer(object):
             input1 = self._feature[counter]
             input2 = self._feature[counter+1]
 
-            # Calculate the bond 
+            # Calculate the bond
             bond = tf.einsum('lmij,njk->lmnik', n1, n2)
             # bond = tf.transpose(tf.tensordot(n1, n2, [[3],[1]]), [0, 1, 3, 2, 4])
             # einsum is actually faster in this case
 
             C = self._calculate_C(C1, C2, input1, input2)
 
-            # Update the bond 
+            # Update the bond
             updated_bond = self._update_bond(bond, C)
-    
-            # Decompose the bond 
+
+            # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
             aj1 = tf.transpose(aj1, perm=[1, 2, 0, 3])
-    
-            # Transpose the values and add to the new variables 
+
+            # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
-    
+
             with tf.name_scope("tensordotcontracted_aj"):
                 #contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
                 contracted_aj = tf.tensordot(self._feature[counter], aj, [[1], [0]])
@@ -485,7 +484,7 @@ class MPSOptimizer(object):
             C1s = C1s.write(counter, C1)
             # counter = tf.Print(counter, [counter])
             updated_counter = counter + 1
-    
+
         return [updated_counter, C1s, updated_nodes, aj1]
 
     def _calculate_C(self, C1, C2, input1, input2):
@@ -526,7 +525,7 @@ class MPSOptimizer(object):
             f = tf.tensordot(C, bond, [[1,2,3,4],[1,2,3,4]])
             h = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
-            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f)) 
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f))
             # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
         return h, cost
@@ -535,14 +534,14 @@ class MPSOptimizer(object):
         # obtain the original cost
         f, cost = self._get_f_and_cost(bond, C)
 
-        # perform gradient descent on the bond 
+        # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):
             #gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
             gradient = tf.tensordot(self._label-f, C, [[0],[0]])
         label_bond = self.rate_of_change * gradient
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
         updated_bond = tf.add(bond, label_bond)
-        
+
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
         # cost1 = tf.Print(cost1, [cost, cost1], message='cost and updated cost')
@@ -606,7 +605,7 @@ class MPSOptimizer(object):
 
     def _bond_decomposition(self, bond, max_size, min_size=3, threshold=10**(-8)):
         """
-        
+
         :param self:
         :param bond:
         :param max_size:
@@ -648,12 +647,12 @@ class MPSOptimizer(object):
             u_cropped = filtered_u[:, 0:m]
             v_cropped = tf.transpose(filtered_v[:, 0:m])
 
-            # make a_ 
+            # make a_
             a_prime_j = tf.reshape(u_cropped, [dims[0], dims[1], m])
 
             sv = tf.matmul(s_mat, v_cropped)
             a_prime_j1 = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
-            #a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
+            # a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
             # will do this in the update_right/update_left functions from now on as else transpose twice for udpate_left
 
         return (a_prime_j, a_prime_j1)
