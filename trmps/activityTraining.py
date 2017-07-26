@@ -32,19 +32,19 @@ network.prepare(data_source, lin_reg_iterations)
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)
 optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
-optimizer.train(data_source, batch_size, n_step, 
-                rate_of_change=rate_of_change, 
-                _logging_enabled=logging_enabled, 
+optimizer.train(data_source, batch_size, n_step,
+                rate_of_change=rate_of_change,
+                _logging_enabled=logging_enabled,
                 initial_weights=weights)
-                
+
 # Testing
 
 # with open('weights', 'rb') as fp:
 #    weights = pickle.load(fp)
 #    if len(weights) != input_size:
 #        weights = None
-#     
-# network.prepare(data_source)   
+#
+# network.prepare(data_source)
 # feed_dict = network.create_feed_dict(weights)
 # test_features, test_labels = data_source.test_data
 # features = tf.placeholder(tf.float32, shape=[input_size, None, d_feature])
