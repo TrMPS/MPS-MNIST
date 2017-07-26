@@ -20,9 +20,9 @@ class cardioLabels(Enum):
     other = 2
     A = 3
     AF = 3
-    
+
 class cardioDatasource(MPSDatasource):
-    
+
     def __init__(self, shuffled = False):
         if not os.path.isdir(type(self).__name__):
             os.mkdir(type(self).__name__)
@@ -44,7 +44,7 @@ class cardioDatasource(MPSDatasource):
             with ZipFile(self._compressed_data_path) as zf:
                 zf.extractall(type(self).__name__)
         super().__init__(expected_shape, shuffled)
-        
+
     def _load_all_data(self):
         _all_datapoints = []
         _all_labels = []
@@ -57,6 +57,7 @@ class cardioDatasource(MPSDatasource):
         with open(csv_filename, 'r') as f:
             reader = csv.reader(f)
             for index, row in enumerate(reader):
+                current_data = []
                 current_loc = self.data_length
                 percentage = int(100 * index/8528.0)
                 _spinner.print_spinner(percentage)
@@ -64,7 +65,7 @@ class cardioDatasource(MPSDatasource):
                 if row[1] != "~":
                     label = cardioLabels[row[1]]
                 sorted_indices = counter.argsort()
-                if label.value == sorted_indices[0] or label.value == 0:
+                if label.value != sorted_indices[-1]:
                     record = self._uncompressed_data_path + row[0] + ".mat"
                     mat_data = scipy.io.loadmat(record)
                     samples = mat_data["val"]
@@ -77,9 +78,11 @@ class cardioDatasource(MPSDatasource):
                     data = np.column_stack((ones, data))
                     _all_labels.append(label.value)
                     _all_datapoints.append(data)
+                    current_data.append(data)
                     counter[label.value] = counter[label.value] + 1
                     len_left -= self.data_length
-                    while len_left>self.data_length:
+                    while (len_left>self.data_length and (label.value == 0 or label.value == sorted_indices[0])
+                           and label.value != 3):
                         data = samples[current_loc:current_loc+self.data_length]
                         data = np.abs(np.fft.rfft(data))[:-1]
                         factor = 1/np.amax(data)
@@ -90,14 +93,23 @@ class cardioDatasource(MPSDatasource):
                             label = cardioLabels[row[1]]
                         _all_labels.append(label.value)
                         _all_datapoints.append(data)
+                        current_data.append(data)
                         counter[label.value] = counter[label.value] + 1
                         current_loc += self.data_length + 1
                         len_left -= self.data_length
+                    if counter[label.value] < counter[sorted_indices[2]] or label.value == 0:
+                        for data in current_data:
+                            _all_datapoints.append(data)
+                            _all_labels.append(label.value)
+                            _all_datapoints.append(data)
+                            _all_labels.append(label.value)
+                            counter[label.value] = counter[label.value] + 1
+                            counter[label.value] = counter[label.value] + 1
         _all_datapoints = np.array(_all_datapoints)
         _all_labels = convert_to_onehot(np.array(_all_labels))
-        
+
         _spinner.print_spinner(100.0)
-        
+
         print(_all_datapoints.shape)
         print(_all_labels.shape)
         print(_all_labels[0])
@@ -105,22 +117,22 @@ class cardioDatasource(MPSDatasource):
         print("datapoints by class:", counter)
         np.save(self._all_data_path, _all_datapoints)
         np.save(self._all_labels_path, _all_labels)
-    
-    
+
+
     def _load_test_data(self):
         if self._all_data is None:
             self._load_all_data()
         test_index = int(self.training_fraction * len(self._all_data[0]))
         self._test_data = self._all_data[0][:test_index], self._all_data[1][:test_index]
         super()._load_test_data()
-        
+
     def _load_training_data(self):
         if self._all_data is None:
             self._load_all_data()
         test_index = int(self.training_fraction * len(self._all_data[0]))
         self._training_data = self._all_data[0][test_index:], self._all_data[1][test_index:]
         super()._load_training_data()
-        
+
 if __name__ == "__main__":
     data_source = cardioDatasource(shuffled = False)
     data, labels = data_source.next_training_data_batch(1000)
@@ -134,4 +146,4 @@ if __name__ == "__main__":
     data, labels = data_source.next_training_data_batch(500)
     print(len(labels))
 
-        
+
