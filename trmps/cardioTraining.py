@@ -10,49 +10,54 @@ batch_size = 5000
 permuted = False
 shuffled = False
 input_size = 900
-lin_reg_iterations = 500
+lin_reg_iterations = 10000
 
 max_size = 25
 
-rate_of_change = 10**(-6)
+rate_of_change = 10**(-8)
 logging_enabled = False
 
 cutoff = 10 # change this next
-n_step = 1000
+n_step = 300
 
-data_source = cardiopreprocessing.cardioDatasource(shuffled = shuffled)
+data_source = cardiopreprocessing.cardioDatasource(shuffled=shuffled)
 batch_size = int(data_source.num_train_samples/10)
 
 print(data_source.num_train_samples, data_source.num_test_samples)
 
-# Training
-
 weights = None
 
 # DMRG optimizer
-# network = MPS(d_feature, d_output, input_size)
-# network.prepare(data_source, lin_reg_iterations)
-# optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
-# optimizer.train(data_source, batch_size, n_step, 
-#                 rate_of_change=rate_of_change, 
-#                 _logging_enabled=logging_enabled, 
-#                 initial_weights=weights)
+
+# with open('weights_sgd', 'rb') as fp:
+#     weights = pickle.load(fp)
+#     if len(weights) != input_size:
+#         weights = None
+
+network = MPS(d_feature, d_output, input_size)
+network.prepare(data_source, lin_reg_iterations)
+optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
+optimizer.train(data_source, batch_size, n_step,
+                rate_of_change=rate_of_change,
+                _logging_enabled=logging_enabled,
+                initial_weights=weights)
 
 # SGD optimizer
-network = SimpleMPS(d_feature, d_output, input_size)
-network.prepare(data_source, lin_reg_iterations)
-optimizer = SGDOptimizer(network)
-optimizer.train(data_source, batch_size, n_step,
-                rate_of_change = rate_of_change)
-                
+
+# network = SimpleMPS(d_feature, d_output, input_size)
+# network.prepare(data_source, lin_reg_iterations)
+# optimizer = SGDOptimizer(network)
+# optimizer.train(data_source, batch_size, n_step,
+#                 rate_of_change=rate_of_change)
+
 # Testing
 
 # with open('weights', 'rb') as fp:
 #    weights = pickle.load(fp)
 #    if len(weights) != input_size:
 #        weights = None
-#     
-# network.prepare(data_source)   
+#
+# network.prepare(data_source)
 # feed_dict = network.create_feed_dict(weights)
 # test_features, test_labels = data_source.test_data
 # features = tf.placeholder(tf.float32, shape=[input_size, None, d_feature])
