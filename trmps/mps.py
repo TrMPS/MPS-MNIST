@@ -288,12 +288,10 @@ class MPS(object):
             self.nodes_list = []
             self.nodes = tf.TensorArray(tf.float32, size=0, dynamic_size=True,
                                         clear_after_read=False, infer_shape=False)
-            # First node
-            self.nodes_list.append(tf.placeholder_with_default(
-                self._make_start_vector(), [self.d_feature, None]))
-            self.nodes = self.nodes.write(0, self.nodes_list[-1])
+            self.start_node = self._make_start_node()
+            self.end_node = self._make_end_node()
 
-            for i in range(1, self.input_size - 1):
+            for i in range(0, self.input_size):
                 if i == self._special_node_loc:
                     # The Second node with output leg attached
                     self.nodes_list.append(tf.placeholder_with_default(self._make_special_node(i),
@@ -304,36 +302,45 @@ class MPS(object):
                                                                        [self.d_feature, None, None]))
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
 
-            # Last node
-            self.nodes_list.append(
-                tf.placeholder_with_default(self._make_end_vector(), [self.d_feature, None]))
-            self.nodes = self.nodes.write(
-                self.input_size - 1, self.nodes_list[-1])
 
-    def _make_start_vector(self):
+    def _make_start_node(self):
         """
 
         :return:
         """
-        start_vector = np.zeros(
-            [self.d_feature, self.d_matrix], dtype=np.float32)
+        start_vector = np.zeros([1, self.d_matrix], dtype=np.float32)
         start_vector[0, self.d_output:] = 1
-        start_vector[1:, 0:self.d_output] = self.weight[0]
-        return tf.Variable(start_vector, dtype=tf.float32)
+        return tf.Variable(start_vector, dtype=tf.float32, 
+                           trainable=False, name='start_node')
 
-    def _make_end_vector(self):
+    def _make_end_node(self):
         """
 
         :return:
         """
 
-        end_vector = np.zeros(
-            [self.d_feature, self.d_matrix], dtype=np.float32)
+        end_vector = np.zeros([1, self.d_matrix], dtype=np.float32)
         end_vector[0, 0:self.d_output] = 1
-        end_vector[0, self.d_output:] = self.bias
-        end_vector[1:, self.d_output:] = self.weight[-1]
 
-        return tf.Variable(end_vector, dtype=tf.float32)
+        return tf.Variable(end_vector, dtype=tf.float32, 
+                           trainable=False, name='end_node')
+
+    def _make_special_node(self, index):
+        def _make_matrix(i):
+            m = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
+            m[0, i, i] = 1
+            m[0, i+self.d_output, i+self.d_output] = 1
+            m[0, i+self.d_output, i] = self.bias[i]
+            m[1:, i+self.d_output, i] = self.weight[index, :, i]
+
+            return m
+
+        stacked = [_make_matrix(i) for i in range(self.d_output)]
+        node = np.stack(stacked, axis=0)
+
+        return tf.Variable(node, dtype=tf.float32, 
+                           trainable=True, name='special')
+
 
     def _make_middle_node(self, index):
         """
@@ -342,34 +349,13 @@ class MPS(object):
         :return:
         """
 
-        middle_node = np.zeros(
-            [self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
+        middle_node = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
         middle_node[0] = np.identity(self.d_matrix)
         for i in range(1, self.d_feature):
-            middle_node[i, self.d_output:, 0:self.d_output] = np.diag(self.weight[
-                                                                      index, i - 1])
+            middle_node[i, self.d_output:, 0:self.d_output] = np.diag(self.weight[index, i-1])
 
-        return tf.Variable(middle_node, dtype=tf.float32)
+        return tf.Variable(middle_node, dtype=tf.float32, trainable=True, name='G_{}'.format(index))
 
-    def _make_special_node(self, index):
-        """
-
-        :param index:
-        :return:
-        """
-
-        def _make_matrix(i):
-            m = np.zeros([self.d_feature, self.d_matrix,
-                          self.d_matrix], dtype=np.float32)
-            m[0, i, i] = 1
-            m[0, i + self.d_output, i + self.d_output] = 1
-            m[1:, i + self.d_output, i] = self.weight[index, :, i]
-
-            return tf.Variable(m)
-
-        stacked = [_make_matrix(i) for i in range(self.d_output)]
-
-        return tf.stack(stacked)
 
     def _chain_multiply_r(self, counter, C1):
         with tf.name_scope('chain_multiply_right'):
@@ -403,23 +389,21 @@ class MPS(object):
         with tf.name_scope("MPS_predict"):
             # Read in feature
             self.feature = feature
+            batch_size = tf.shape(feature)[1]
 
             with tf.name_scope('calculate_C1'):
-                node1 = self.nodes.read(0)
-                node1.set_shape([self.d_feature, None])
-                C1 = tf.matmul(feature[0], node1)
+
+                C1 = tf.tile(self.start_node, [batch_size, 1])
                 cond = lambda c, b: tf.less(c, self._special_node_loc)
-                counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_r, loop_vars=[1, C1],
+                counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_r, loop_vars=[0, C1],
                                             shape_invariants=[tf.TensorShape(
                                                 []), tf.TensorShape([None, None])],
                                             parallel_iterations=5)
 
             with tf.name_scope('calculate_C2'):
-                nodelast = self.nodes.read(self.input_size - 1)
-                nodelast.set_shape([self.d_feature, None])
-                C2 = tf.matmul(feature[self.input_size - 1], nodelast)
+                C2 = tf.tile(self.end_node, [batch_size, 1])
                 cond2 = lambda c, b: tf.greater(c, self._special_node_loc)
-                _, C2 = tf.while_loop(cond=cond2, body=self._chain_multiply_l, loop_vars=[self.input_size - 2, C2],
+                _, C2 = tf.while_loop(cond=cond2, body=self._chain_multiply_l, loop_vars=[self.input_size - 1, C2],
                                       shape_invariants=[tf.TensorShape(
                                           []), tf.TensorShape([None, None])],
                                       parallel_iterations=5)
@@ -481,5 +465,5 @@ if __name__ == '__main__':
     # Initialise the model
     network = MPS(d_feature, d_output, input_size)
     network.prepare(data_source)
-    feature, label = data_source.next_training_data_batch(1000)
+    feature, label = data_source.test_data
     network.test(feature, label)
