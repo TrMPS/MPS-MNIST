@@ -11,6 +11,7 @@ shrink = True
 input_size = 784
 if shrink:
     input_size = 196
+special_node_loc = None
 
 max_size = 30
 min_singular_value = 10 ** (-6)
