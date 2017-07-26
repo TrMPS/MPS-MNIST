@@ -99,7 +99,7 @@ class activityDatasource(MPSDatasource):
 
                     if index >= jump_index:
                         if index != 0 and (index) % self.data_length == 0:
-                            data = np.abs(np.fft.rfft(data, axis = 0)*factor)[1:]
+                            data = np.abs(np.fft.rfft(data, axis = 0)*factor)[:-1]
                             data = np.column_stack((ones, data))
                             _all_datapoints.append(np.array(data))
                             _all_labels.append(row_label.value)
