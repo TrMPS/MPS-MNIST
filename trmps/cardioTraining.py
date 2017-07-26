@@ -11,14 +11,15 @@ permuted = False
 shuffled = False
 input_size = 400
 lin_reg_iterations = 10000
+special_node_loc = 200
 
-max_size = 25
+max_size = 10
 
-rate_of_change = 10**(-9)
+rate_of_change = 10**(1)
 logging_enabled = False
 verbose = -10
 
-cutoff = 10  # change this next
+cutoff = 10**(-5)  # change this next
 n_step = 300
 
 data_source = cardiopreprocessing.cardioDatasource(shuffled=shuffled)
@@ -35,7 +36,8 @@ weights = None
 #     if len(weights) != input_size:
 #         weights = None
 
-network = MPS(d_feature, d_output, input_size, special_node_loc=2)
+network = MPS(d_feature, d_output, input_size,
+              special_node_loc=special_node_loc)
 network.prepare(data_source, lin_reg_iterations)
 optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff,
                          verbose=verbose)

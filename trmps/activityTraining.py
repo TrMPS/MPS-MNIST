@@ -9,6 +9,7 @@ permuted = False
 shuffled = False
 input_size = 100
 lin_reg_iterations = 1000
+special_node_loc = 50
 
 max_size = 15
 
@@ -28,7 +29,7 @@ print(data_source.num_train_samples, data_source.num_test_samples)
 
 weights = None
 
-network = MPS(d_feature, d_output, input_size)
+network = MPS(d_feature, d_output, input_size, special_node_loc=special_node_loc)
 network.prepare(data_source, lin_reg_iterations)
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)

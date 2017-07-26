@@ -99,10 +99,11 @@ class MPS(object):
         self.d_matrix = d_output * 2
         self.d_feature = d_feature
         self.d_output = d_output
-        if special_node_loc is None:
-            self._special_node_loc = int(np.floor(self.input_size / 2))
-        else:
-            self._special_node_loc = special_node_loc
+        self._special_node_loc = special_node_loc
+        # if special_node_loc is None:
+        #     self._special_node_loc = int(np.floor(self.input_size / 2))
+        # else:
+        #     self._special_node_loc = special_node_loc
 
     def prepare(self, data_source, iterations=1000, learning_rate=0.05):
         """
@@ -274,9 +275,16 @@ class MPS(object):
             print('Lin regression gives a test accuracy of {}'.format(test_acc))
             print(test_conf)
 
-            self.weight = sess.run(reshaped_weight)
-            self.bias = sess.run(bias)
+            self.weight, self.bias = sess.run([reshaped_weight, bias])
             del batch_feature, batch_label
+        if self._special_node_loc is None:
+            max_loc = np.unravel_index(self.weight.argmax(), self.weight.shape)[0]
+            if max_loc == 0:
+                max_loc += 1
+            elif max_loc == self.input_size - 1:
+                max_loc -= 1
+            print("special node location: " + str(max_loc))
+            self._special_node_loc = int(max_loc)
 
     def _setup_nodes(self):
         """

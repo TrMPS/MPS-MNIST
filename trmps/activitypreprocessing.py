@@ -9,7 +9,7 @@ import csv
 from utils import spinner
 from utils import convert_to_onehot
 from enum import Enum
-    
+
 class activityLabels(Enum):
     """
     An enum to hold the different types of activity available in the activity dataset:
@@ -32,7 +32,7 @@ class activityDatasource(MPSDatasource):
     Dataset of walking, running, sitting, standing, jogging, biking, walking upstairs and walking downstairs activities
     as found on
     http://ps.ewi.utwente.nl/Datasets.php
-    
+
     Use as you would use any subclass of MPSDatasource.
     This class requires that unrar and rarfile are installed.
     """
@@ -64,7 +64,7 @@ class activityDatasource(MPSDatasource):
             with RarFile("ActivityData.rar") as rf:
                 rf.extractall()
         super().__init__(expected_shape, shuffled)
-        
+
     def _load_all_data(self):
         """
         _load_all_data is responsible for reading the .csv files downloaded in the initialisation.
@@ -79,10 +79,10 @@ class activityDatasource(MPSDatasource):
         ones = np.ones(new_length)
         _spinner = spinner()
         for i in range(10):
-        
+
             #_spinner.print_spinner(0.0)
             percentage = int((i / 10) * 100)
-            
+
             filename = self._uncompressed_data_path + "Participant_" + str(i+1) +".csv"
             with open(filename, 'r') as f:
                 reader = csv.reader(f)
@@ -94,12 +94,12 @@ class activityDatasource(MPSDatasource):
                 row_label = 0
                 data = []
                 for index, row in enumerate(reader):
-                
+
                     _spinner.print_spinner(percentage)
-                    
+
                     if index >= jump_index:
                         if index != 0 and (index) % self.data_length == 0:
-                            data = np.abs(np.fft.rfft(data, axis = 0)*factor)[:-1]
+                            data = np.abs(np.fft.rfft(data, axis = 0)*factor)[1:]
                             data = np.column_stack((ones, data))
                             _all_datapoints.append(np.array(data))
                             _all_labels.append(row_label.value)
@@ -118,17 +118,17 @@ class activityDatasource(MPSDatasource):
         #_all_datapoints = _all_datapoints[permutation]
         #_all_labels = _all_labels[permutation]
         #_all_datapoints[:,:,1:] = np.tanh(_all_datapoints[:,:,1:])
-        
+
         _spinner.print_spinner(100.0)
-        
+
         print(_all_datapoints.shape)
         print(_all_labels.shape)
         print(_all_labels[0])
         self._all_data = (_all_datapoints, _all_labels)
         np.save(self._all_data_path, _all_datapoints)
         np.save(self._all_labels_path, _all_labels)
-    
-    
+
+
     def _load_test_data(self):
         """
         Takes part of _all_data (non-overlapping with training data)
@@ -140,7 +140,7 @@ class activityDatasource(MPSDatasource):
         test_index = int(self.training_fraction * len(self._all_data[0]))
         self._test_data = self._all_data[0][:test_index], self._all_data[1][:test_index]
         super()._load_test_data()
-        
+
     def _load_training_data(self):
         """
         Takes part of _all_data (non-overlapping with test data)
@@ -152,7 +152,7 @@ class activityDatasource(MPSDatasource):
         test_index = int(self.training_fraction * len(self._all_data[0]))
         self._training_data = self._all_data[0][test_index:], self._all_data[1][test_index:]
         super()._load_training_data()
-        
+
 if __name__ == "__main__":
     data_source = activityDatasource(shuffled = False)
     data, labels = data_source.next_training_data_batch(1000)
