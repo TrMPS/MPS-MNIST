@@ -28,6 +28,25 @@ def getunzipped(url, name):
     z.close()
     print('Data downloaded and unzipped')
 
+def list_from(tensorArray, length):
+    """
+    list_from is a helper function that produces a list from a tensorArray.
+    It is used to extract the results of training in MPSOptimizer.
+    :param tensorArray: tensorflow TensorArray
+        The tensor array that is to be converted to a list
+    :param length: integer
+        The length of the TensorArray/the list that is to be created
+    :return: list of tensorflow Tensors
+        A list containing all the values of the TensorArray as Tensors.
+        This has to then be evaluated to get actual values.
+    """
+    arr = tensorArray
+    result_list = []
+    with tf.name_scope("createlist"):
+        for i in range(length):
+            result_list.append(arr.read(i))
+    return result_list
+
 
 class spinner(object):
     def __init__(self, jump = 400):
