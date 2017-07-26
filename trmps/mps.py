@@ -16,7 +16,7 @@ class MPS(object):
     d_matrix: int
         The initial sizes of the matrices
     d_feature: int
-        The sizes of the feature vectors. 
+        The sizes of the feature vectors.
         (Referred to as 'Local dimension' in the paper)
         Try to keep this low (if possible), as the optimisation algorithm scales
         as (d_feature)^3.
@@ -26,12 +26,12 @@ class MPS(object):
     nodes: tf.TensorArray
         a TensorArray containing all of the weights for this model.
     feature: tf.Placeholder of shape (input_size, batch_size, d_feature)
-    
+
     Usage example:
-    
+
     from optimizer import *
     import activitypreprocessing as ap
-    
+
     # Model parameters
     d_feature = 4
     d_output = 7
@@ -40,29 +40,29 @@ class MPS(object):
     shuffled = False
     input_size = 100
     lin_reg_iterations = 1000
-    
+
     max_size = 15
-    
+
     rate_of_change = 10**(-7)
     logging_enabled = False
-    
+
     cutoff = 10 # change this next
     n_step = 10
-    
+
     data_source = ap.activityDatasource(shuffled = shuffled)
     batch_size = data_source.num_train_samples
-    
+
     print(data_source.num_train_samples, data_source.num_test_samples)
-    
+
     # Testing
-    
+
     # load weights that we have saved to a file from a previous run.
     with open('weights', 'rb') as fp:
        weights = pickle.load(fp)
        if len(weights) != input_size:
            weights = None
-        
-    network.prepare(data_source)   
+
+    network.prepare(data_source)
     feed_dict = network.create_feed_dict(weights)
     test_features, test_labels = data_source.test_data
     features = tf.placeholder(tf.float32, shape=[input_size, None, d_feature])
@@ -79,12 +79,12 @@ class MPS(object):
     print("\n\n\n\n" + str(conf))
     """
 
-    def __init__(self, d_feature, d_output, input_size):
+    def __init__(self, d_feature, d_output, input_size, special_node_loc=None):
         """
         Initialises the MPS. Currently, the prepare method must be called immediately
         after this before anything else can be done.
         :param d_feature: integer
-            The sizes of the feature vectors. 
+            The sizes of the feature vectors.
             (Referred to as 'Local dimension' in the paper)
             Try to keep this low (if possible), as the optimisation algorithm scales
             as (d_feature)^3.
@@ -99,7 +99,10 @@ class MPS(object):
         self.d_matrix = d_output * 2
         self.d_feature = d_feature
         self.d_output = d_output
-        self._special_node_loc = int(np.floor(self.input_size / 2))
+        if special_node_loc is None:
+            self._special_node_loc = int(np.floor(self.input_size / 2))
+        else:
+            self._special_node_loc = special_node_loc
 
     def prepare(self, data_source, iterations=1000, learning_rate=0.05):
         """
@@ -127,7 +130,8 @@ class MPS(object):
         :return: nothing
         """
         # feature must be numpy array of dtype float32
-        feature = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
+        feature = tf.placeholder(
+            tf.float32, shape=[self.input_size, None, self.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.d_output])
 
         f = self.predict(feature)
@@ -135,7 +139,8 @@ class MPS(object):
         accuracy = self.accuracy(f, label)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            test_cost, test_acc = sess.run([cost, accuracy], {feature: test_feature, label: test_label})
+            test_cost, test_acc = sess.run(
+                [cost, accuracy], {feature: test_feature, label: test_label})
             print(test_cost)
             print(test_acc)
 
@@ -168,7 +173,8 @@ class MPS(object):
             The cost of the predictions, as judged by softmax cross entropy with logits
         """
         with tf.name_scope("cost"):
-            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=f)) # 0.5 * tf.reduce_sum(tf.square(f-label))
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+                labels=labels, logits=f))  # 0.5 * tf.reduce_sum(tf.square(f-label))
         return cost
 
     def accuracy(self, f, labels):
@@ -187,7 +193,7 @@ class MPS(object):
             correct_prediction = tf.equal(prediction, true_value)
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
         return accuracy
-        
+
     def confusion_matrix(self, f, labels):
         """
         Returns the confusion matrix given the predictions(f), and the correct labels
@@ -200,8 +206,20 @@ class MPS(object):
         """
         predictions = tf.argmax(f, axis=1)
         true_values = tf.argmax(labels, axis=1)
-        confusion_mat = tf.confusion_matrix(true_values, predictions, num_classes = self.d_output)
+        confusion_mat = tf.confusion_matrix(
+            true_values, predictions, num_classes=self.d_output)
         return confusion_mat
+
+    def f1score(self, f, labels, _confusion_matrix=None):
+        confusion_matrix = _confusion_matrix
+        if confusion_matrix is None:
+            confusion_matrix = self.confusion_matrix(f, labels)
+        diag_elements = tf.diag_part(confusion_matrix)
+        row_reduced = tf.reduce_sum(confusion_matrix, 0)
+        column_reduced = tf.reduce_sum(confusion_matrix, 1)
+        f1_scores = 2 * diag_elements / (row_reduced + column_reduced)
+        f1_score = tf.reduce_sum(f1_scores) / self.d_output
+        return f1_score
 
     def _lin_reg(self, data_source, iterations, learning_rate):
 
@@ -212,41 +230,47 @@ class MPS(object):
             bias = tf.Variable(tf.zeros([self.d_output]))
 
         with tf.name_scope('data'):
-            feature = tf.placeholder(tf.float32, shape=[self.input_size, None, self.d_feature])
+            feature = tf.placeholder(
+                tf.float32, shape=[self.input_size, None, self.d_feature])
             label = tf.placeholder(tf.float32, shape=[None, self.d_output])
 
         with tf.name_scope('lin_model'):
             x = tf.transpose(feature[:, :, 1:], perm=[1, 0, 2])
-            x = tf.contrib.layers.flatten(x) # flatten out everything except the first dim
-
+            # flatten out everything except the first dim
+            x = tf.contrib.layers.flatten(x)
 
             prediction = tf.matmul(x, weight) + bias
-            #cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
-            cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
-            train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy) 
+            # cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
+            cross_entropy = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
+            train_step = tf.train.GradientDescentOptimizer(
+                learning_rate).minimize(cross_entropy)
 
         accuracy = self.accuracy(prediction, label)
         confusion_matrix = self.confusion_matrix(prediction, label)
 
         reshaped_weight = tf.transpose(weight)
-        reshaped_weight = tf.reshape(reshaped_weight, [self.d_output, self.input_size, self.d_feature-1])
+        reshaped_weight = tf.reshape(
+            reshaped_weight, [self.d_output, self.input_size, self.d_feature - 1])
         reshaped_weight = tf.transpose(reshaped_weight, perm=[1, 2, 0])
-
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
 
             for _ in range(iterations):
+                batch_feature, batch_label = data_source.next_training_data_batch(
+                    100)
+                sess.run(train_step, feed_dict={
+                         feature: batch_feature, label: batch_label})
 
-                batch_feature, batch_label = data_source.next_training_data_batch(100)
-                sess.run(train_step, feed_dict={feature: batch_feature, label: batch_label})
-
-            train_acc, train_conf = sess.run([accuracy, confusion_matrix], feed_dict={feature: batch_feature, label: batch_label})
+            train_acc, train_conf = sess.run([accuracy, confusion_matrix], feed_dict={
+                                             feature: batch_feature, label: batch_label})
             print('Lin regression gives a training accuracy of {}'.format(train_acc))
             print(train_conf)
 
             batch_feature, batch_label = data_source.test_data
-            test_acc, test_conf = sess.run([accuracy, confusion_matrix], feed_dict={feature: batch_feature, label: batch_label})
+            test_acc, test_conf = sess.run([accuracy, confusion_matrix], feed_dict={
+                                           feature: batch_feature, label: batch_label})
             print('Lin regression gives a test accuracy of {}'.format(test_acc))
             print(test_conf)
 
@@ -265,7 +289,8 @@ class MPS(object):
             self.nodes = tf.TensorArray(tf.float32, size=0, dynamic_size=True,
                                         clear_after_read=False, infer_shape=False)
             # First node
-            self.nodes_list.append(tf.placeholder_with_default(self._make_start_vector(), [self.d_feature, None]))
+            self.nodes_list.append(tf.placeholder_with_default(
+                self._make_start_vector(), [self.d_feature, None]))
             self.nodes = self.nodes.write(0, self.nodes_list[-1])
 
             for i in range(1, self.input_size - 1):
@@ -282,14 +307,16 @@ class MPS(object):
             # Last node
             self.nodes_list.append(
                 tf.placeholder_with_default(self._make_end_vector(), [self.d_feature, None]))
-            self.nodes = self.nodes.write(self.input_size - 1, self.nodes_list[-1])
+            self.nodes = self.nodes.write(
+                self.input_size - 1, self.nodes_list[-1])
 
     def _make_start_vector(self):
         """
 
         :return:
         """
-        start_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
+        start_vector = np.zeros(
+            [self.d_feature, self.d_matrix], dtype=np.float32)
         start_vector[0, self.d_output:] = 1
         start_vector[1:, 0:self.d_output] = self.weight[0]
         return tf.Variable(start_vector, dtype=tf.float32)
@@ -300,10 +327,11 @@ class MPS(object):
         :return:
         """
 
-        end_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
-        end_vector[0, 0:self.d_output] = 1 
-        end_vector[0, self.d_output:] = self.bias 
-        end_vector[1:, self.d_output:] = self.weight[-1] 
+        end_vector = np.zeros(
+            [self.d_feature, self.d_matrix], dtype=np.float32)
+        end_vector[0, 0:self.d_output] = 1
+        end_vector[0, self.d_output:] = self.bias
+        end_vector[1:, self.d_output:] = self.weight[-1]
 
         return tf.Variable(end_vector, dtype=tf.float32)
 
@@ -314,10 +342,12 @@ class MPS(object):
         :return:
         """
 
-        middle_node = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
+        middle_node = np.zeros(
+            [self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
         middle_node[0] = np.identity(self.d_matrix)
         for i in range(1, self.d_feature):
-            middle_node[i, self.d_output:, 0:self.d_output] = np.diag(self.weight[index, i-1])
+            middle_node[i, self.d_output:, 0:self.d_output] = np.diag(self.weight[
+                                                                      index, i - 1])
 
         return tf.Variable(middle_node, dtype=tf.float32)
 
@@ -327,12 +357,13 @@ class MPS(object):
         :param index:
         :return:
         """
-        
+
         def _make_matrix(i):
-            m = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
-            m[0, i, i] = 1 
-            m[0, i+self.d_output, i+self.d_output] = 1
-            m[1:, i+self.d_output, i] = self.weight[index, :, i]
+            m = np.zeros([self.d_feature, self.d_matrix,
+                          self.d_matrix], dtype=np.float32)
+            m[0, i, i] = 1
+            m[0, i + self.d_output, i + self.d_output] = 1
+            m[1:, i + self.d_output, i] = self.weight[index, :, i]
 
             return tf.Variable(m)
 
@@ -344,8 +375,8 @@ class MPS(object):
         with tf.name_scope('chain_multiply_right'):
             node = self.nodes.read(counter)
             node.set_shape([self.d_feature, None, None])
-            contracted_node = tf.tensordot(self.feature[counter], node, 
-                                            [[1], [0]])
+            contracted_node = tf.tensordot(self.feature[counter], node,
+                                           [[1], [0]])
             C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
             counter = counter + 1
         return [counter, C1]
@@ -354,13 +385,12 @@ class MPS(object):
         with tf.name_scope('chain_multiply_left'):
             node = self.nodes.read(counter)
             node.set_shape([self.d_feature, None, None])
-            contracted_node = tf.tensordot(self.feature[counter], node, 
-                                            [[1], [0]])
+            contracted_node = tf.tensordot(self.feature[counter], node,
+                                           [[1], [0]])
             C2 = tf.einsum('tij,tj->ti', contracted_node, C2)
             counter = counter - 1
-        
+
         return [counter, C2]
-        
 
     def predict(self, feature):
         """
@@ -371,7 +401,7 @@ class MPS(object):
             The predictions
         """
         with tf.name_scope("MPS_predict"):
-            # Read in feature 
+            # Read in feature
             self.feature = feature
 
             with tf.name_scope('calculate_C1'):
@@ -380,23 +410,25 @@ class MPS(object):
                 C1 = tf.matmul(feature[0], node1)
                 cond = lambda c, b: tf.less(c, self._special_node_loc)
                 counter, C1 = tf.while_loop(cond=cond, body=self._chain_multiply_r, loop_vars=[1, C1],
-                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
+                                            shape_invariants=[tf.TensorShape(
+                                                []), tf.TensorShape([None, None])],
                                             parallel_iterations=5)
 
             with tf.name_scope('calculate_C2'):
                 nodelast = self.nodes.read(self.input_size - 1)
                 nodelast.set_shape([self.d_feature, None])
-                C2 = tf.matmul(feature[self.input_size-1], nodelast)
+                C2 = tf.matmul(feature[self.input_size - 1], nodelast)
                 cond2 = lambda c, b: tf.greater(c, self._special_node_loc)
-                _, C2 = tf.while_loop(cond=cond2, body=self._chain_multiply_l, loop_vars=[self.input_size-2, C2],
-                                      shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None])],
+                _, C2 = tf.while_loop(cond=cond2, body=self._chain_multiply_l, loop_vars=[self.input_size - 2, C2],
+                                      shape_invariants=[tf.TensorShape(
+                                          []), tf.TensorShape([None, None])],
                                       parallel_iterations=5)
 
-
-            # contract special node with C1 
+            # contract special node with C1
             sp_node = self.nodes.read(self._special_node_loc)
             sp_node.set_shape([self.d_output, self.d_feature, None, None])
-            contracted_sp_node = tf.einsum('lnij,tn->tlij', sp_node, feature[self._special_node_loc])
+            contracted_sp_node = tf.einsum(
+                'lnij,tn->tlij', sp_node, feature[self._special_node_loc])
             C1 = tf.einsum('ti,tlij->tlj', C1, contracted_sp_node)
             f = tf.einsum('tli,ti->tl', C1, C2)
 
@@ -406,7 +438,7 @@ class MPS(object):
         """
         Creates a feed_dict which assigns the given weights to the MPS' nodes.
         This should be used whenever you want to update the weights of the MPS.
-        
+
         e.g.:
         feed_dict = network.create_feed_dict(weights)
         test_features, test_labels = data_source.test_data
@@ -420,14 +452,14 @@ class MPS(object):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             conf, acc = sess.run([confusion_matrix, accuracy], feed_dict = feed_dict)
-            
+
         :param weights: list of numpy arrays of length input_length
             The weights that you want to use for the MPS.
         :return: dictionary
             Edit this dictionary for any other things you want to pass in the feed_dict.
         """
         feed_dict = {}
-        if weights != None:
+        if weights is not None:
             for index, element in enumerate(weights):
                 feed_dict[self.nodes_list[index]] = element
         return feed_dict
@@ -444,11 +476,10 @@ if __name__ == '__main__':
     batch_size = 1000
     permuted = False
 
-    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted = permuted)
-    
+    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
+
     # Initialise the model
     network = MPS(d_feature, d_output, input_size)
     network.prepare(data_source)
     feature, label = data_source.next_training_data_batch(1000)
     network.test(feature, label)
-

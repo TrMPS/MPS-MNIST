@@ -11,7 +11,7 @@ class SimpleMPS(MPS):
         Initialises the MPS. Currently, the prepare method must be called immediately
         after this before anything else can be done.
         :param d_feature: integer
-            The sizes of the feature vectors. 
+            The sizes of the feature vectors.
             (Referred to as 'Local dimension' in the paper)
             Try to keep this low (if possible), as the optimisation algorithm scales
             as (d_feature)^3.
@@ -33,7 +33,7 @@ class SimpleMPS(MPS):
             with tf.name_scope('calculate_C1'):
                 C1 = tf.matmul(feature[0], self.nodes[0])
                 for i in range(1, self._special_node_loc):
-                    node = self.nodes[i] 
+                    node = self.nodes[i]
                     contracted_node = tf.einsum('tn,nij->tij', feature[i], node)
                     C1 = tf.einsum('ti,tij->tj', C1, contracted_node)
 
@@ -45,8 +45,8 @@ class SimpleMPS(MPS):
                     C2 = tf.einsum('tij,tj->ti', contracted_node, C2)
 
             special_node = self.nodes[self._special_node_loc]
-            contracted_node = tf.einsum('tn,lnij->tlij', 
-                                        feature[self._special_node_loc], 
+            contracted_node = tf.einsum('tn,lnij->tlij',
+                                        feature[self._special_node_loc],
                                         special_node)
             C2 = tf.einsum('tlij,tj->tli', contracted_node, C2)
             f = tf.einsum('ti,tli->tl', C1, C2)
@@ -86,11 +86,11 @@ class SimpleMPS(MPS):
 
         return penalty
 
-       
+
 
     def cost(self, f, label):
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=f)) #tf.reduce_mean((f - label)**2)
-        reg_penalty = self.regularisation() 
+        reg_penalty = self.regularisation()
         return loss + reg_penalty
 
     def _setup_nodes(self):
@@ -107,9 +107,9 @@ class SimpleMPS(MPS):
                     self.nodes.append(self._make_special_node(i))
                 else:
                     self.nodes.append(self._make_middle_node(i))
-                                                                   
+
             self.nodes.append(self._make_end_vector())
-    
+
 
     def _make_start_vector(self):
         """
@@ -128,20 +128,20 @@ class SimpleMPS(MPS):
         """
 
         end_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
-        end_vector[0, 0:self.d_output] = 1 
-        end_vector[0, self.d_output:] = self.bias 
-        end_vector[1:, self.d_output:] = self.weight[-1] 
+        end_vector[0, 0:self.d_output] = 1
+        end_vector[0, self.d_output:] = self.bias
+        end_vector[1:, self.d_output:] = self.weight[-1]
 
         return tf.Variable(end_vector, dtype=tf.float32, trainable=True, name='end')
 
     def _make_special_node(self, index):
         def _make_matrix(i):
             m = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
-            m[0, i, i] = 1 
+            m[0, i, i] = 1
             m[0, i+self.d_output, i+self.d_output] = 1
             m[1:, i+self.d_output, i] = self.weight[index, :, i]
 
-            return m 
+            return m
 
         stacked = [_make_matrix(i) for i in range(self.d_output)]
         node = np.stack(stacked, axis=0)
@@ -175,7 +175,7 @@ if __name__ == '__main__':
     permuted = False
 
     data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted = permuted)
-    
+
     # Initialise the model
     network = SimpleMPS(d_feature, d_output, input_size)
     network.prepare(data_source)
