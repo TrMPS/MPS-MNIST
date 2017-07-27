@@ -528,12 +528,12 @@ class MPSOptimizer(object):
         with tf.name_scope("tensordotf"):
             # f = tf.einsum('lmnik,tmnik->tl', bond, C)
             f = tf.tensordot(C, bond, [[1, 2, 3, 4], [1, 2, 3, 4]])
-            f = tf.nn.softmax(f)
+            h = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
             cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f))
             # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
-        return f, cost
+        return h, cost
 
     def _calculate_hessian(self, f, C):
         with tf.name_scope('hessian'):
