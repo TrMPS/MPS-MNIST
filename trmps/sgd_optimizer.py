@@ -74,7 +74,7 @@ if __name__ == '__main__':
     rate_of_change = 0.001
     feature_reg=1.1
     reg=0.1/batch_size
-    n_step = 600
+    n_step = 1200
 
     data_source = MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
 

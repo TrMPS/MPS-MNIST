@@ -21,7 +21,7 @@ rate_of_change = 10 ** (-6)
 logging_enabled = False
 verbose = 398
 
-cutoff = 100 # change this next
+cutoff = 100 
 n_step = 6
 
 data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)

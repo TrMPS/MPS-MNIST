@@ -69,7 +69,7 @@ class MPSOptimizer(object):
                     initial_weights=weights)
     """
 
-    def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=1000, reg=0.001, min_singular_value=10 ** (-8), verbose=0):
+    def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=1000, reg=0.001, min_singular_value=10 ** (-4), verbose=0):
 
         """
         Initialises the optimiser.
@@ -418,8 +418,7 @@ class MPSOptimizer(object):
             updated_bond = self._update_bond(bond, C)
 
             # Decompose the bond
-            aj, aj1 = self._bond_decomposition(updated_bond, self.max_size, 
-                                               min_singular_value=self.min_singular_value)
+            aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
             aj = tf.transpose(aj, perm=[0, 2, 1])
             aj1 = tf.transpose(aj1, perm=[1, 2, 3, 0])
 
@@ -604,7 +603,7 @@ class MPSOptimizer(object):
         index += 1
         return (index, old_nodes, new_nodes)
 
-    def _bond_decomposition(self, bond, max_size, min_size=3, min_singular_value=10**(-8)):
+    def _bond_decomposition(self, bond, max_size, min_size=3):
         """
 
         :param self:
@@ -632,7 +631,7 @@ class MPSOptimizer(object):
             filtered_u = utils.check_nan(u, 'u', replace_nan=True)
             filtered_v = utils.check_nan(v, 'v', replace_nan=True)
 
-            filtered_s = tf.boolean_mask(s, tf.greater(s, min_singular_value))
+            filtered_s = tf.boolean_mask(s, tf.greater(s, self.min_singular_value))
             s_size = tf.size(filtered_s)
             # s_size = tf.Print(s_size, [s_size], message='bond dim: ')
 
