@@ -641,6 +641,8 @@ class MPSOptimizer(object):
             case3 = lambda: s_size
             m = tf.case({tf.less(s_size, min_size): case1, tf.greater(s_size, max_size): case2}, default=case3,
                         exclusive=True)
+            if self.verbose != 0:
+                m = tf.Print(m, [m, s[m-5:m]], first_n=self.verbose, summarize=5, message='bond: ')
 
             # make s into a matrix
             s_mat = tf.diag(s[0:m])

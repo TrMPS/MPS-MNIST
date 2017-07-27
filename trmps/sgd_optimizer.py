@@ -45,7 +45,7 @@ class SGDOptimizer(object):
                     print('step {}, accuracy {}'.format(i, train_acc))
                     print('step {}, training cost {}'.format(i, train_cost))
                     print(train_conf_mat)
-                    print('each step takes {}s on average'.format(end-start))
+                    print('each step takes {}s on average'.format((end-start)/100))
                     start = time.time()
 
             test_feature, test_label = data_source.test_data
@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
     rate_of_change = 0.001
     feature_reg=1.1
-    reg=1/batch_size
+    reg=0.1/batch_size
     n_step = 600
 
     data_source = MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
