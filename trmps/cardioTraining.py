@@ -10,16 +10,16 @@ batch_size = 5000
 permuted = False
 shuffled = False
 input_size = 400
-lin_reg_iterations = 10000
+lin_reg_iterations = 10
 special_node_loc = 200
 
-max_size = 10
+max_size = 23
 
-rate_of_change = 10**(1)
+rate_of_change = 10**(-7)
 logging_enabled = False
-verbose = -10
+verbose = 0
 
-cutoff = 10**(-5)  # change this next
+cutoff = 10**(-1)  # change this next
 n_step = 300
 
 data_source = cardiopreprocessing.cardioDatasource(shuffled=shuffled)
@@ -31,10 +31,10 @@ weights = None
 
 # DMRG optimizer
 
-# with open('weights_sgd', 'rb') as fp:
-#     weights = pickle.load(fp)
-#     if len(weights) != input_size:
-#         weights = None
+with open('weights', 'rb') as fp:
+    weights = pickle.load(fp)
+    if len(weights) != input_size:
+        weights = None
 
 network = MPS(d_feature, d_output, input_size,
               special_node_loc=special_node_loc)
