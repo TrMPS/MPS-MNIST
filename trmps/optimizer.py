@@ -141,9 +141,6 @@ class MPSOptimizer(object):
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-        # increment = (1/10) ** (1/(n_step))
-        increment = 1.
-
         self.feed_dict = None
         self.test = None
         test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
@@ -177,7 +174,7 @@ class MPSOptimizer(object):
                                                                                                     options=run_options,
                                                                                                     run_metadata=run_metadata)
 
-                rate_of_change = rate_of_change * increment
+                rate_of_change = rate_of_change / np.sqrt(i)
 
                 if _logging_enabled:
                     # writer.add_run_metadata(run_metadata, 'step' + str(i))
@@ -650,7 +647,7 @@ class MPSOptimizer(object):
             r_dim = dims[2] * dims[3] * dims[4]
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
-            filtered_u = utils.check_nan(u, 'u', replace_nan=True)
+            filtered_u = utilsp.check_nan(u, 'u', replace_nan=True)
             filtered_v = utils.check_nan(v, 'v', replace_nan=True)
 
             filtered_s = tf.boolean_mask(s, tf.greater(s, self.min_singular_value))
@@ -662,8 +659,8 @@ class MPSOptimizer(object):
             case3 = lambda: s_size
             m = tf.case({tf.less(s_size, min_size): case1, tf.greater(s_size, max_size): case2}, default=case3,
                         exclusive=True)
-            if self.verbose != 0:
-                m = tf.Print(m, [m, s[m-5:m]], first_n=self.verbose, summarize=5, message='bond: ')
+            # if self.verbose != 0:
+            #     m = tf.Print(m, [m, s[m-5:m]], first_n=self.verbose, summarize=5, message='bond: ')
 
             # make s into a matrix
             s_mat = tf.diag(s[0:m])
