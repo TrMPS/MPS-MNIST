@@ -105,7 +105,7 @@ class MPS(object):
         # else:
         #     self._special_node_loc = special_node_loc
 
-    def prepare(self, data_source, iterations=1000, learning_rate=0.05):
+    def prepare(self, data_source=None, iterations=1000, learning_rate=0.05):
         """
         Prepares the MPS using linear regression. This can be thought of as pre-training the network,
         and dramatically shortens the required training time. This function must be called immediately
@@ -118,7 +118,13 @@ class MPS(object):
             The learning rate to use when training with linear regression
         :return: nothing
         """
-        self._lin_reg(data_source, iterations, learning_rate)
+        if data_source is not None:
+            self._lin_reg(data_source, iterations, learning_rate)
+        else:
+            self.weight = np.random.rand(self.input_size, self.d_feature - 1, self.d_output)
+            self.bias = np.random.rand(self.d_output)
+            if self._special_node_loc is None:
+                self._special_node_loc = int(np.floor(self.input_size / 2))
         self._setup_nodes()
 
     def test(self, test_feature, test_label):

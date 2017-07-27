@@ -13,14 +13,14 @@ special_node_loc = 50
 
 max_size = 15
 
-rate_of_change = 10**(-9)
+rate_of_change = 10**(-8)
 logging_enabled = False
 
-cutoff = 10 # change this next
-n_step = 10
-verbose = -10
+cutoff = 10  # change this next
+n_step = 300
+verbose = 0
 
-data_source = ap.activityDatasource(shuffled = shuffled)
+data_source = ap.activityDatasource(shuffled=shuffled)
 batch_size = data_source.num_train_samples
 
 print(data_source.num_train_samples, data_source.num_test_samples)
@@ -30,7 +30,7 @@ print(data_source.num_train_samples, data_source.num_test_samples)
 weights = None
 
 network = MPS(d_feature, d_output, input_size, special_node_loc=special_node_loc)
-network.prepare(data_source, lin_reg_iterations)
+network.prepare(data_source=None, iterations=lin_reg_iterations)
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)
 optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff,
