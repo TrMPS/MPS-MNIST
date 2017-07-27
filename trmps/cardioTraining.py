@@ -10,8 +10,9 @@ batch_size = 5000
 permuted = False
 shuffled = False
 input_size = 400
-lin_reg_iterations = 10
+lin_reg_iterations = 1000
 special_node_loc = 200
+reg = 0.1
 
 max_size = 23
 
@@ -31,29 +32,30 @@ weights = None
 
 # DMRG optimizer
 
-with open('weights', 'rb') as fp:
-    weights = pickle.load(fp)
-    if len(weights) != input_size:
-        weights = None
+# with open('weights_sgd', 'rb') as fp:
+#     weights = pickle.load(fp)
+#     if len(weights) != input_size:
+#         weights = None
 
-network = MPS(d_feature, d_output, input_size,
-              special_node_loc=special_node_loc)
-network.prepare(data_source, lin_reg_iterations)
-optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff,
-                         verbose=verbose)
-optimizer.train(data_source, batch_size, n_step,
-                rate_of_change=rate_of_change,
-                _logging_enabled=logging_enabled,
-                initial_weights=weights)
+# network = MPS(d_feature, d_output, input_size,
+#               special_node_loc=special_node_loc)
+# network.prepare(data_source, lin_reg_iterations)
+# optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff,
+#                          verbose=verbose, reg=reg)
+# optimizer.train(data_source, batch_size, n_step,
+#                 rate_of_change=rate_of_change,
+#                 _logging_enabled=logging_enabled,
+#                 initial_weights=weights)
 
 # SGD optimizer
 
-# batch_size = int(data_source.num_train_samples/10)
-# network = SimpleMPS(d_feature, d_output, input_size)
-# network.prepare(data_source, lin_reg_iterations)
-# optimizer = SGDOptimizer(network)
-# optimizer.train(data_source, batch_size, n_step,
-#                 rate_of_change=rate_of_change)
+batch_size = int(data_source.num_train_samples / 10)
+network = SimpleMPS(d_feature, d_output, input_size,
+                    special_node_loc=special_node_loc, reg=reg)
+network.prepare(data_source, lin_reg_iterations)
+optimizer = SGDOptimizer(network)
+optimizer.train(data_source, batch_size, n_step,
+                rate_of_change=rate_of_change)
 
 # Testing
 

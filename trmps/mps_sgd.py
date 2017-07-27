@@ -6,7 +6,7 @@ import MNISTpreprocessing
 
 class SimpleMPS(MPS):
 
-    def __init__(self, d_feature, d_output, input_size, feature_reg=1.1, reg=0.001):
+    def __init__(self, d_feature, d_output, input_size, feature_reg=1.1, reg=0.001, special_node_loc=None):
         """
         Initialises the MPS. Currently, the prepare method must be called immediately
         after this before anything else can be done.
@@ -25,7 +25,7 @@ class SimpleMPS(MPS):
         self.feature_reg = feature_reg
         self.reg = reg
 
-        super().__init__(d_feature, d_output, input_size)
+        super().__init__(d_feature, d_output, input_size, special_node_loc=special_node_loc)
 
     def predict(self, feature):
         batch_size = tf.shape(feature)[1]
@@ -100,7 +100,7 @@ class SimpleMPS(MPS):
         with tf.name_scope("MPSnodes"):
             self.start_node = self._make_start_node()
             self.end_node = self._make_end_node()
-            self.nodes= []    
+            self.nodes= []
 
             for i in range(0, self.input_size):
                 if i == self._special_node_loc:
@@ -108,7 +108,7 @@ class SimpleMPS(MPS):
                 else:
                     self.nodes.append(self._make_middle_node(i))
 
-            
+
 
 
 if __name__ == '__main__':

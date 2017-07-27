@@ -318,7 +318,7 @@ class MPS(object):
         """
         start_vector = np.zeros([1, self.d_matrix], dtype=np.float32)
         start_vector[0, self.d_output:] = 1
-        return tf.Variable(start_vector, dtype=tf.float32, 
+        return tf.Variable(start_vector, dtype=tf.float32,
                            trainable=False, name='start_node')
 
     def _make_end_node(self):
@@ -330,7 +330,7 @@ class MPS(object):
         end_vector = np.zeros([1, self.d_matrix], dtype=np.float32)
         end_vector[0, 0:self.d_output] = 1
 
-        return tf.Variable(end_vector, dtype=tf.float32, 
+        return tf.Variable(end_vector, dtype=tf.float32,
                            trainable=False, name='end_node')
 
     def _make_special_node(self, index):
@@ -346,7 +346,7 @@ class MPS(object):
         stacked = [_make_matrix(i) for i in range(self.d_output)]
         node = np.stack(stacked, axis=0)
 
-        return tf.Variable(node, dtype=tf.float32, 
+        return tf.Variable(node, dtype=tf.float32,
                            trainable=True, name='special')
 
 
