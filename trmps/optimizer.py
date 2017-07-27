@@ -478,7 +478,7 @@ class MPSOptimizer(object):
             updated_nodes = updated_nodes.write(counter, aj)
 
             with tf.name_scope("tensordotcontracted_aj"):
-                #contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
+                # contracted_aj = tf.einsum('mij,tm->tij', aj, self._feature[counter])
                 contracted_aj = tf.tensordot(self._feature[counter], aj, [[1], [0]])
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
@@ -546,11 +546,10 @@ class MPSOptimizer(object):
         # calculate the cost with the updated bond
         f1, cost1 = self._get_f_and_cost(updated_bond, C)
         if self.verbose != 0:
-            cost1 = tf.Print(cost1, [cost, cost1], first_n=self.verbose,
-                             message='cost and updated cost')
-
+            cost1 = tf.Print(cost1, [cost, cost1], first_n=self.verbose, message='cost & updated cost')
         cond_change_bond = tf.less(cost1, cost)
-        updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond), false_fn=(lambda: bond))
+        updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
+                               false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
 
         return updated_bond
 
