@@ -13,11 +13,11 @@ if shrink:
     input_size = 196
 special_node_loc = 91
 
-max_size = 50
-min_singular_value = 0.01
+max_size = 20
+min_singular_value = 0.05
 reg = 0.01
 
-rate_of_change = 10 ** (-6)
+rate_of_change = 10 ** (-3)
 logging_enabled = False
 verbose = 398
 
@@ -28,12 +28,12 @@ data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink, permuted=permute
 
 # Initialise the model
 
-with open('weights_sgd', 'rb') as fp:
-    weights = pickle.load(fp)
-    if len(weights) != input_size:
-        weights = None
+# with open('weights_sgd', 'rb') as fp:
+#     weights = pickle.load(fp)
+#     if len(weights) != input_size:
+#         weights = None
 
-# weights=None
+weights=None
 network = MPS(d_feature, d_output, input_size, special_node_loc)
 network.prepare(data_source)
 optimizer = MPSOptimizer(network, max_size, None, 

@@ -238,7 +238,7 @@ class MPSOptimizer(object):
             _, _, self.C1s = tf.while_loop(cond=cond, body=self._find_C1, loop_vars=[0, C1, C1s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                              tf.TensorShape(None)],
-                                           parallel_iterations=10,
+                                           parallel_iterations=5,
                                            name="initialFindC1")
 
             C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=False, clear_after_read=False)
@@ -248,7 +248,7 @@ class MPSOptimizer(object):
             _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[self.MPS.input_size-1, C2, C2s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                              tf.TensorShape(None)], 
-                                           parallel_iterations=10,
+                                           parallel_iterations=5,
                                            name="initialFindC2")
 
     def _find_C1(self, counter, C1, C1s):
@@ -357,7 +357,7 @@ class MPSOptimizer(object):
         _, self.C2s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_left,
                                                             loop_vars=wrapped,
                                                             shape_invariants=shape_invariants,
-                                                            parallel_iterations=10,
+                                                            parallel_iterations=5,
                                                             name="leftSweep")
         self.updated_nodes = self.updated_nodes.write(0, n1)
         return self.updated_nodes
@@ -380,7 +380,7 @@ class MPSOptimizer(object):
         _, self.C1s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_right,
                                                             loop_vars=wrapped,
                                                             shape_invariants=shape_invariants,
-                                                            parallel_iterations=10, name="rightSweep")
+                                                            parallel_iterations=5, name="rightSweep")
         self.updated_nodes = self.updated_nodes.write(to_index, n1)
         return self.updated_nodes
 
@@ -523,21 +523,34 @@ class MPSOptimizer(object):
         with tf.name_scope("tensordotf"):
             # f = tf.einsum('lmnik,tmnik->tl', bond, C)
             f = tf.tensordot(C, bond, [[1, 2, 3, 4], [1, 2, 3, 4]])
-            h = tf.nn.softmax(f)
+            f = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
             cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f))
             # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
-        return h, cost
+        return f, cost
+
+    def _calculate_hessian(self, f, C):
+        with tf.name_scope('hessian'):
+            d1 = tf.shape(C)[-2]
+            d2 = tf.shape(C)[-1]
+            f_part = tf.reshape(f * (1 - f), [self.batch_size, self.MPS.d_output, 1, 1, 1, 1])
+            C_sq = tf.reshape(C * C, [self.batch_size, 1, self.MPS.d_feature, self.MPS.d_feature, d1, d2])
+            hessian = tf.reduce_sum(f_part * C_sq, axis=0) + 2 * self.reg
+
+            return hessian 
+
 
     def _update_bond(self, bond, C):
         # obtain the original cost
         f, cost = self._get_f_and_cost(bond, C)
+        h = self._calculate_hessian(f, C)
 
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):
             # gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
-            gradient = tf.tensordot(self._label - f, C, [[0], [0]]) + 2 * self.reg * bond
+            gradient = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
+            gradient = gradient / h 
         label_bond = self.rate_of_change * gradient
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
         updated_bond = tf.add(bond, label_bond)
