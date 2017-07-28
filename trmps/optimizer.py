@@ -1,5 +1,6 @@
 import tensorflow as tf
 import time
+import numpy as np
 from mps import MPS
 import pickle
 import utils
@@ -145,6 +146,7 @@ class MPSOptimizer(object):
         self.test = None
         test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
         self.test = initial_weights
+        initial_lr = rate_of_change
 
         train_cost, train_accuracy, train_confusion, _ = self._test_step(self._feature, self._label)
 
@@ -160,6 +162,8 @@ class MPSOptimizer(object):
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 start = time.time()
+                rate_of_change = initial_lr / np.sqrt(i+1)
+                print(rate_of_change)
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
 
                 self.feed_dict = self.MPS.create_feed_dict(self.test)
@@ -173,8 +177,6 @@ class MPSOptimizer(object):
                                                                                                     feed_dict=self.feed_dict,
                                                                                                     options=run_options,
                                                                                                     run_metadata=run_metadata)
-
-                rate_of_change = rate_of_change / np.sqrt(i)
 
                 if _logging_enabled:
                     # writer.add_run_metadata(run_metadata, 'step' + str(i))
