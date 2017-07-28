@@ -647,7 +647,7 @@ class MPSOptimizer(object):
             r_dim = dims[2] * dims[3] * dims[4]
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
-            filtered_u = utilsp.check_nan(u, 'u', replace_nan=True)
+            filtered_u = utils.check_nan(u, 'u', replace_nan=True)
             filtered_v = utils.check_nan(v, 'v', replace_nan=True)
 
             filtered_s = tf.boolean_mask(s, tf.greater(s, self.min_singular_value))

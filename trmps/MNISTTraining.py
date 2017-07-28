@@ -4,7 +4,7 @@ import MNISTpreprocessing
 # Model parameters
 d_feature = 2
 d_output = 10
-batch_size = 5000
+batch_size = 10000
 permuted = False
 shuffled = True
 shrink = True
@@ -15,9 +15,9 @@ special_node_loc = 91
 
 max_size = 30
 min_singular_value = 0.05
-reg = 0.01
+reg = 0.001
 
-rate_of_change = 10 ** (-3)
+rate_of_change = 10 ** (-4)
 lr_reg = 0.99
 logging_enabled = False
 verbose = 398
@@ -36,7 +36,7 @@ data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink, permuted=permute
 
 weights=None
 network = MPS(d_feature, d_output, input_size, special_node_loc)
-network.prepare(data_source)
+network.prepare(data_source=None)
 optimizer = MPSOptimizer(network, max_size, None, 
                          cutoff=cutoff, reg=reg, lr_reg=lr_reg,
                          verbose=verbose, 
