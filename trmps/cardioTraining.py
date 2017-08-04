@@ -16,7 +16,7 @@ reg = 0.1
 
 max_size = 23
 
-rate_of_change = 10**(-9)
+rate_of_change = 10**(-7)
 logging_enabled = False
 verbose = 0
 
@@ -39,7 +39,8 @@ with open('weights_sgd', 'rb') as fp:
 
 network = MPS(d_feature, d_output, input_size,
               special_node_loc=special_node_loc)
-network.prepare(data_source, lin_reg_iterations)
+network.prepare()
+# network.prepare(data_source, lin_reg_iterations)
 optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff,
                          verbose=verbose, reg=reg)
 optimizer.train(data_source, batch_size, n_step,
