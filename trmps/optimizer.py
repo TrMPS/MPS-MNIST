@@ -120,7 +120,7 @@ class MPSOptimizer(object):
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-        # increment = (1/10) ** (n_step)
+        # increment = increment = (1/10) ** (1/(n_step))
         increment = 1.
 
         self.feed_dict = None
