@@ -6,26 +6,6 @@ import utils
 from tensorflow.python.client import timeline
 
 
-def list_from(tensorArray, length):
-    """
-    list_from is a helper function that produces a list from a tensorArray.
-    It is used to extract the results of training in MPSOptimizer.
-    :param tensorArray: tensorflow TensorArray
-        The tensor array that is to be converted to a list
-    :param length: integer
-        The length of the TensorArray/the list that is to be created
-    :return: list of tensorflow Tensors
-        A list containing all the values of the TensorArray as Tensors.
-        This has to then be evaluated to get actual values.
-    """
-    arr = tensorArray
-    result_list = []
-    with tf.name_scope("createlist"):
-        for i in range(length):
-            result_list.append(arr.read(i))
-    return result_list
-
-
 class MPSOptimizer(object):
     """
     MPSOptimizer is used to optimize the MPS class for a dataset.
@@ -140,12 +120,12 @@ class MPSOptimizer(object):
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-        # increment = (1/10) ** (1/(n_step))
+        # increment = (1/10) ** (n_step)
         increment = 1.
 
         self.feed_dict = None
         self.test = None
-        test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
+        test_result = utils.list_from(self.updated_nodes, length=self.MPS.input_size)
         self.test = initial_weights
 
         train_cost, train_accuracy, train_confusion, _ = self._test_step(self._feature, self._label)
@@ -226,11 +206,11 @@ class MPSOptimizer(object):
         feature = self._feature
         nodes = self.MPS.nodes
         special_loc = self.MPS._special_node_loc
-        batch_size = tf.shape(feature)[1] 
+        batch_size = tf.shape(feature)[1]
 
         with tf.name_scope("setup_optimization"):
-            
-            
+
+
             C1 = tf.tile(self.MPS.start_node, [batch_size, 1])
             C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=False, clear_after_read=False)
             C1s = C1s.write(0, C1)
@@ -247,7 +227,7 @@ class MPSOptimizer(object):
             cond = lambda counter, *args: tf.greater(counter, special_loc+1)
             _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[self.MPS.input_size-1, C2, C2s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
-                                                             tf.TensorShape(None)], 
+                                                             tf.TensorShape(None)],
                                            parallel_iterations=10,
                                            name="initialFindC2")
 
@@ -291,7 +271,7 @@ class MPSOptimizer(object):
         contracted_node2 = tf.tensordot(self._feature[counter], node2, [[1], [0]])
         new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
         C2s = C2s.write(counter-1, new_C2)
-        counter = counter - 1 
+        counter = counter - 1
         return [counter, new_C2, C2s]
 
     def train_step(self):
