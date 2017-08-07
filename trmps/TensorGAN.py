@@ -4,4 +4,4 @@ import tensorflow as tensorflow
 
 class GeneratorMPS(MPS):
     def create(seed):
-        return (super().predict(seed), tf.ones([]) #ACTUALLY IMPLEMENT
+        return super().predict(seed)
