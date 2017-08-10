@@ -13,7 +13,7 @@ special_node_loc = 50
 
 max_size = 15
 
-rate_of_change = 10**(-5)
+rate_of_change = 5*10**(-5)
 lr_reg = 0.0
 reg = 0.001
 logging_enabled = False
@@ -23,7 +23,7 @@ n_step = 300
 verbose = 0
 
 data_source = ap.activityDatasource(shuffled=shuffled)
-batch_size = data_source.num_train_samples
+# batch_size = data_source.num_train_samples
 
 print(data_source.num_train_samples, data_source.num_test_samples)
 

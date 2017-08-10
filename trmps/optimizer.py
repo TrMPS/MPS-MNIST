@@ -70,7 +70,9 @@ class MPSOptimizer(object):
                     initial_weights=weights)
     """
 
-    def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=1000, reg=0.001, lr_reg=0.99, min_singular_value=10 ** (-4), verbose=0):
+    def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=1000,
+                 reg=0.001, lr_reg=0.99, min_singular_value=10 ** (-4), verbose=0,
+                 armijo_coeff=10**(-4)):
 
         """
         Initialises the optimiser.
@@ -86,9 +88,11 @@ class MPSOptimizer(object):
         """
         self.MPS = MPSNetwork
         self.rate_of_change = tf.placeholder(tf.float32, shape=[])
+        self.rates_of_change = self.rate_of_change * tf.ones([self.MPS.input_size])
         self.reg = reg
         self.lr_reg=lr_reg
         self.max_size = max_size
+        self.armijo_coeff = armijo_coeff
         self.grad_func = grad_func
         self.cutoff = cutoff
         self.min_singular_value = min_singular_value
@@ -238,7 +242,7 @@ class MPSOptimizer(object):
             _, _, self.C1s = tf.while_loop(cond=cond, body=self._find_C1, loop_vars=[0, C1, C1s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                              tf.TensorShape(None)],
-                                           parallel_iterations=5,
+                                           parallel_iterations=10,
                                            name="initialFindC1")
 
             C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=False, clear_after_read=False)
@@ -248,7 +252,7 @@ class MPSOptimizer(object):
             _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[self.MPS.input_size-1, C2, C2s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                              tf.TensorShape(None)],
-                                           parallel_iterations=5,
+                                           parallel_iterations=10,
                                            name="initialFindC2")
 
     def _find_C1(self, counter, C1, C1s):
@@ -359,7 +363,7 @@ class MPSOptimizer(object):
         _, self.acc_lr_reg, self.C2s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_left,
                                                             loop_vars=wrapped,
                                                             shape_invariants=shape_invariants,
-                                                            parallel_iterations=5,
+                                                            parallel_iterations=10,
                                                             name="leftSweep")
         self.updated_nodes = self.updated_nodes.write(0, n1)
         return self.updated_nodes
@@ -383,7 +387,7 @@ class MPSOptimizer(object):
         _, self.acc_lr_reg, self.C1s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_right,
                                                             loop_vars=wrapped,
                                                             shape_invariants=shape_invariants,
-                                                            parallel_iterations=5, name="rightSweep")
+                                                            parallel_iterations=10, name="rightSweep")
         self.updated_nodes = self.updated_nodes.write(to_index, n1)
         return self.updated_nodes
 
@@ -418,7 +422,7 @@ class MPSOptimizer(object):
             C = self._calculate_C(C2, C1, input2, input1)
 
             # update the bond
-            updated_bond = self._update_bond(bond, C, acc_lr_reg)
+            updated_bond = self._update_bond(bond, C, acc_lr_reg, counter)
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
@@ -473,7 +477,7 @@ class MPSOptimizer(object):
             C = self._calculate_C(C1, C2, input1, input2)
 
             # Update the bond
-            updated_bond = self._update_bond(bond, C, acc_lr_reg)
+            updated_bond = self._update_bond(bond, C, acc_lr_reg, counter)
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
@@ -547,30 +551,54 @@ class MPSOptimizer(object):
 
             return hessian
 
+    def _armijo_condition(self, learning_rate, cost, updated_cost, direction_of_change_dot_change):
+        rhs = cost - self.armijo_coeff * learning_rate * direction_of_change_dot_change
+        rhs = tf.Print(rhs, [updated_cost, rhs, tf.less(updated_cost, rhs)], message = "armijo")
+        return tf.less(updated_cost, rhs)
 
-    def _update_bond(self, bond, C, acc_lr_reg):
+    def _armijo_cond_loop_fn(self, flag, learning_rate, cost,
+                             updated_cost, direction_of_change_dot_change, counter, bond, C, gradient):
+        updated_bond = tf.add(bond, learning_rate * gradient)
+        _, updated_cost = self._get_f_and_cost(updated_bond, C)
+        _a_cond = self._armijo_condition(learning_rate, cost, updated_cost, direction_of_change_dot_change)
+        _counter_cond = tf.greater(counter, 10)
+        flag = tf.logical_or(_a_cond, _counter_cond)
+        learning_rate = tf.cond(flag, lambda: learning_rate, lambda: learning_rate * 0.5)
+        bond = tf.cond(flag, lambda: updated_bond, lambda: bond)
+        flag = tf.logical_not(flag)
+        counter += 1
+        # flag = tf.Print(flag, [flag, _a_cond, _counter_cond, tf.shape(bond)])
+        return flag, learning_rate, cost, updated_cost, direction_of_change_dot_change, counter, bond, C, gradient
+
+    def _update_bond(self, bond, C, acc_lr_reg, counter):
         # obtain the original cost
+        # bond = tf.Print(bond, [counter, tf.shape(bond)])
         f, cost = self._get_f_and_cost(bond, C)
         h = self._calculate_hessian(f, C)
 
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):
             # gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
-            gradient = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
-            gradient = gradient / h
-        lr = self.rate_of_change / tf.sqrt(1 - acc_lr_reg)
-        label_bond = lr * gradient
-        label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
-        updated_bond = tf.add(bond, label_bond)
-
+            direction_of_change = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
+            gradient = direction_of_change / h
+        direction_of_change_dot_change = tf.tensordot(direction_of_change, gradient,
+                                                      [[0, 1, 2, 3, 4],[0, 1, 2, 3, 4]])
+        lr = self.rates_of_change[counter] # / tf.sqrt(1 - acc_lr_reg)
+        # label_bond = lr * gradient
+        # label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
+        # updated_bond = tf.add(bond, label_bond)
+        cond = lambda f, *args: f
         # calculate the cost with the updated bond
-        f1, cost1 = self._get_f_and_cost(updated_bond, C)
+        # f1, cost1 = self._get_f_and_cost(updated_bond, C)
+        loop_vars = [True, lr, cost, 0.0, direction_of_change_dot_change, 0, bond, C, gradient]
+        _, lr, _, cost1, _, _, updated_bond, _, _ = tf.while_loop(cond=cond, body=self._armijo_cond_loop_fn,
+                                    loop_vars=loop_vars, name="lr_opt")
         if self.verbose != 0:
             cost1 = tf.Print(cost1, [cost, cost1], first_n=self.verbose, message='cost & updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
                                false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
-
+        # updated_bond = tf.Print(updated_bond, [tf.shape(updated_bond)], summarize = 10000)
         return updated_bond
 
     def _make_new_nodes(self, nodes):
