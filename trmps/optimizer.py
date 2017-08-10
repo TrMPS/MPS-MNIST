@@ -162,7 +162,7 @@ class MPSOptimizer(object):
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 start = time.time()
-                rate_of_change = initial_lr / np.sqrt(i+1)
+                # rate_of_change = initial_lr / np.sqrt(i+1)
                 print(rate_of_change)
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
 
@@ -226,11 +226,11 @@ class MPSOptimizer(object):
         feature = self._feature
         nodes = self.MPS.nodes
         special_loc = self.MPS._special_node_loc
-        batch_size = tf.shape(feature)[1] 
+        batch_size = tf.shape(feature)[1]
 
         with tf.name_scope("setup_optimization"):
-            
-            
+
+
             C1 = tf.tile(self.MPS.start_node, [batch_size, 1])
             C1s = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=False, clear_after_read=False)
             C1s = C1s.write(0, C1)
@@ -247,7 +247,7 @@ class MPSOptimizer(object):
             cond = lambda counter, *args: tf.greater(counter, special_loc+1)
             _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[self.MPS.input_size-1, C2, C2s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
-                                                             tf.TensorShape(None)], 
+                                                             tf.TensorShape(None)],
                                            parallel_iterations=5,
                                            name="initialFindC2")
 
@@ -291,7 +291,7 @@ class MPSOptimizer(object):
         contracted_node2 = tf.tensordot(self._feature[counter], node2, [[1], [0]])
         new_C2 = tf.einsum('tij,tj->ti', contracted_node2, prev_C2)
         C2s = C2s.write(counter-1, new_C2)
-        counter = counter - 1 
+        counter = counter - 1
         return [counter, new_C2, C2s]
 
     def train_step(self):
@@ -352,7 +352,7 @@ class MPSOptimizer(object):
         self.C2s = self.C2s.write(self.MPS.input_size - 1, C2)
         cond = lambda counter, *args: tf.greater(counter, 0)
         wrapped = [self.MPS.input_size-1, self.acc_lr_reg, self.C2s, self.updated_nodes, n1]
-        shape_invariants = [tf.TensorShape([]), tf.TensorShape([]), 
+        shape_invariants = [tf.TensorShape([]), tf.TensorShape([]),
                             tf.TensorShape(None), tf.TensorShape(None),
                             tf.TensorShape([None, None, None, None])]
 
@@ -377,7 +377,7 @@ class MPSOptimizer(object):
 
         cond = lambda counter, *args: tf.less(counter, to_index)
         wrapped = [from_index, self.acc_lr_reg, self.C1s, self.updated_nodes, n1]
-        shape_invariants = [tf.TensorShape([]), tf.TensorShape([]), 
+        shape_invariants = [tf.TensorShape([]), tf.TensorShape([]),
                             tf.TensorShape(None), tf.TensorShape(None),
                             tf.TensorShape([None, None, None, None])]
         _, self.acc_lr_reg, self.C1s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_right,
@@ -545,7 +545,7 @@ class MPSOptimizer(object):
             C_sq = tf.reshape(C * C, [self.batch_size, 1, self.MPS.d_feature, self.MPS.d_feature, d1, d2])
             hessian = tf.reduce_sum(f_part * C_sq, axis=0) + 2 * self.reg
 
-            return hessian 
+            return hessian
 
 
     def _update_bond(self, bond, C, acc_lr_reg):
@@ -557,7 +557,7 @@ class MPSOptimizer(object):
         with tf.name_scope("tensordotgradient"):
             # gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
             gradient = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
-            gradient = gradient / h 
+            gradient = gradient / h
         lr = self.rate_of_change / tf.sqrt(1 - acc_lr_reg)
         label_bond = lr * gradient
         label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
