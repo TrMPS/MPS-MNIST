@@ -15,10 +15,10 @@ special_node_loc = 91
 
 max_size = 30
 min_singular_value = 0.05
-reg = 0.001
+reg = 0.01
 
-rate_of_change = 10 ** (-4)
-lr_reg = 0.99
+rate_of_change = 5 * 10 ** (-4)
+lr_reg = 0.0
 logging_enabled = False
 verbose = 398
 
