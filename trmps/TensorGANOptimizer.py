@@ -9,6 +9,15 @@ class TensorGANOptimizer(object):
     def __init__(self, generator, discriminator, generator_max_size, discriminator_max_size):
         self.generator = generator
         self.discriminator = discriminator
+        self._true_features = tf.placeholder(tf.float32, shape=[self.discriminator.input_size, None, self.discriminator.d_feature])
+        self.batch_size = tf.shape(self._true_features)[1]
+        ones = tf.ones([self.batch_size, self.discriminator.d_output])
+        zeros = tf.zeros([self.batch_size, self.discriminator.d_output])
+        self._true_labels = tf.stack([ones, zeros], axis = 1)
+        self._true_labels = tf.Print(self._true_labels, [tf.shape(self._true_labels)], message="trueLabelsShape")
+        self._desired_labels = self._true_labels
+        self._false_labels = tf.stack([zeros, ones], axis = 1)
+        self._label = tf.stack([self._true_labels, self._false_labels])
         self.generator_optimizer = generatorOptimizer(generator, generator_max_size, self)
         self.discriminator_optimizer = MPSOptimizer(discriminator, discriminator_max_size)
         self.discriminator_rate = tf.placeholder(tf.float32, shape=[])
@@ -16,19 +25,12 @@ class TensorGANOptimizer(object):
         self.generator_optimizer.rate_of_change = self.generator_rate
         self.discriminator_optimizer.rate_of_change = self.discriminator_rate
         self.tree_made = False
-        self._true_features = tf.placeholder(tf.float32, shape=[self.discriminator.input_size, None, self.discriminator.d_feature])
-        self.batch_size = tf.shape(self._true_features)[1]
-        ones = tf.ones([self.batch_size, self.discriminator.d_output])
-        zeros = tf.zeros([self.batch_size, self.discriminator.d_output])
         # self._true_labels = tf.placeholder(tf.float32, shape=[None, self.discriminator.d_output])
-        self._true_labels = tf.stack([ones, zeros], axis = 1)
-        self._true_labels = tf.Print(self._true_labels, [tf.shape(self._true_labels)], message="trueLabelsShape")
-        self._false_labels = tf.stack([zeros, ones], axis = 1)
+        self.generator_optimizer._label = self._label
+        self.discriminator_optimizer._label = self._desired_labels
 
     def train_step(self):
         self.seed = tf.random_uniform([self.generator.input_size, self.batch_size, self.generator.d_feature])
-        self._desired_labels = self._true_labels
-        self._label = tf.stack([self._true_labels, self._false_labels])
         false_features = self.generator.create(self.seed)
         self.discriminator_features = tf.stack([self._true_features, false_features], axis = 1)
         self.discriminator_optimizer._feature = self.discriminator_features
