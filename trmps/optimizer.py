@@ -162,7 +162,7 @@ class MPSOptimizer(object):
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 start = time.time()
-                # rate_of_change = initial_lr / np.sqrt(i+1)
+                rate_of_change = initial_lr / np.sqrt(1-0.9^i)
                 print(rate_of_change)
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
 
@@ -680,3 +680,44 @@ class MPSOptimizer(object):
             # will do this in the update_right/update_left functions from now on as else transpose twice for udpate_left
 
         return (a_prime_j, a_prime_j1)
+
+    def _svd_decomp(self, bond_flattened, max_size):
+        s, u, v = tf.svd(bond_flattened)
+        filtered_u = utils.check_nan(u, 'u', replace_nan=True)
+        filtered_v = utils.check_nan(v, 'v', replace_nan=True)
+        filtered_s = tf.boolean_mask(s, tf.greater(s, self.min_singular_value))
+        s_size = tf.size(filtered_s)
+
+        m = tf.case({tf.less(s_size, min_size): case1, tf.greater(s_size, max_size): case2}, default=case3,
+                    exclusive=True)
+        s_mat = tf.diag(s[0:m])
+
+        A = filtered_u[:, 0:m]
+        v_cropped = tf.transpose(filtered_v[:, 0:m])
+        B = tf.matmul(s_mat, v_cropped)
+
+        if s_size > max_size:
+
+            # iteratively compute A 
+            body = lambda B: tf.matmul(A, bond_flattened)
+
+            tf.while_loop(cond=cond, body=self._update_right,
+                                                            loop_vars=wrapped,
+                                                            shape_invariants=shape_invariants,
+                                                            parallel_iterations=5, name="rightSweep")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
