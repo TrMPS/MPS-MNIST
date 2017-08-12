@@ -72,7 +72,7 @@ class MPSOptimizer(object):
 
     def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=1000,
                  reg=0.001, lr_reg=0.99, min_singular_value=10 ** (-4), verbose=0,
-                 armijo_coeff=10**(-4)):
+                 armijo_coeff=0.5):
 
         """
         Initialises the optimiser.
@@ -483,6 +483,10 @@ class MPSOptimizer(object):
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
             aj1 = tf.transpose(aj1, perm=[1, 2, 0, 3])
 
+            test_bond = tf.einsum('mij,lnjk->lmnik', aj, aj1)
+            _, cost = self._get_f_and_cost(test_bond, C)
+            counter = tf.Print(counter, [cost], message='cost after bond decomp')
+
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
 
@@ -551,24 +555,30 @@ class MPSOptimizer(object):
 
             return hessian
 
-    def _armijo_condition(self, learning_rate, cost, updated_cost, direction_of_change_dot_change):
-        rhs = cost - self.armijo_coeff * learning_rate * direction_of_change_dot_change
-        rhs = tf.Print(rhs, [updated_cost, rhs, tf.less(updated_cost, rhs)], message = "armijo")
-        return tf.less(updated_cost, rhs)
+    def _armijo_loop(self, bond, C, lr, cost, delta_bond, gradient_dot_change):
 
-    def _armijo_cond_loop_fn(self, flag, learning_rate, cost,
-                             updated_cost, direction_of_change_dot_change, counter, bond, C, gradient):
-        updated_bond = tf.add(bond, learning_rate * gradient)
-        _, updated_cost = self._get_f_and_cost(updated_bond, C)
-        _a_cond = self._armijo_condition(learning_rate, cost, updated_cost, direction_of_change_dot_change)
-        _counter_cond = tf.greater(counter, 10)
-        flag = tf.logical_or(_a_cond, _counter_cond)
-        learning_rate = tf.cond(flag, lambda: learning_rate, lambda: learning_rate * 0.5)
-        bond = tf.cond(flag, lambda: updated_bond, lambda: bond)
-        flag = tf.logical_not(flag)
-        counter += 1
-        # flag = tf.Print(flag, [flag, _a_cond, _counter_cond, tf.shape(bond)])
-        return flag, learning_rate, cost, updated_cost, direction_of_change_dot_change, counter, bond, C, gradient
+        def _armijo_condition(learning_rate, updated_bond):
+            _, updated_cost = self._get_f_and_cost(updated_bond, C)
+            target = cost - self.armijo_coeff * learning_rate * gradient_dot_change
+            if self.verbose != 0:
+                target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbose, 
+                                  message = "updated_cost, target and cost")
+            return tf.greater(updated_cost, target)
+
+        def _armijo_step(counter, armijo_cond, learning_rate, updated_bond): 
+            updated_bond = tf.add(bond, learning_rate * delta_bond)
+            armijo_cond = _armijo_condition(learning_rate, updated_bond)
+            updated_bond = tf.cond(armijo_cond, true_fn=lambda: bond, false_fn=lambda: updated_bond)
+            return counter+1, armijo_cond, learning_rate * 0.5, updated_bond
+
+        with tf.name_scope("armijo_loop"):
+            cond = lambda c, f, lr, b: tf.logical_and(f, tf.less(c, 10))
+            loop_vars = [1, True, lr, bond]
+            _, _, lr, updated_bond = tf.while_loop(cond=cond, body=_armijo_step, loop_vars=loop_vars, name="lr_opt")
+
+        return lr, updated_bond
+
+
 
     def _update_bond(self, bond, C, acc_lr_reg, counter):
         # obtain the original cost
@@ -578,27 +588,17 @@ class MPSOptimizer(object):
 
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):
-            # gradient = tf.einsum('tl,tmnik->lmnik', self._label-f, C)
-            direction_of_change = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
-            gradient = direction_of_change / h
-        direction_of_change_dot_change = tf.tensordot(direction_of_change, gradient,
-                                                      [[0, 1, 2, 3, 4],[0, 1, 2, 3, 4]])
-        lr = self.rates_of_change[counter] # / tf.sqrt(1 - acc_lr_reg)
-        # label_bond = lr * gradient
-        # label_bond = tf.clip_by_value(label_bond, -(self.cutoff), self.cutoff)
-        # updated_bond = tf.add(bond, label_bond)
-        cond = lambda f, *args: f
-        # calculate the cost with the updated bond
-        # f1, cost1 = self._get_f_and_cost(updated_bond, C)
-        loop_vars = [True, lr, cost, 0.0, direction_of_change_dot_change, 0, bond, C, gradient]
-        _, lr, _, cost1, _, _, updated_bond, _, _ = tf.while_loop(cond=cond, body=self._armijo_cond_loop_fn,
-                                    loop_vars=loop_vars, name="lr_opt")
-        if self.verbose != 0:
-            cost1 = tf.Print(cost1, [cost, cost1], first_n=self.verbose, message='cost & updated cost')
-        cond_change_bond = tf.less(cost1, cost)
-        updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
-                               false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
-        # updated_bond = tf.Print(updated_bond, [tf.shape(updated_bond)], summarize = 10000)
+            gradient = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
+            delta_bond = gradient / h
+        gradient_dot_change = tf.tensordot(gradient, 
+                                           delta_bond,
+                                           [[0, 1, 2, 3, 4],[0, 1, 2, 3, 4]])/tf.cast(self.batch_size, tf.float32)
+        lr = self.rates_of_change[counter]
+        lr, updated_bond = self._armijo_loop(bond, C, lr, cost, delta_bond, gradient_dot_change)
+
+        _, cost = self._get_f_and_cost(updated_bond, C)
+        updated_bond = tf.Print(updated_bond, [cost], message='updated cost')
+
         return updated_bond
 
     def _make_new_nodes(self, nodes):
