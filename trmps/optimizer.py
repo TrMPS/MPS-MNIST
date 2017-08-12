@@ -162,7 +162,7 @@ class MPSOptimizer(object):
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 start = time.time()
-                # rate_of_change = initial_lr / np.sqrt(i+1)
+                rate_of_change = initial_lr / np.sqrt(1-self.lr_reg**(i+1))
                 print(rate_of_change)
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
 
