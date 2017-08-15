@@ -4,7 +4,7 @@ import MNISTpreprocessing
 # Model parameters
 d_feature = 2
 d_output = 10
-batch_size = 1000
+batch_size = 2000
 permuted = False
 shuffled = True
 shrink = True
@@ -13,14 +13,17 @@ if shrink:
     input_size = 196
 special_node_loc = 91
 
+
 max_size = 30
 min_singular_value = 0.001
 reg = 0.01
 
 rate_of_change = 10 ** (-3)
 lr_reg = 0.0
+
 logging_enabled = False
-verbose = 398
+verbose = 20
+
 
 cutoff = 100
 n_step = 6
