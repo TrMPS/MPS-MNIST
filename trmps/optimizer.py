@@ -5,6 +5,7 @@ from mps import MPS
 import pickle
 import utils
 from tensorflow.python.client import timeline
+from parameterObjects import MPSOptimizerParameters, MPSTrainingParameters
 
 
 def list_from(tensorArray, length):
@@ -70,9 +71,7 @@ class MPSOptimizer(object):
                     initial_weights=weights)
     """
 
-    def __init__(self, MPSNetwork, max_size, grad_func=None, cutoff=1000,
-                 reg=0.001, lr_reg=0.99, min_singular_value=10 ** (-4), verbose=0,
-                 armijo_coeff=0.5):
+    def __init__(self, MPSNetwork, max_size, optional_parameters=MPSOptimizerParameters()):
 
         """
         Initialises the optimiser.
@@ -86,19 +85,19 @@ class MPSOptimizer(object):
         :param cutoff: float
             The cutoff value for the gradient. Anything above this is clipped off.
         """
+        self.parameters = optional_parameters
         self.MPS = MPSNetwork
         self.rate_of_change = tf.placeholder(tf.float32, shape=[])
-        self.reg = reg
-        self.lr_reg=lr_reg
+        self.reg = self.parameters.reg
+        self.lr_reg = self.parameters.lr_reg
         self.max_size = max_size
-        self.armijo_coeff = armijo_coeff
-        self.grad_func = grad_func
-        self.cutoff = cutoff
-        self.min_singular_value = min_singular_value
+        self.armijo_coeff = self.parameters.armijo_coeff
+        self.cutoff = self.parameters.cutoff
+        self.min_singular_value = self.parameters.min_singular_value
         self._feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
-        self.verbose = verbose
+        self.verbosity = self.parameters.verbosity
         _ = self.train_step()
 
         print("_____   Thomas the Tensor Train    . . . . . o o o o o",
@@ -108,7 +107,7 @@ class MPSOptimizer(object):
               "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
               " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
 
-    def train(self, data_source, batch_size, n_step, rate_of_change=1000, initial_weights=None, _logging_enabled=False):
+    def train(self, data_source, batch_size, n_step, optional_parameters=MPSTrainingParameters()):
         """
         Trains the network.
         If it is required to chain the training with other tensorflow steps, do not use this function.
@@ -141,15 +140,15 @@ class MPSOptimizer(object):
 
         run_options = []
         run_metadata = []
-        if _logging_enabled:
+        if optional_parameters._logging_enabled:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
         self.feed_dict = None
         self.test = None
         test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
-        self.test = initial_weights
-        initial_lr = rate_of_change
+        self.test = optional_parameters.initial_weights
+        initial_lr = optional_parameters.rate_of_change
 
         train_cost, train_accuracy, train_confusion, _ = self._test_step(self._feature, self._label)
 
@@ -161,7 +160,7 @@ class MPSOptimizer(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            if _logging_enabled:
+            if optional_parameters._logging_enabled:
                 writer = tf.summary.FileWriter("output", sess.graph)
             for i in range(n_step):
                 start = time.time()
@@ -182,7 +181,7 @@ class MPSOptimizer(object):
                                                                                                     options=run_options,
                                                                                                     run_metadata=run_metadata)
 
-                if _logging_enabled:
+                if optional_parameters._logging_enabled:
                     # writer.add_run_metadata(run_metadata, 'step' + str(i))
                     tl = timeline.Timeline(run_metadata.step_stats)
                     ctf = tl.generate_chrome_trace_format()
@@ -197,7 +196,7 @@ class MPSOptimizer(object):
                 print('f1 score: ', test_f1score)
                 print('confusion matrix: \n' + str(test_conf))
                 # print("prediction:" + str(prediction[0]))
-            if _logging_enabled:
+            if optional_parameters._logging_enabled:
                 writer.close()
 
     def _test_step(self, feature, label):
@@ -431,8 +430,8 @@ class MPSOptimizer(object):
             aj1 = tf.transpose(aj1, perm=[1, 2, 3, 0])
             test_bond = tf.einsum('mij,lnjk->lmnik', aj, aj1)
             _, cost = self._get_f_and_cost(test_bond, C)
-            if self.verbose != 0:
-                counter = tf.Print(counter, [cost], message='cost after bond decomp', first_n=self.verbose)
+            if self.verbosity != 0:
+                counter = tf.Print(counter, [cost], message='cost after bond decomp', first_n=self.verbosity)
 
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
@@ -490,8 +489,8 @@ class MPSOptimizer(object):
 
             test_bond = tf.einsum('mij,lnjk->lmnik', aj, aj1)
             _, cost = self._get_f_and_cost(test_bond, C)
-            if self.verbose != 0:
-                counter = tf.Print(counter, [cost], message='cost after bond decomp', first_n=self.verbose)
+            if self.verbosity != 0:
+                counter = tf.Print(counter, [cost], message='cost after bond decomp', first_n=self.verbosity)
 
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
@@ -566,8 +565,8 @@ class MPSOptimizer(object):
         def _armijo_condition(learning_rate, updated_bond):
             _, updated_cost = self._get_f_and_cost(updated_bond, C)
             target = cost - self.armijo_coeff * learning_rate * gradient_dot_change
-            if self.verbose != 0:
-                target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbose,
+            if self.verbosity != 0:
+                target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbosity,
                                   message = "updated_cost, target and cost")
             return tf.greater(updated_cost, target)
 
@@ -603,8 +602,8 @@ class MPSOptimizer(object):
         lr, updated_bond = self._armijo_loop(bond, C, lr, cost, delta_bond, gradient_dot_change)
 
         _, cost = self._get_f_and_cost(updated_bond, C)
-        if self.verbose != 0:
-            updated_bond = tf.Print(updated_bond, [cost], message='updated cost', first_n=self.verbose)
+        if self.verbosity != 0:
+            updated_bond = tf.Print(updated_bond, [cost], message='updated cost', first_n=self.verbosity)
 
         return updated_bond
 
@@ -696,8 +695,8 @@ class MPSOptimizer(object):
             case3 = lambda: s_size
             m = tf.case({tf.less(s_size, min_size): case1, tf.greater(s_size, max_size): case2}, default=case3,
                         exclusive=True)
-            # if self.verbose != 0:
-            #     m = tf.Print(m, [m, s[m-5:m]], first_n=self.verbose, summarize=5, message='bond: ')
+            # if self.verbosity != 0:
+            #     m = tf.Print(m, [m, s[m-5:m]], first_n=self.verbosity, summarize=5, message='bond: ')
 
             # make s into a matrix
             s_mat = tf.diag(s[0:m])

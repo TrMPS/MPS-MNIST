@@ -4,23 +4,25 @@ import activitypreprocessing as ap
 # Model parameters
 d_feature = 4
 d_output = 7
-batch_size = 2000
-permuted = False
-shuffled = False
 input_size = 100
 lin_reg_iterations = 1000
 special_node_loc = 50
 
-max_size = 15
+# Data parameters
+permuted = False
+shuffled = False
 
+# Optimizer parameters
+max_size = 15
+batch_size = 2000
 rate_of_change = 5*10**(-5)
 lr_reg = 0.0
 reg = 0.001
-logging_enabled = False
+logging_enabled = True
 
 cutoff = 10  # change this next
 n_step = 300
-verbose = 0
+verbosity = 0
 
 data_source = ap.activityDatasource(shuffled=shuffled)
 # batch_size = data_source.num_train_samples
@@ -30,18 +32,17 @@ print(data_source.num_train_samples, data_source.num_test_samples)
 # Training
 
 weights = None
+optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_reg, verbosity=verbosity)
+training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
+                                            _logging_enabled=logging_enabled)
 
 network = MPS(d_feature, d_output, input_size, special_node_loc=special_node_loc)
 network.prepare(data_source=None, iterations=lin_reg_iterations)
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)
-optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff,
-                         reg=reg, lr_reg=lr_reg,
-                         verbose=verbose)
+optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
-                rate_of_change=rate_of_change,
-                _logging_enabled=logging_enabled,
-                initial_weights=weights)
+                training_parameters)
 
 # Testing
 
