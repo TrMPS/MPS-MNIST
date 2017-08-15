@@ -166,7 +166,7 @@ class MPSOptimizer(object):
             for i in range(n_step):
                 start = time.time()
                 # rate_of_change = initial_lr / np.sqrt(i+1)
-                print(rate_of_change)
+                # print(rate_of_change)
                 (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size)
 
                 self.feed_dict = self.MPS.create_feed_dict(self.test)
@@ -423,10 +423,15 @@ class MPSOptimizer(object):
             # update the bond
             updated_bond = self._update_bond(bond, C, acc_lr_reg, counter)
 
+
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
             aj = tf.transpose(aj, perm=[0, 2, 1])
             aj1 = tf.transpose(aj1, perm=[1, 2, 3, 0])
+            test_bond = tf.einsum('mij,lnjk->lmnik', aj, aj1)
+            _, cost = self._get_f_and_cost(test_bond, C)
+            if self.verbose != 0:
+                counter = tf.Print(counter, [cost], message='cost after bond decomp', first_n=self.verbose)
 
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
@@ -484,7 +489,8 @@ class MPSOptimizer(object):
 
             test_bond = tf.einsum('mij,lnjk->lmnik', aj, aj1)
             _, cost = self._get_f_and_cost(test_bond, C)
-            counter = tf.Print(counter, [cost], message='cost after bond decomp')
+            if self.verbose != 0:
+                counter = tf.Print(counter, [cost], message='cost after bond decomp', first_n=self.verbose)
 
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
@@ -596,7 +602,8 @@ class MPSOptimizer(object):
         lr, updated_bond = self._armijo_loop(bond, C, lr, cost, delta_bond, gradient_dot_change)
 
         _, cost = self._get_f_and_cost(updated_bond, C)
-        updated_bond = tf.Print(updated_bond, [cost], message='updated cost')
+        if self.verbose != 0:
+            updated_bond = tf.Print(updated_bond, [cost], message='updated cost', first_n=self.verbose)
 
         return updated_bond
 
