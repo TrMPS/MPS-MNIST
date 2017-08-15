@@ -4,7 +4,7 @@ import MNISTpreprocessing
 # Model parameters
 d_feature = 2
 d_output = 10
-batch_size = 2000
+batch_size = 1000
 permuted = False
 shuffled = True
 shrink = True
@@ -14,15 +14,16 @@ if shrink:
 special_node_loc = 91
 
 
-max_size = 30
-min_singular_value = 0.001
+max_size = 30 
+min_singular_value = 0.0001
 reg = 0.01
 
-rate_of_change = 10 ** (-3)
+rate_of_change = 10 ** (-4)
 lr_reg = 0.0
+armijo_coeff = 10 ** (-4)
 
 logging_enabled = False
-verbose = 20
+verbose = 10000
 
 
 cutoff = 100
@@ -43,6 +44,7 @@ network.prepare(data_source=None)
 optimizer = MPSOptimizer(network, max_size, None,
                          cutoff=cutoff, reg=reg, lr_reg=lr_reg,
                          verbose=verbose,
+                         armijo_coeff=armijo_coeff,
                          min_singular_value=min_singular_value)
 optimizer.train(data_source, batch_size, n_step,
                 rate_of_change=rate_of_change,
