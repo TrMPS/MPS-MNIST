@@ -1,7 +1,7 @@
 class MPSOptimizerParameters(object):
     def __init__(self, cutoff=1000,
                  reg=0.001, lr_reg=0.99, min_singular_value=10**(-4),
-                 verbosity=0, armijo_coeff=0.5):
+                 verbosity=0, armijo_coeff=10**(-4)):
         self.cutoff = cutoff
         self.reg = reg
         self.lr_reg=lr_reg
