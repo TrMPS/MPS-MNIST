@@ -15,10 +15,11 @@ shuffled = False
 # Optimizer parameters
 max_size = 15
 batch_size = 2000
-rate_of_change = 5*10**(-5)
+rate_of_change = 10**(-6)
 lr_reg = 0.0
 reg = 0.001
-logging_enabled = True
+logging_enabled = False
+armijo_coeff = 10**(-4)
 
 cutoff = 10  # change this next
 n_step = 300
@@ -32,7 +33,8 @@ print(data_source.num_train_samples, data_source.num_test_samples)
 # Training
 
 weights = None
-optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_reg, verbosity=verbosity)
+optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_reg, verbosity=verbosity,
+                                              armijo_coeff=armijo_coeff)
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled)
 

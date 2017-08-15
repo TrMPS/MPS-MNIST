@@ -590,6 +590,7 @@ class MPSOptimizer(object):
         # bond = tf.Print(bond, [counter, tf.shape(bond)])
         f, cost = self._get_f_and_cost(bond, C)
         h = self._calculate_hessian(f, C)
+        # h = 1.0
 
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):
@@ -601,9 +602,12 @@ class MPSOptimizer(object):
         lr = self.rate_of_change
         lr, updated_bond = self._armijo_loop(bond, C, lr, cost, delta_bond, gradient_dot_change)
 
-        _, cost = self._get_f_and_cost(updated_bond, C)
+        _, cost1 = self._get_f_and_cost(updated_bond, C)
         if self.verbosity != 0:
-            updated_bond = tf.Print(updated_bond, [cost], message='updated cost', first_n=self.verbosity)
+            updated_bond = tf.Print(updated_bond, [cost1], message='updated cost', first_n=self.verbosity)
+        cond_change_bond = tf.less(cost1, cost)
+        updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
+                               false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
 
         return updated_bond
 
