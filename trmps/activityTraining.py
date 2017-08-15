@@ -1,5 +1,6 @@
 from optimizer import *
 import activitypreprocessing as ap
+from squaredDistanceMPS import *
 
 # Model parameters
 d_feature = 4
@@ -15,11 +16,11 @@ shuffled = False
 # Optimizer parameters
 max_size = 15
 batch_size = 2000
-rate_of_change = 10**(-6)
+rate_of_change = 10**(-11)
 lr_reg = 0.0
 reg = 0.001
 logging_enabled = False
-armijo_coeff = 10**(-4)
+armijo_coeff = 10**(-3)
 
 cutoff = 10  # change this next
 n_step = 300
@@ -38,11 +39,11 @@ optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled)
 
-network = MPS(d_feature, d_output, input_size, special_node_loc=special_node_loc)
+network = sqMPS(d_feature, d_output, input_size, special_node_loc=special_node_loc)
 network.prepare(data_source=None, iterations=lin_reg_iterations)
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)
-optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
+optimizer = sqMPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
 
