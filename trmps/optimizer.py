@@ -88,7 +88,6 @@ class MPSOptimizer(object):
         """
         self.MPS = MPSNetwork
         self.rate_of_change = tf.placeholder(tf.float32, shape=[])
-        self.rates_of_change = self.rate_of_change * tf.ones([self.MPS.input_size])
         self.reg = reg
         self.lr_reg=lr_reg
         self.max_size = max_size
@@ -561,11 +560,11 @@ class MPSOptimizer(object):
             _, updated_cost = self._get_f_and_cost(updated_bond, C)
             target = cost - self.armijo_coeff * learning_rate * gradient_dot_change
             if self.verbose != 0:
-                target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbose, 
+                target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbose,
                                   message = "updated_cost, target and cost")
             return tf.greater(updated_cost, target)
 
-        def _armijo_step(counter, armijo_cond, learning_rate, updated_bond): 
+        def _armijo_step(counter, armijo_cond, learning_rate, updated_bond):
             updated_bond = tf.add(bond, learning_rate * delta_bond)
             armijo_cond = _armijo_condition(learning_rate, updated_bond)
             updated_bond = tf.cond(armijo_cond, true_fn=lambda: bond, false_fn=lambda: updated_bond)
@@ -590,10 +589,10 @@ class MPSOptimizer(object):
         with tf.name_scope("tensordotgradient"):
             gradient = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
             delta_bond = gradient / h
-        gradient_dot_change = tf.tensordot(gradient, 
+        gradient_dot_change = tf.tensordot(gradient,
                                            delta_bond,
                                            [[0, 1, 2, 3, 4],[0, 1, 2, 3, 4]])/tf.cast(self.batch_size, tf.float32)
-        lr = self.rates_of_change[counter]
+        lr = self.rate_of_change
         lr, updated_bond = self._armijo_loop(bond, C, lr, cost, delta_bond, gradient_dot_change)
 
         _, cost = self._get_f_and_cost(updated_bond, C)
