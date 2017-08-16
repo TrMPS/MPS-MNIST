@@ -3,6 +3,10 @@ from optimizer import MPSOptimizer
 import tensorflow as tf
 
 class sqMPS(MPS):
+    """
+    A subclass of MPS that uses the square error instead of the cross entropy.
+    Should be used in the exact same way, but with sqMPSOptimizer instead of MPSOptimizer.
+    """
     def cost(self, f, labels):
         """
         Returns the cost (softmax cross entropy with logits) given the predictions(f), and the correct labels
@@ -21,6 +25,10 @@ class sqMPS(MPS):
         return 0.5 * tf.reduce_sum(tf.square(predictions-labels))
 
 class sqMPSOptimizer(MPSOptimizer):
+    """
+    A subclass of MPSOptimizer that uses the square error instead of the cross entropy.
+    Should be used in the exact same way, but with sqMPS instead of MPS.
+    """
     def _get_f_and_cost(self, bond, C):
         """
 

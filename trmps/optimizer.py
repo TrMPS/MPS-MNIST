@@ -79,11 +79,9 @@ class MPSOptimizer(object):
             The matrix product state network that will be optimised.
         :param max_size: integer
             The maximum size the tensors composing the MPS can grow to.
-        :param grad_func: a function that returns the gradient. Yet to be implemented
-            Yet to be implemented. just pass None. Currently, the gradient function
-            corresponding to the cross entropy cost function is implemented
-        :param cutoff: float
-            The cutoff value for the gradient. Anything above this is clipped off.
+        :param optional_parameters: MPSOptimizerParameters
+            Optional parameters for the MPSOptimizer.
+            See documentation for MPSOptimizerParameters for more detail.
         """
         self.parameters = optional_parameters
         self.MPS = MPSNetwork
@@ -126,16 +124,9 @@ class MPSOptimizer(object):
             such that the output leg is attached to a node at the same position as at the start.
             Typically, (if the batch size is all of the data), then a couple of steps should
             be enough to fully optimise the MPS.
-        :param rate_of_change: float
-            The rate of change for the optimisation.
-            Different values should be tried, as there is no 'right answer' that works for
-            all situations, and depending on the data set, the same value can cause
-            overshooting, or make the optimisation slower than it should be.
-        :param initial_weights: list
-            The initial weights for the network, if it is desired to override the default values
-            from mps.prepare(self, data_source, iterations = 1000)
-        :param _logging_enabled: boolean
-            Whether certain things are logged to Tensorboard/ to a Chrome timeline.
+        :param optional_parameters: MPSTrainingParameters
+            Optional parameters for training in the MPSOptimizer.
+            See documentation for MPSTrainingParameters for more detail.
         :return: nothing
         """
 
