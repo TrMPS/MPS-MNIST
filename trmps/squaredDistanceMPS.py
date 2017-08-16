@@ -53,8 +53,9 @@ class sqMPSOptimizer(MPSOptimizer):
         # obtain the original cost
         # bond = tf.Print(bond, [counter, tf.shape(bond)])
         f, cost = self._get_f_and_cost(bond, C)
-        # h = self._calculate_hessian(f, C)
         h = 1.0
+        if self.use_hessian:
+            h = self._calculate_hessian(f, C)
 
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):

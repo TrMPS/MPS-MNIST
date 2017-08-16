@@ -87,6 +87,7 @@ class MPSOptimizer(object):
         """
         self.parameters = optional_parameters
         self.MPS = MPSNetwork
+        self.use_hessian = self.parameters.use_hessian
         self.rate_of_change = tf.placeholder(tf.float32, shape=[])
         self.reg = self.parameters.reg
         self.lr_reg = self.parameters.lr_reg
@@ -580,8 +581,9 @@ class MPSOptimizer(object):
         # obtain the original cost
         # bond = tf.Print(bond, [counter, tf.shape(bond)])
         f, cost = self._get_f_and_cost(bond, C)
-        h = self._calculate_hessian(f, C)
-        # h = 1.0
+        h = 1.0
+        if self.use_hessian:
+            h = self._calculate_hessian(f, C)
 
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):

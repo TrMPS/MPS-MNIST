@@ -1,13 +1,15 @@
 class MPSOptimizerParameters(object):
     def __init__(self, cutoff=1000,
                  reg=0.001, lr_reg=0.99, min_singular_value=10**(-4),
-                 verbosity=0, armijo_coeff=10**(-4)):
+                 verbosity=0, armijo_coeff=10**(-4), use_hessian=False):
         self.cutoff = cutoff
         self.reg = reg
-        self.lr_reg=lr_reg
-        self.min_singular_value=min_singular_value
-        self.verbosity=verbosity
-        self.armijo_coeff=armijo_coeff
+        self.lr_reg = lr_reg
+        self.min_singular_value = min_singular_value
+        self.verbosity = verbosity
+        self.armijo_coeff = armijo_coeff
+        self.use_hessian = use_hessian
+
 
 class MPSTrainingParameters(object):
     def __init__(self, rate_of_change=1000, initial_weights=None, _logging_enabled=False):
