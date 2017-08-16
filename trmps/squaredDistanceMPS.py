@@ -2,6 +2,9 @@ from mps import MPS
 from optimizer import MPSOptimizer
 import tensorflow as tf
 
+# TODO: Deprecate everything in this file and move these things into some sort of configuration for the
+#       MPS and MPSOptimizer classes
+
 class sqMPS(MPS):
     """
     A subclass of MPS that uses the square error instead of the cross entropy.
@@ -56,30 +59,3 @@ class sqMPSOptimizer(MPSOptimizer):
             hessian = tf.expand_dims(hessian, axis = 0)
 
             return hessian
-
-    def _update_bond(self, bond, C):
-        # obtain the original cost
-        # bond = tf.Print(bond, [counter, tf.shape(bond)])
-        f, cost = self._get_f_and_cost(bond, C)
-        h = 1.0
-        if self.use_hessian:
-            h = self._calculate_hessian(f, C)
-
-        # perform gradient descent on the bond
-        with tf.name_scope("tensordotgradient"):
-            gradient = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
-            delta_bond = gradient / h
-        gradient_dot_change = tf.tensordot(gradient,
-                                           delta_bond,
-                                           [[0, 1, 2, 3, 4],[0, 1, 2, 3, 4]])/tf.cast(self.batch_size, tf.float32)
-        lr = self.rate_of_change
-        lr, updated_bond = self._armijo_loop(bond, C, lr, cost, delta_bond, gradient_dot_change)
-
-        _, cost1 = self._get_f_and_cost(updated_bond, C)
-        if self.verbosity != 0:
-            updated_bond = tf.Print(updated_bond, [cost1], message='updated cost', first_n=self.verbosity)
-        cond_change_bond = tf.less(cost1, cost)
-        updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
-                               false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
-
-        return updated_bond
