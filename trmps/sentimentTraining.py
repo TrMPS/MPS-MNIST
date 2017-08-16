@@ -36,6 +36,10 @@ network = MPS(d_feature, d_output, input_size)
 network.prepare(datasource,
 				iterations=lin_reg_iterations,
 				learning_rate=lin_reg_lr)
+optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_reg,
+                                              verbosity=verbosity)
+training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
+                                            _logging_enabled=logging_enabled)
 optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
 
 datasource.shuffle()
