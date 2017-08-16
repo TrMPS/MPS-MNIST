@@ -49,7 +49,7 @@ class sqMPSOptimizer(MPSOptimizer):
 
             return hessian
 
-    def _update_bond(self, bond, C, acc_lr_reg, counter):
+    def _update_bond(self, bond, C):
         # obtain the original cost
         # bond = tf.Print(bond, [counter, tf.shape(bond)])
         f, cost = self._get_f_and_cost(bond, C)

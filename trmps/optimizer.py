@@ -422,7 +422,7 @@ class MPSOptimizer(object):
             C = self._calculate_C(C2, C1, input2, input1)
 
             # update the bond
-            updated_bond = self._update_bond(bond, C, acc_lr_reg, counter)
+            updated_bond = self._update_bond(bond, C)
 
 
             # Decompose the bond
@@ -478,7 +478,7 @@ class MPSOptimizer(object):
             C = self._calculate_C(C1, C2, input1, input2)
 
             # Update the bond
-            updated_bond = self._update_bond(bond, C, acc_lr_reg, counter)
+            updated_bond = self._update_bond(bond, C)
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
@@ -575,9 +575,7 @@ class MPSOptimizer(object):
 
         return lr, updated_bond
 
-
-
-    def _update_bond(self, bond, C, acc_lr_reg, counter):
+    def _update_bond(self, bond, C):
         # obtain the original cost
         # bond = tf.Print(bond, [counter, tf.shape(bond)])
         f, cost = self._get_f_and_cost(bond, C)
