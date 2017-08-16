@@ -17,6 +17,9 @@ class sqMPS(MPS):
             cost = 0.5 * tf.reduce_mean(tf.square(f-labels))
         return cost
 
+    def _cost_for_lin_reg(self, labels, predictions):
+        return 0.5 * tf.reduce_sum(tf.square(predictions-labels))
+
 class sqMPSOptimizer(MPSOptimizer):
     def _get_f_and_cost(self, bond, C):
         """
@@ -29,6 +32,7 @@ class sqMPSOptimizer(MPSOptimizer):
         with tf.name_scope("tensordotf"):
             # f = tf.einsum('lmnik,tmnik->tl', bond, C)
             f = tf.tensordot(C, bond, [[1, 2, 3, 4], [1, 2, 3, 4]])
+            # f = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
             cost = 0.5 * tf.reduce_mean(tf.square(f-self._label))
 

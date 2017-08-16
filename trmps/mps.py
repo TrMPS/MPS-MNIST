@@ -150,9 +150,10 @@ class MPS(object):
         accuracy = self.accuracy(f, label)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            test_cost, test_acc = sess.run(
-                [cost, accuracy], {feature: test_feature, label: test_label})
+            test_cost, test_acc, test_f = sess.run(
+                [cost, accuracy, f], {feature: test_feature, label: test_label})
             print(test_cost)
+            print("sample prediction:", test_f[0])
             print(test_acc)
 
 #     def load_nodes(self, weights):
@@ -232,6 +233,10 @@ class MPS(object):
         f1_score = tf.reduce_sum(f1_scores) / self.d_output
         return f1_score
 
+    def _cost_for_lin_reg(self, labels, predictions):
+        return tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=predictions))
+
     def _lin_reg(self, data_source, iterations, learning_rate):
 
         x_dim = self.input_size * (self.d_feature - 1)
@@ -252,10 +257,9 @@ class MPS(object):
 
             prediction = tf.matmul(x, weight) + bias
             # cross_entropy = 0.5 * tf.reduce_sum(tf.square(prediction-label))
-            cross_entropy = tf.reduce_mean(
-                tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=prediction))
+            cost = self._cost_for_lin_reg(label, prediction)
             train_step = tf.train.GradientDescentOptimizer(
-                learning_rate).minimize(cross_entropy)
+                learning_rate).minimize(cost)
 
         accuracy = self.accuracy(prediction, label)
         confusion_matrix = self.confusion_matrix(prediction, label)
