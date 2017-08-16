@@ -121,15 +121,19 @@ class MPS(object):
         if data_source is not None:
             self._lin_reg(data_source, iterations, learning_rate)
         else:
-            # self.weight = (0.05 * np.random.rand(self.input_size, self.d_feature - 1, self.d_output)
-            #                + np.ones([self.input_size, self.d_feature - 1, self.d_output]))
-            self.weight = np.ones([self.input_size, self.d_feature - 1, self.d_output])
-            # self.bias = (0.05 * np.random.rand(self.d_output)
-            #              + np.ones(self.d_output))
-            self.bias = np.zeros([self.d_output])
-            if self._special_node_loc is None:
-                self._special_node_loc = int(np.floor(self.input_size / 2))
+            self._random_prepare()
         self._setup_nodes()
+
+    def _random_prepare(self):
+        # self.weight = (0.05 * np.random.rand(self.input_size, self.d_feature - 1, self.d_output)
+        #                + np.ones([self.input_size, self.d_feature - 1, self.d_output]))
+        self.weight = np.ones([self.input_size, self.d_feature - 1, self.d_output])/(self.input_size * (self.d_feature - 1))
+        # self.bias = (0.05 * np.random.rand(self.d_output)
+        #              + np.ones(self.d_output))
+        self.bias = np.zeros([self.d_output])
+        if self._special_node_loc is None:
+            self._special_node_loc = int(np.floor(self.input_size / 2))
+
 
     def test(self, test_feature, test_label):
         """
