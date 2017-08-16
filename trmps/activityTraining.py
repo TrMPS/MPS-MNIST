@@ -33,7 +33,7 @@ data_source = ap.activityDatasource(shuffled=shuffled)
 print(data_source.num_train_samples, data_source.num_test_samples)
 
 network = sqMPS(d_feature, d_output, input_size, special_node_loc=special_node_loc)
-network.prepare(data_source=data_source, iterations=lin_reg_iterations, learning_rate=lin_reg_learning_rate)
+network.prepare(data_source=None, iterations=lin_reg_iterations, learning_rate=lin_reg_learning_rate)
 
 weights = None
 

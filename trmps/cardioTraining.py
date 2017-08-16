@@ -45,8 +45,8 @@ with open('weights_sgd', 'rb') as fp:
 training_parameters.initial_weights = weights
 
 network = sqMPS(d_feature, d_output, input_size,
-              special_node_loc=special_node_loc)
-network.prepare(data_source, lin_reg_iterations)
+                special_node_loc=special_node_loc)
+network.prepare(None, lin_reg_iterations)
 optimizer = sqMPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
