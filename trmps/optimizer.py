@@ -524,7 +524,6 @@ class MPSOptimizer(object):
             f = tf.reduce_sum(bond * C, [2, 3, 4, 5])
             h = tf.reshape(tf.nn.softmax(f), [self.batch_size, self.MPS.d_output, 1, 1, 1, 1])
         with tf.name_scope("reduce_sumcost"):
-
             cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=tf.squeeze(f)))
             # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
@@ -533,7 +532,7 @@ class MPSOptimizer(object):
     def _calculate_hessian(self, f, C):
         with tf.name_scope('hessian'):
             f_part = f * (1 - f)
-            C_sq = C * C
+            C_sq = tf.square(C)
             hessian = tf.reduce_sum(f_part * C_sq, axis=0) + 2 * self.reg
 
         return hessian
