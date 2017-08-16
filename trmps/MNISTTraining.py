@@ -12,16 +12,16 @@ shuffled = True
 shrink = True
 if shrink:
     input_size = 196
-special_node_loc = 91
+special_node_loc = 98
 
 # Optimizer parameters
-batch_size = 1000
+batch_size = 2000
 max_size = 30
 min_singular_value = 0.001
 reg = 0.01
 
-rate_of_change = 10 ** (-3)
-lr_reg = 0.0
+rate_of_change = 10 ** (-4)
+lr_reg = 0.5
 logging_enabled = False
 verbosity = 398
 
@@ -44,11 +44,6 @@ training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initi
                                             _logging_enabled=logging_enabled)
 network = MPS(d_feature, d_output, input_size, special_node_loc)
 network.prepare(data_source=None)
-optimizer = MPSOptimizer(network, max_size, None,
-                         cutoff=cutoff, reg=reg, lr_reg=lr_reg,
-                         verbosity=verbosity,
-                         min_singular_value=min_singular_value)
+optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
-                rate_of_change=rate_of_change,
-                _logging_enabled=logging_enabled,
-                initial_weights=weights)
+                training_parameters)

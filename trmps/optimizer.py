@@ -428,10 +428,6 @@ class MPSOptimizer(object):
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
             aj = tf.transpose(aj, perm=[0, 2, 1])
             aj1 = tf.transpose(aj1, perm=[1, 2, 3, 0])
-            test_bond = tf.einsum('mij,lnjk->lmnik', aj, aj1)
-            _, cost = self._get_f_and_cost(test_bond, C)
-            if self.verbosity != 0:
-                counter = tf.Print(counter, [cost], message='cost after bond decomp', first_n=self.verbosity)
 
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
@@ -486,11 +482,6 @@ class MPSOptimizer(object):
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
             aj1 = tf.transpose(aj1, perm=[1, 2, 0, 3])
-
-            test_bond = tf.einsum('mij,lnjk->lmnik', aj, aj1)
-            _, cost = self._get_f_and_cost(test_bond, C)
-            if self.verbosity != 0:
-                counter = tf.Print(counter, [cost], message='cost after bond decomp', first_n=self.verbosity)
 
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
