@@ -546,7 +546,7 @@ class MPSOptimizer(object):
             d1 = tf.shape(C)[-2]
             d2 = tf.shape(C)[-1]
             f_part = tf.reshape(f * (1 - f), [self.batch_size, self.MPS.d_output, 1, 1, 1, 1])
-            C_sq = tf.reshape(C * C, [self.batch_size, 1, self.MPS.d_feature, self.MPS.d_feature, d1, d2])
+            C_sq = tf.reshape(tf.square(C), [self.batch_size, 1, self.MPS.d_feature, self.MPS.d_feature, d1, d2])
             hessian = tf.reduce_sum(f_part * C_sq, axis=0) + 2 * self.reg
 
             return hessian
