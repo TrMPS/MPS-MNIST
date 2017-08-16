@@ -42,9 +42,10 @@ class sqMPSOptimizer(MPSOptimizer):
         with tf.name_scope('hessian'):
             d1 = tf.shape(C)[-2]
             d2 = tf.shape(C)[-1]
-            C_sq = tf.reshape(C * C, [self.batch_size, 1, self.MPS.d_feature, self.MPS.d_feature, d1, d2])
+            C_sq = tf.square(C)
             hessian = C_sq+ 2 * self.reg
-            hessian = tf.expand_dims(C_sq, 0)
+            hessian = tf.reduce_sum(hessian, axis = 0)
+            hessian = tf.expand_dims(hessian, axis = 0)
 
             return hessian
 
@@ -58,7 +59,7 @@ class sqMPSOptimizer(MPSOptimizer):
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):
             gradient = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
-            delta_bond = gradient
+            delta_bond = gradient / h
         gradient_dot_change = tf.tensordot(gradient,
                                            delta_bond,
                                            [[0, 1, 2, 3, 4],[0, 1, 2, 3, 4]])/tf.cast(self.batch_size, tf.float32)
