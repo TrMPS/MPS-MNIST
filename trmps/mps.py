@@ -376,7 +376,7 @@ class MPS(object):
         """
 
         middle_node = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
-        middle_node[0] = np.identity(self.d_matrix) * 1
+        middle_node[0] = np.identity(self.d_matrix)
         for i in range(1, self.d_feature):
             middle_node[i, self.d_output:, 0:self.d_output] = np.diag(self.weight[index, i-1])
 

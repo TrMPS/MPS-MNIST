@@ -44,11 +44,11 @@ def _preprocess_images(data, size, shrink = True):
         #pooled_image = tf.placeholder(tf.float32, shape=[1, 14, 14, 1])
         snaked_image = tf.reshape(pool, shape=[196])
     
-        constants = tf.fill([196], 1.0)
+        ones = tf.ones([196], dtype=tf.float32)
     else:
         snaked_image = image
-        constants = tf.fill([784], 1.0)
-    phi = tf.stack([constants, 2 * snaked_image - 1], axis=1)
+        ones = tf.ones([784], dtype=tf.float32)
+    phi = tf.stack([ones, snaked_image], axis=1)
     
     _spinner = spinner(jump = 300)
 

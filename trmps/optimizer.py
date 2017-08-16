@@ -410,8 +410,11 @@ class MPSOptimizer(object):
             # Calculate the bond
             bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
 
+            C = self._calculate_C(C2, C1, input2, input1)
+
             # update the bond
-            updated_bond = self._update_bond(bond, C2, C1, input2, input1, acc_lr_reg)
+            updated_bond = self._update_bond(bond, C)
+
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
@@ -426,7 +429,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
             C2s = C2s.write(counter - 1, C2)
-            
+            #counter = tf.Print(counter, [counter])
             updated_counter = counter - 1
             acc_lr_reg = acc_lr_reg * self.lr_reg
 
@@ -463,8 +466,10 @@ class MPSOptimizer(object):
             # bond = tf.transpose(tf.tensordot(n1, n2, [[3],[1]]), [0, 1, 3, 2, 4])
             # einsum is actually faster in this case
 
+            C = self._calculate_C(C1, C2, input1, input2)
+
             # Update the bond
-            updated_bond = self._update_bond(bond, C1, C2, input1, input2, acc_lr_reg)
+            updated_bond = self._update_bond(bond, C)
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
@@ -479,7 +484,7 @@ class MPSOptimizer(object):
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             C1s = C1s.write(counter+1, C1)
-            
+            #counter = tf.Print(counter, [counter])
             updated_counter = counter + 1
             acc_lr_reg = acc_lr_reg * self.lr_reg
 
@@ -496,10 +501,18 @@ class MPSOptimizer(object):
         :return:
         """
         # C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, input1, input2)
+        d1 = tf.shape(C1)[1]
+        d2 = tf.shape(C2)[1]
+
         with tf.name_scope("calculateC"):
-            left = C1 * input1 
-            right = C2 * input2 
-            C = left * right
+            C1 = tf.reshape(C1, [self.batch_size, 1, 1, d1, 1])
+            C2 = tf.reshape(C2, [self.batch_size, 1, 1, 1, d2])
+            input1 = tf.reshape(input1, [self.batch_size, self.MPS.d_feature, 1, 1, 1])
+            input2 = tf.reshape(input2, [self.batch_size, 1, self.MPS.d_feature, 1, 1])
+            intermediate_1 = C1 * C2
+            intermediate_2 = input1 * input2
+            C = intermediate_1 * intermediate_2
+
         return C
 
     def _get_f_and_cost(self, bond, C):
@@ -510,93 +523,75 @@ class MPSOptimizer(object):
         :param C:
         :return:
         """
-        with tf.name_scope("calculate_f"):
-            f = tf.reduce_sum(bond * C, [2, 3, 4, 5])
-            h = tf.reshape(tf.nn.softmax(f), [self.batch_size, self.MPS.d_output, 1, 1, 1, 1])
+        with tf.name_scope("tensordotf"):
+            # f = tf.einsum('lmnik,tmnik->tl', bond, C)
+            f = tf.tensordot(C, bond, [[1, 2, 3, 4], [1, 2, 3, 4]])
+            h = tf.nn.softmax(f)
         with tf.name_scope("reduce_sumcost"):
-            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=tf.squeeze(f)))
+            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f))
             # 0.5 * tf.reduce_sum(tf.square(f-self._label))
 
         return h, cost
 
     def _calculate_hessian(self, f, C):
         with tf.name_scope('hessian'):
-            f_part = f * (1 - f)
-            C_sq = tf.square(C)
-
+            d1 = tf.shape(C)[-2]
+            d2 = tf.shape(C)[-1]
+            f_part = tf.reshape(f * (1 - f), [self.batch_size, self.MPS.d_output, 1, 1, 1, 1])
+            C_sq = tf.reshape(tf.square(C), [self.batch_size, 1, self.MPS.d_feature, self.MPS.d_feature, d1, d2])
             hessian = tf.reduce_sum(f_part * C_sq, axis=0) + 2 * self.reg
 
-        return hessian
+            return hessian
 
     def _armijo_loop(self, bond, C, lr, cost, delta_bond, gradient_dot_change):
 
         def _armijo_condition(learning_rate, updated_bond):
-            with tf.name_scope("armijo_condition"):
-                _, updated_cost = self._get_f_and_cost(updated_bond, C)
-                target = cost - self.armijo_coeff * learning_rate * gradient_dot_change
-                if self.verbose != 0:
-                    target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbose,
-                                      message = "updated_cost, target and cost")
+            _, updated_cost = self._get_f_and_cost(updated_bond, C)
+            target = cost - self.armijo_coeff * learning_rate * gradient_dot_change
+            if self.verbosity != 0:
+                target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbosity,
+                                  message = "updated_cost, target and cost")
             return tf.greater(updated_cost, target)
 
         def _armijo_step(counter, armijo_cond, learning_rate, updated_bond):
-            updated_bond = tf.add(bond, learning_rate * delta_bond, name="add_bond")
+            updated_bond = tf.add(bond, learning_rate * delta_bond)
             armijo_cond = _armijo_condition(learning_rate, updated_bond)
-            armijo_cond.set_shape([])
-            updated_bond = tf.cond(armijo_cond, true_fn=lambda: bond, false_fn=lambda: updated_bond, name="condition")
+            updated_bond = tf.cond(armijo_cond, true_fn=lambda: bond, false_fn=lambda: updated_bond)
             return counter+1, armijo_cond, learning_rate * 0.5, updated_bond
 
         with tf.name_scope("armijo_loop"):
             cond = lambda c, f, lr, b: tf.logical_and(f, tf.less(c, 10))
             loop_vars = [1, True, lr, bond]
-            shapes = [tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([]), 
-                                tf.TensorShape([None, self.MPS.d_output, self.MPS.d_feature, self.MPS.d_feature, None, None])]
-            _, _, lr, updated_bond = tf.while_loop(cond=cond, 
-                                                   body=_armijo_step, 
-                                                   loop_vars=loop_vars, 
-                                                   shape_invariants=shapes, 
-                                                   name="lr_opt")
+            _, _, lr, updated_bond = tf.while_loop(cond=cond, body=_armijo_step, loop_vars=loop_vars, name="lr_opt")
 
         return lr, updated_bond
 
-    def _reshape(self, labels, C1, C2, input1, input2, bond):
-        d1 = self.batch_size
-        d2 = self.MPS.d_output 
-        d3 = self.MPS.d_feature
-        d5 = tf.shape(C1)[1]
-        d6 = tf.shape(C2)[1]
-
-        reshaped_labels = tf.reshape(labels, [d1, d2, 1, 1, 1, 1])
-        reshaped_C1 = tf.reshape(C1, [d1, 1, 1, 1, d5, 1])
-        reshaped_C2 = tf.reshape(C2, [d1, 1, 1, 1, 1, d6])
-        reshaped_input1 = tf.reshape(input1, [d1, 1, d3, 1, 1, 1])
-        reshaped_input2 = tf.reshape(input2, [d1, 1, 1, d3, 1, 1])
-        reshaped_bond = tf.reshape(bond, [1, d2, d3, d3, d5, d6])
-
-        return reshaped_labels, reshaped_C1, reshaped_C2, reshaped_input1, reshaped_input2, reshaped_bond
-
-    def _update_bond(self, bond, C1, C2, input1, input2, acc_lr_reg):
+    def _update_bond(self, bond, C):
         # obtain the original cost
-        r_label, r_C1, r_C2, r_input1, r_input2, r_bond = self._reshape(self._label, C1, C2, input1, input2, bond)
-        C = self._calculate_C(r_C1, r_C2, r_input1, r_input2)
-
-        f, cost = self._get_f_and_cost(r_bond, C)
-        h = self._calculate_hessian(f, C)
-
-
+        # bond = tf.Print(bond, [counter, tf.shape(bond)])
+        f, cost = self._get_f_and_cost(bond, C)
+        h = 1.0
+        if self.use_hessian:
+            h = self._calculate_hessian(f, C)
 
         # perform gradient descent on the bond
         with tf.name_scope("tensordotgradient"):
-            gradient = tf.reduce_sum((r_label - f) * C, 0) - 2 * self.reg * bond
+            gradient = tf.tensordot(self._label - f, C, [[0], [0]]) - 2 * self.reg * bond
             delta_bond = gradient / h
-        gradient_dot_change = tf.reduce_sum(gradient * delta_bond)/tf.cast(self.batch_size, tf.float32)
-
+        gradient_dot_change = tf.tensordot(gradient,
+                                           delta_bond,
+                                           [[0, 1, 2, 3, 4],[0, 1, 2, 3, 4]])/tf.cast(self.batch_size, tf.float32)
         lr = self.rate_of_change
-        lr, updated_bond = self._armijo_loop(r_bond, C, lr, cost, delta_bond, gradient_dot_change)
+        lr, updated_bond = self._armijo_loop(bond, C, lr, cost, delta_bond, gradient_dot_change)
 
-        _, cost = self._get_f_and_cost(updated_bond, C)
+        _, cost1 = self._get_f_and_cost(updated_bond, C)
+        if self.verbosity != 0:
+            updated_bond = tf.Print(updated_bond, [cost1], message='updated cost', first_n=self.verbosity)
+        cond_change_bond = tf.less(cost1, cost)
+        updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
+                               false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
 
-        return tf.squeeze(updated_bond)
+        return updated_bond
 
     def _make_new_nodes(self, nodes):
         """
