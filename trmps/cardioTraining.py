@@ -2,6 +2,7 @@ from optimizer import *
 import cardiopreprocessing
 from sgd_optimizer import SGDOptimizer
 from mps_sgd import SimpleMPS
+from squaredDistanceMPS import *
 
 # Model parameters
 d_feature = 2
@@ -9,6 +10,7 @@ d_output = 4
 input_size = 400
 lin_reg_iterations = 1000
 special_node_loc = 200
+lin_reg_learning_rate = 10**(-4)
 
 # Data parameters
 permuted = False
@@ -17,8 +19,8 @@ shuffled = False
 # Optimizer parameters
 reg = 0.1
 max_size = 23
-rate_of_change = 10**(-6)
-verbosity = 0
+rate_of_change = 10**(-5)
+verbosity = -0
 cutoff = 10**(-1)  # change this next
 n_step = 300
 logging_enabled = False
@@ -42,10 +44,10 @@ with open('weights_sgd', 'rb') as fp:
         weights = None
 training_parameters.initial_weights = weights
 
-network = MPS(d_feature, d_output, input_size,
+network = sqMPS(d_feature, d_output, input_size,
               special_node_loc=special_node_loc)
 network.prepare(data_source, lin_reg_iterations)
-optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
+optimizer = sqMPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
 
