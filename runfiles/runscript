@@ -1,0 +1,12 @@
+#!/bin/bash
+
+python3 MPS-MNIST/trmps/MNISTTraining.py > trmps.log
+echo "========================" >> trmps.log
+echo "========================" >> trmps.log
+python3 MPS-MNIST/trmps/training2.py >> trmps.log
+echo "=======================" >> trmps.log
+echo "========================">> trmps.log
+python3 MPS-MNIST/trmps/training3.py >> trmps.log
+echo "=======================" >> trmps.log
+echo "========================">> trmps.log 
+python3 MPS-MNIST/trmps/training4.py >> trmps.log
