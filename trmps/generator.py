@@ -3,6 +3,8 @@ import numpy as np
 from distribution import Quadratic
 from mps import MPS
 import pickle 
+import utils
+from matplotlib import pyplot as plt
 
 class MPSGenerator(object):
 
@@ -12,53 +14,62 @@ class MPSGenerator(object):
         assert self.MPS.d_feature == 2
 
     def generate(self, n_samples, digit):
-        self.samples = tf.zeros([n, self.MPS.input_size], dtype=tf.float32)
+        samples_ta = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=True, clear_after_read=False)
         self.digit = digit
         self.n_samples = n_samples
 
-        L = tf.tile(tf.diag(self.MPS.start_node), [n, 1, 1])
-        cond = lambda c, l: tf.less(c, self.MPS.input_size)
-        _, _ = tf.while_loop(cond=cond, 
+        L = tf.diag(tf.squeeze(self.MPS.start_node))
+        L = tf.expand_dims(L, 0)
+        L = tf.tile(L, [n_samples, 1, 1])
+        cond = lambda c, l, t: tf.less(c, self.MPS.input_size)
+        _, _, samples_ta = tf.while_loop(cond=cond, 
                              body=self._generate_from_one_node, 
-                             loop_vars=[0, L],
-                             shape_invariants=[tf.TensorShape([]), tf.TensorShape([n_samples, None, None])], 
+                             loop_vars=[0, L, samples_ta],
+                             shape_invariants=[tf.TensorShape([]), 
+                                               tf.TensorShape([n_samples, None, None]), 
+                                               tf.TensorShape(None)], 
                              parallel_iterations=5)
-        return self.samples
+        return samples_ta.stack()
     
     def _sample_from_vector(self, vector):
-        # sqrt the vector 
-        vector_sign = tf.sign(vector) 
-        vector = vector_sign * tf.sqrt(vector_sign * vector)
+        with tf.name_scope("sample_from_vector"):
+            # sqrt the vector 
+            vector_sign = tf.sign(vector) 
+            vector = vector_sign * tf.sqrt(vector_sign * vector)
 
-        vector = tf.Print(vector, [vector])
-        vector = vector/tf.norm(vector) 
+            vector = tf.Print(vector, [vector])
+            vector = vector/tf.norm(vector) 
 
-        dist = Quadratic(vector[0], vector[1])
-        samples = dist.sample(self.n_samples)
-        del dist 
+            dist = Quadratic(vector[0], vector[1])
+            samples = dist.sample(self.n_samples)
+            del dist 
 
         return samples
 
 
-    def _generate_from_one_node(self, counter, L):
-        node = self.MPS.nodes.read(counter)
-        node = tf.cond(tf.equal(counter, self.MPS._special_node_loc), 
-                       true_fn=lambda: node[self.digit],
-                       false_fn=lambda: node)
+    def _generate_from_one_node(self, counter, L, samples_ta):
 
-        node.set_shape([self.d_feature, None, None])
-        L_dot_node = tf.einsum('tij,mik,njk->mn', L, node, node)
-        vector = tf.diag_part(L_dot_node)
-        samples = self._sample_from_vector(vector)
-        self.samples[:, counter] = samples 
+        with tf.name_scope("read_node"):
+            node = self.MPS.nodes.read(counter)
+            node = tf.cond(tf.equal(counter, self.MPS._special_node_loc), 
+                           true_fn=lambda: node[self.digit],
+                           false_fn=lambda: node)
 
-        ones = tf.ones_like(samples) 
-        feature = tf.stack([ones, np.sqrt(3) * (2 * samples - 1)], axis=1)
+        with tf.name_scope("sample_from_node"):
+            node.set_shape([self.MPS.d_feature, None, None])
+            L_dot_node = tf.einsum('tij,mik,njk->mn', L, node, node)
+            vector = tf.diag_part(L_dot_node)
+            samples = self._sample_from_vector(vector)
+            samples_ta = samples_ta.write(counter, samples) 
 
-        contracted_node = tf.einsum('mij,tm->tij', node, feature)
-        L = tf.einsum('tij,tik,tjl->tkl', L, contracted_node, contract_node)
+        with tf.name_scope("updated_L"):
+            ones = tf.ones_like(samples) 
+            feature = tf.stack([ones, np.sqrt(3) * (2 * samples - 1)], axis=1)
 
-        return counter+1, L
+            contracted_node = tf.einsum('mij,tm->tij', node, feature)
+            L = tf.einsum('tij,tik,tjl->tkl', L, contracted_node, contracted_node)
+
+        return counter+1, L, samples_ta
 
 if __name__ == '__main__':
 
@@ -67,6 +78,7 @@ if __name__ == '__main__':
     shrink = True
     shuffled = True
     permuted = False
+    special_node_loc = 0
 
     if shrink:
         input_size = 196
@@ -81,18 +93,24 @@ if __name__ == '__main__':
             weights = None
 
     # Initialise the model
-    network = MPS(d_feature, d_output, input_size)
+    network = MPS(d_feature, d_output, input_size, special_node_loc)
     network.prepare(data_source=None)
-    feed_dict = network.create_feed_dict(weights)
 
     generator = MPSGenerator(network)
 
-    digit = 5 
+    digit = 1
     n_samples = 10 
-    samples = MPSGenerator.generate(n_samples, digit)
+    samples = generator.generate(n_samples, digit)
+    feed_dict = network.create_feed_dict(weights)
 
     with tf.Session() as sess: 
+        sess.run(tf.global_variables_initializer())
         samples = sess.run(samples, feed_dict=feed_dict)
+        one_sample = samples[:, 0]
+        utils.show(one_sample)
+        plt.show()
+
+
 
 
 

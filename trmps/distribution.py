@@ -20,7 +20,7 @@ class Quadratic(distribution.Distribution):
 			self._b_sq = b * b 
 			self._tol = tol
 		parameters = locals() 
-		super(quadratic, self).__init__(
+		super(Quadratic, self).__init__(
 			dtype=self._a.dtype, 
 			reparameterization_type=distribution.FULLY_REPARAMETERIZED, 
 			validate_args=True, 

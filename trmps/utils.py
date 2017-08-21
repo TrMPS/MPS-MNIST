@@ -3,6 +3,7 @@ import urllib
 import tarfile
 import sys
 import numpy as np
+import matplotlib.pyplot as plt
 
 def check_nan(tensor, name, replace_nan=True):
     s = tf.reduce_sum(tensor)
@@ -105,6 +106,17 @@ def convert_to_onehot(vector, num_classes=None):
     result = np.zeros(shape=(len(vector), num_classes))
     result[np.arange(len(vector)), vector] = 1
     return result.astype(int)
+
+def into_image(snaked_image):
+    length = len(snaked_image)
+    dim = int(np.sqrt(length))
+    if float(dim) != float(np.sqrt(length)):
+        print("something's wrong; please pass in a snaked image that was originally square")
+    image = np.reshape(snaked_image, [dim, dim])
+    return image
+
+def show(snaked_image):
+    imgplot = plt.imshow(into_image(snaked_image), interpolation='none', cmap='binary')
 
 
 
