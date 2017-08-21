@@ -11,6 +11,7 @@ class MPS(object):
     by E.Miles Stoudenmire and David J.Schwab
     The class can also be used on its own to perform inference.
     Variables:
+    TODO: Make a bunch of these get only once the MPS is initialised!
     input_size: int
         The input size, i.e. the number of matrices composing the matrix product state
     d_matrix: int
@@ -136,6 +137,7 @@ class MPS(object):
 
 
     def test(self, test_feature, test_label):
+        # TODO: allow passing in weights for testing as well
         """
         A function to test the MPS.
         :param test_feature: a numpy array of type float32 of shape (input_size, batch_size, d_feature)
@@ -211,6 +213,7 @@ class MPS(object):
         return accuracy
 
     def confusion_matrix(self, f, labels):
+        # TODO: add a normalisation option.
         """
         Returns the confusion matrix given the predictions(f), and the correct labels
         :param f: tensorflow Tensor of shape (batch_size, d_output)
