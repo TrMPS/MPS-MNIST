@@ -8,8 +8,6 @@ Welcome to TrMPS's documentation!
 
 TrMPS offers an implementation of of `Supervised Learning with Quantum-Inspired Tensor Networks <https://arxiv.org/abs/1605.05775>`_  (and more!) using TensorFlow.
 
-Contents:
-
 .. toctree::
    :maxdepth: 1
    :hidden:
