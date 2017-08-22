@@ -5,6 +5,7 @@ from mps import MPS
 import pickle 
 import utils
 from matplotlib import pyplot as plt
+import MNISTpreprocessing
 
 class MPSGenerator(object):
 
@@ -18,38 +19,42 @@ class MPSGenerator(object):
         self.digit = digit
         self.n_samples = n_samples
 
-        L = tf.transpose(self.MPS.start_node) * self.MPS.start_node
-        L = tf.expand_dims(L, 0)
-        L = tf.tile(L, [n_samples, 1, 1])
+        C1 = self.MPS.start_node
+        C1 = tf.tile(C1, [n_samples, 1])
         cond = lambda c, l, t: tf.less(c, self.MPS.input_size)
-        _, L, samples_ta = tf.while_loop(cond=cond, 
+        _, C1, samples_ta = tf.while_loop(cond=cond, 
                              body=self._generate_from_one_node, 
-                             loop_vars=[0, L, samples_ta],
+                             loop_vars=[0, C1, samples_ta],
                              shape_invariants=[tf.TensorShape([]), 
-                                               tf.TensorShape([n_samples, None, None]), 
+                                               tf.TensorShape([n_samples, None]), 
                                                tf.TensorShape(None)], 
                              parallel_iterations=5)
-        R = tf.transpose(self.MPS.end_node) * self.MPS.end_node
-        probs = tf.einsum('tij,ij->t', L, R)
+        C2 = tf.squeeze(self.MPS.end_node)
+        probs = tf.einsum('ti,i->t', C1, C2)
         return samples_ta.stack(), probs
     
     def _sample_from_vector(self, vector):
         with tf.name_scope("sample_from_vector"):
             # sqrt the vector 
-            vector_sign = tf.sign(vector) 
-            vector = vector_sign * tf.sqrt(vector_sign * vector)
+            vector = tf.Print(vector, [vector[0]])
+            vector = vector/tf.norm(vector, axis=1, keep_dims=True) 
 
-            vector = tf.Print(vector, [vector])
-            vector = vector/tf.norm(vector) 
-
-            dist = Quadratic(vector[0], vector[1])
-            samples = dist.sample(self.n_samples)
+            dist = Quadratic(vector[:, 0], vector[:, 1])
+            samples = dist.sample()
             del dist 
 
         return samples
 
+    def _matrix_to_vector(self, matrices):
+        '''
+        Go from a matrix of vv^T to v
+        '''
+        vectors = tf.map_fn(lambda x:tf.diag_part(x), matrices)
+        vectors = tf.sqrt(vectors)
+        signs = tf.map_fn(lambda x:tf.sign(x[0]), matrices)
+        return signs * vectors 
 
-    def _generate_from_one_node(self, counter, L, samples_ta):
+    def _generate_from_one_node(self, counter, C1, samples_ta):
 
         with tf.name_scope("read_node"):
             node = self.MPS.nodes.read(counter)
@@ -60,8 +65,10 @@ class MPSGenerator(object):
 
         with tf.name_scope("sample_from_node"):
             node.set_shape([self.MPS.d_feature, None, None])
-            L_dot_node = tf.einsum('tij,mik,njk->mn', L, node, node)
-            vector = tf.diag_part(L_dot_node)
+            C1_dot_node = tf.einsum('ti,mij->tmj', C1, node)
+            contracted_C1_dot_node = tf.einsum('tmj,tnj->tmn', C1_dot_node, C1_dot_node)
+            vector = self._matrix_to_vector(contracted_C1_dot_node)
+
             samples = self._sample_from_vector(vector)
             samples_ta = samples_ta.write(counter, samples) 
 
@@ -69,10 +76,9 @@ class MPSGenerator(object):
             ones = tf.ones_like(samples) 
             feature = tf.stack([ones, np.sqrt(3) * (2 * samples - 1)], axis=1)
 
-            contracted_node = tf.einsum('mij,tm->tij', node, feature)
-            L = tf.einsum('tij,tik,tjl->tkl', L, contracted_node, contracted_node)
+            C1 = tf.einsum('tmj,tm->tj', C1_dot_node, feature)
 
-        return counter+1, L, samples_ta
+        return counter+1, C1, samples_ta
 
     def _normalise_special_node(self, special_node):
         special_node.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
@@ -139,21 +145,37 @@ if __name__ == '__main__':
     generator = MPSGenerator(network)
     norm = generator._check_norm()
 
-    digit = 8
-    n_samples = 5
+    digit = 7
+    n_samples = 100
     samples, probs = generator.generate(n_samples, digit)
 
+    feature = tf.stack([tf.ones_like(samples), np.sqrt(3) * (2 * samples - 1)], axis=-1)
+    label_np = np.zeros([n_samples, 10])
+    label_np[:, digit] = 1 
+    label = tf.constant(label_np)
+
+    f = network.predict(feature)
+    cost = network.cost(f, label)
+    accuracy = network.accuracy(f, label)
+    confusion = network.confusion_matrix(f, label)
+        
 
     feed_dict = network.create_feed_dict(weights)
 
     with tf.Session() as sess: 
         sess.run(tf.global_variables_initializer())
-        samples, probs, norm = sess.run([samples, probs, norm], feed_dict=feed_dict)
-        print(norm)
-        print(probs)
-        one_sample = samples[:, 0]
+        to_eval = [samples, cost, accuracy, confusion]
+        samples, cost, accuracy, confusion = sess.run(to_eval, feed_dict=feed_dict)
+        print(cost, accuracy)
+        print(confusion)
+        one_sample = samples[:, 1]
         utils.show(one_sample)
         plt.show()
+
+
+
+
+
 
 
 
