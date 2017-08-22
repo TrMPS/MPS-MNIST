@@ -94,7 +94,7 @@ class MPSGenerator(object):
         def _multiply_right(counter, L):
             node = self.MPS.nodes.read(counter)
             node.set_shape([self.MPS.d_feature, None, None])
-            T = tf.einsum('mij,nkl->ikjl', node, node)
+            T = tf.einsum('mij,mkl->ikjl', node, node)
             L = tf.einsum('ik,ikjl->jl', L, T)
             counter = counter + 1 
 
