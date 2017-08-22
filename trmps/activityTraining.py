@@ -16,7 +16,7 @@ permuted = False
 shuffled = False
 
 # Optimizer parameters
-max_size = 15
+max_size = 50
 batch_size = 2000
 rate_of_change = 10**(-7)
 lr_reg = 0.0

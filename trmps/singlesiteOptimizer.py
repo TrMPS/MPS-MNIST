@@ -158,6 +158,7 @@ class SingleSiteMPSOptimizer(MPSOptimizer):
 
     def _calculate_hessian(self, f, C):
         # TODO: IMPLEMENT
+        print("WARNING: Calculating the Hessian for Single Site DMRG is not yet implemented; this will probably cause your script to not work/ crash")
         with tf.name_scope('hessian'):
             d1 = tf.shape(C)[-2]
             d2 = tf.shape(C)[-1]
