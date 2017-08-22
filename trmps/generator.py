@@ -18,18 +18,20 @@ class MPSGenerator(object):
         self.digit = digit
         self.n_samples = n_samples
 
-        L = tf.diag(tf.squeeze(self.MPS.start_node))
+        L = tf.transpose(self.MPS.start_node) * self.MPS.start_node
         L = tf.expand_dims(L, 0)
         L = tf.tile(L, [n_samples, 1, 1])
         cond = lambda c, l, t: tf.less(c, self.MPS.input_size)
-        _, _, samples_ta = tf.while_loop(cond=cond, 
+        _, L, samples_ta = tf.while_loop(cond=cond, 
                              body=self._generate_from_one_node, 
                              loop_vars=[0, L, samples_ta],
                              shape_invariants=[tf.TensorShape([]), 
                                                tf.TensorShape([n_samples, None, None]), 
                                                tf.TensorShape(None)], 
                              parallel_iterations=5)
-        return samples_ta.stack()
+        R = tf.transpose(self.MPS.end_node) * self.MPS.end_node
+        probs = tf.einsum('tij,ij->t', L, R)
+        return samples_ta.stack(), probs
     
     def _sample_from_vector(self, vector):
         with tf.name_scope("sample_from_vector"):
@@ -52,8 +54,9 @@ class MPSGenerator(object):
         with tf.name_scope("read_node"):
             node = self.MPS.nodes.read(counter)
             node = tf.cond(tf.equal(counter, self.MPS._special_node_loc), 
-                           true_fn=lambda: node[self.digit],
+                           true_fn=lambda: self._normalise_special_node(node)[self.digit],
                            false_fn=lambda: node)
+
 
         with tf.name_scope("sample_from_node"):
             node.set_shape([self.MPS.d_feature, None, None])
@@ -70,6 +73,43 @@ class MPSGenerator(object):
             L = tf.einsum('tij,tik,tjl->tkl', L, contracted_node, contracted_node)
 
         return counter+1, L, samples_ta
+
+    def _normalise_special_node(self, special_node):
+        special_node.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
+        matrix_dim_1 = tf.shape(special_node)[-2] 
+        matrix_dim_2 = tf.shape(special_node)[-1]
+        collective_dim = self.MPS.d_output * self.MPS.d_feature * matrix_dim_1
+        reshaped_node = tf.reshape(special_node, [collective_dim, matrix_dim_2])
+        s, u, v = tf.svd(reshaped_node)
+        s = s/tf.norm(s) 
+        u = u * tf.expand_dims(s, 0)
+        special_node = tf.matmul(u, v, transpose_b=True)
+        special_node = tf.reshape(special_node, 
+                                  [self.MPS.d_output, self.MPS.d_feature, matrix_dim_1, matrix_dim_2])
+
+        return special_node
+
+    def _check_norm(self):
+
+        def _multiply_right(counter, L):
+            node = self.MPS.nodes.read(counter)
+            node.set_shape([self.MPS.d_feature, None, None])
+            T = tf.einsum('mij,nkl->ikjl', node, node)
+            L = tf.einsum('ik,ikjl->jl', L, T)
+            counter = counter + 1 
+
+            return counter, L 
+
+        special_node = self._normalise_special_node(self.MPS.nodes.read(0))
+        L = tf.einsum('lnij,lnik->jk', special_node, special_node)
+        cond = lambda c, l: tf.less(c, self.MPS.input_size)
+        _, L = tf.while_loop(cond=cond, 
+                             body=_multiply_right, 
+                             loop_vars=[1, L],
+                             shape_invariants=[tf.TensorShape([]), 
+                                               tf.TensorShape([None, None])],
+                             parallel_iterations=5)
+        return tf.trace(L)
 
 if __name__ == '__main__':
 
@@ -97,15 +137,20 @@ if __name__ == '__main__':
     network.prepare(data_source=None)
 
     generator = MPSGenerator(network)
+    norm = generator._check_norm()
 
-    digit = 1
-    n_samples = 10 
-    samples = generator.generate(n_samples, digit)
+    digit = 8
+    n_samples = 5
+    samples, probs = generator.generate(n_samples, digit)
+
+
     feed_dict = network.create_feed_dict(weights)
 
     with tf.Session() as sess: 
         sess.run(tf.global_variables_initializer())
-        samples = sess.run(samples, feed_dict=feed_dict)
+        samples, probs, norm = sess.run([samples, probs, norm], feed_dict=feed_dict)
+        print(norm)
+        print(probs)
         one_sample = samples[:, 0]
         utils.show(one_sample)
         plt.show()

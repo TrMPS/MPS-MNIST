@@ -1,6 +1,7 @@
 from optimizer import *
 import MNISTpreprocessing
 from mps import * 
+from squaredDistanceMPS import * 
 
 # Model parameters
 d_feature = 2

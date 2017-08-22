@@ -1,8 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import MNISTpreprocessing
-import utils
-
 
 class MPS(object):
     """
