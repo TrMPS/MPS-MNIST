@@ -1,6 +1,6 @@
-from optimizer import *
+from baseoptimizer import *
 
-class SingleSiteMPSOptimizer(MPSOptimizer):
+class SingleSiteMPSOptimizer(BaseOptimizer):
 
     def _setup_optimization(self):
         """
@@ -144,17 +144,12 @@ class SingleSiteMPSOptimizer(MPSOptimizer):
 
         return C
 
-    def _get_f_and_cost(self, bond, C):
-        # bond = tf.Print(bond, [tf.shape(bond), tf.shape(C)], summarize = 10000, message = "bond, C shapes")
+    def _get_f_and_h(self, bond, C):
         with tf.name_scope("tensordotf"):
             # f = tf.einsum('lmik,tmik->tl', bond, C)
             f = tf.tensordot(C, bond, [[1, 2, 3], [1, 2, 3]])
             h = tf.nn.softmax(f)
-        with tf.name_scope("reduce_sumcost"):
-            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self._label, logits=f))
-            # 0.5 * tf.reduce_sum(tf.square(f-self._label))
-
-        return h, cost
+        return f, h
 
     def _calculate_hessian(self, f, C):
         # TODO: IMPLEMENT
