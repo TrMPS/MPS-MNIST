@@ -35,10 +35,6 @@ class MPSGenerator(object):
     
     def _sample_from_vector(self, vector):
         with tf.name_scope("sample_from_vector"):
-            # sqrt the vector 
-            vector = tf.Print(vector, [vector[0]])
-            vector = vector/tf.norm(vector, axis=1, keep_dims=True) 
-
             dist = Quadratic(vector[:, 0], vector[:, 1])
             samples = dist.sample()
             del dist 
@@ -74,7 +70,7 @@ class MPSGenerator(object):
 
         with tf.name_scope("updated_L"):
             ones = tf.ones_like(samples) 
-            feature = tf.stack([ones, np.sqrt(3) * (2 * samples - 1)], axis=1)
+            feature = tf.stack([ones, np.sqrt(3) * (2 * samples - 1)], axis=-1)
 
             C1 = tf.einsum('tmj,tm->tj', C1_dot_node, feature)
 
@@ -145,7 +141,7 @@ if __name__ == '__main__':
     generator = MPSGenerator(network)
     norm = generator._check_norm()
 
-    digit = 7
+    digit = 5
     n_samples = 100
     samples, probs = generator.generate(n_samples, digit)
 
@@ -164,13 +160,16 @@ if __name__ == '__main__':
 
     with tf.Session() as sess: 
         sess.run(tf.global_variables_initializer())
-        to_eval = [samples, cost, accuracy, confusion]
-        samples, cost, accuracy, confusion = sess.run(to_eval, feed_dict=feed_dict)
-        print(cost, accuracy)
+        to_eval = [norm, samples, cost, accuracy, confusion]
+        norm, samples, cost, accuracy, confusion = sess.run(to_eval, feed_dict=feed_dict)
+        print('Norm: ', norm)
+        print('Cost: ', cost, ', Accuracy: ', accuracy)
         print(confusion)
-        one_sample = samples[:, 1]
-        utils.show(one_sample)
-        plt.show()
+        print('Pixels with values larger than 1: ')
+        print(samples[samples > 1])
+
+    utils.show(samples[:, 0])
+    plt.show()
 
 
 
