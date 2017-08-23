@@ -8,7 +8,7 @@ MPS represents a 'Matrix Product State', which can be optimised (using MPSOptimi
 
 .. code-block:: python
 
-    from optimizer import *
+    from trmps import *
     import activitypreprocessing as ap
 
     # Model parameters
