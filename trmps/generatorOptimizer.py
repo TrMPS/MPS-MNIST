@@ -1,14 +1,14 @@
-from optimizer import MPSOptimizer
+from optimizer import *
 import tensorflow as tf
 
 
 class generatorOptimizer(MPSOptimizer):
-    def __init__(self, MPSNetwork, max_size, delegate, grad_func=None, cutoff=1000, reg=0.001, min_singular_value=10 ** (-4), verbose=0):
+    def __init__(self, MPSNetwork, max_size, delegate, optional_parameters=MPSOptimizerParameters()):
         self.delegate = delegate
         self._desired_labels = self.delegate._desired_labels
         print("Initialised!")
         self.discriminator = self.delegate.discriminator
-        self = super().__init__(MPSNetwork, max_size, grad_func, cutoff, reg, min_singular_value, verbose)
+        self = super().__init__(MPSNetwork, max_size, optional_parameters)
 
     def _get_xs(self, bond, C):
         """
@@ -31,7 +31,11 @@ class generatorOptimizer(MPSOptimizer):
         # obtain the original cost
         xs = self._get_xs(bond, C)
         print(xs.shape)
-        phis = tf.stack([self._phi_part, xs], axis=1)
+        xs.set_shape([None, self.MPS.d_output])
+        print(xs.shape)
+        phis = tf.stack([self._phi_part, xs])
+        print("phis shape:", phis.shape)
+        phis = tf.transpose(phis, [2, 1, 0])
 
         discriminator = self.delegate.discriminator
 
@@ -61,8 +65,10 @@ class generatorOptimizer(MPSOptimizer):
                                                 name="findC2ForGeneratorUpdate")
         spec_node = discriminator.nodes.read(discriminator._special_node_loc)
         spec_node.set_shape([None, None, None, None])
+        phi = phis[discriminator._special_node_loc]
+        phi.set_shape([None, None])
         contracted_sp_node = tf.einsum(
-                'lnij,tn->tlij', spec_node, phis[discriminator._special_node_loc])
+                'lnij,tn->tlij', spec_node, phi)
         prev_C1.set_shape([None, None])
         prev_C2.set_shape([None, None])
         prev_C1 = tf.einsum('ti,tlij->tlj', prev_C1, contracted_sp_node)
@@ -90,11 +96,13 @@ class generatorOptimizer(MPSOptimizer):
         last_C2.set_shape([None, None])
         f = tf.einsum('tli,ti->tl', prev_C1, last_C2)
         f_sub_one = f - 1
+        print("f_sub_one shape: " + str(f_sub_one.shape))
 
 
         # Prepare for finding the gradient by finding the Aphis for the modified phis
         modified_xs = xs*(xs-1)
-        modified_phis = tf.stack([self._phi_part_special, modified_xs], axis=1)
+        modified_phis = tf.stack([self._phi_part_special, modified_xs])
+        modified_phis = tf.transpose(modified_phis, [2, 1, 0])
         modified_Aphis = tf.TensorArray(tf.float32, size=self.MPS.d_output, clear_after_read=False, infer_shape=False)
         loop_vars = [0, modified_Aphis, discriminator.nodes, modified_phis]
         _, modified_Aphis, _, _ = tf.while_loop(cond=full_chain_cond, body=self._find_Aphi, loop_vars=loop_vars,
@@ -105,7 +113,7 @@ class generatorOptimizer(MPSOptimizer):
         bond_shape = tf.shape(bond)
         gradient = tf.zeros(shape=bond_shape)
         loop_vars = [0, f_sub_one, C, C1s, C2s, bond_shape, modified_Aphis, gradient]
-        _, _, _, _, _, gradient = tf.while_loop(cond = full_chain_cond, body = self._find_gradient, loop_vars=loop_vars,
+        _, _, _, _, _, _, _, gradient = tf.while_loop(cond = full_chain_cond, body = self._find_gradient, loop_vars=loop_vars,
                                                 shape_invariants = [tf.TensorShape([]), tf.TensorShape(None), tf.TensorShape(None),
                                                                     tf.TensorShape(None), tf.TensorShape(None),
                                                                     tf.TensorShape(None), tf.TensorShape(None),
@@ -122,12 +130,14 @@ class generatorOptimizer(MPSOptimizer):
 
         # calculate the cost with the updated bond
         x1 = self._get_xs(updated_bond, C)
-        phi1 = tf.stack([self._phi_part, x1], axis=1)
+        phi1 = tf.stack([self._phi_part, x1])
+        phi1 = tf.transpose(phi1, [2, 1, 0])
+        print("phi1 shape:", phi1.shape)
         predictions1 = discriminator.predict(phi1)
         cost1 = discriminator.cost(predictions1, self._desired_labels)
         cost = discriminator.cost(f, self._desired_labels)
-        if self.verbose != 0:
-            cost1 = tf.Print(cost1, [cost, cost1], first_n=self.verbose, message='cost & updated cost')
+        if self.verbosity != 0:
+            cost1 = tf.Print(cost1, [cost, cost1], first_n=self.verbosity, message='cost & updated cost')
         cond_change_bond = tf.less(cost1, cost)
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
                                false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
@@ -138,9 +148,9 @@ class generatorOptimizer(MPSOptimizer):
         _special_node_loc = self.delegate.discriminator._special_node_loc
         _desired_labels = self.delegate._desired_labels
         length = self.MPS.d_output
-        C1 = C1s.read(counter - 1)
-        C2 = C2s.read(counter + 1)
-        Aphi = modified_Aphis.read(counter)
+        _C1 = C1s.read(counter - 1)
+        _C2 = C2s.read(counter + 1)
+        _Aphi = modified_Aphis.read(counter)
         cond_0 = tf.equal(0, counter)
         cond_is_spec = tf.equal(counter, _special_node_loc)
         cond_not_spec = tf.logical_not(cond_is_spec)
@@ -153,21 +163,108 @@ class generatorOptimizer(MPSOptimizer):
         cond_r_non_spec = tf.logical_and(cond_after_spec, cond_not_spec)
         cond_last_non_spec = tf.logical_and(cond_last, cond_not_spec)
         cond_last_spec = tf.logical_and(cond_last, cond_is_spec)
-        shape = tf.case({cond_is_spec:})
-        alpha_case_0_non_spec = lambda: tf.einsum('ti,tli->tl', Aphi, C2)
-        alpha_case_0_spec = lambda: tf.einsum('tli,ti->tl', Aphi, C2)
-        alpha_case_l_non_spec = lambda: tf.einsum('tli,ti->tl',  tf.einsum('tij,tlj->tli', Aphi, C2), C1)
-        alpha_case_mid_spec = lambda: tf.einsum('tli,ti->tl', tf.einsum('tlij,tj->tli', Aphi, C2), C1)
-        alpha_case_r_non_spec = lambda: tf.einsum('ti,tli->tl',  tf.einsum('tij,tj->ti', Aphi, C2), C1)
-        alpha_case_last_non_spec = lambda: tf.einsum('ti,tli->tl', Aphi, C1)
-        alpha_case_last_spec = lambda: tf.einsum('tli,ti->tl', Aphi, C1)
+
+        def alpha_case_0_non_spec():
+            Aphi = tf.identity(_Aphi)
+            C1 = tf.identity(_C1)
+            C2 = tf.identity(_C2)
+            Aphi.set_shape([None, None])
+            C2.set_shape([None, None, None])
+            # print("case0NonSpec")
+            # print(Aphi.shape)
+            # print(C1.shape)
+            # print(C2.shape)
+            return tf.einsum('ti,tli->tl', Aphi, C2)
+
+        def alpha_case_0_spec():
+            Aphi = tf.identity(_Aphi)
+            C1 = tf.identity(_C1)
+            C2 = tf.identity(_C2)
+            Aphi.set_shape([None, None, None])
+            C2.set_shape([None, None])
+            # print("case0Spec")
+            # print(Aphi.shape)
+            # print(C1.shape)
+            # print(C2.shape)
+            return tf.einsum('tli,ti->tl', Aphi, C2)
+
+        def alpha_case_l_non_spec():
+            Aphi = tf.identity(_Aphi)
+            C1 = tf.identity(_C1)
+            C2 = tf.identity(_C2)
+            Aphi.set_shape([None, None, None])
+            C1.set_shape([None, None])
+            C2.set_shape([None, None, None])
+            # print("caseLNonSpec")
+            # print(Aphi.shape)
+            # print(C1.shape)
+            # print(C2.shape)
+            return tf.einsum('tli,ti->tl',  tf.einsum('tij,tlj->tli', Aphi, C2), C1)
+
+        def alpha_case_mid_spec():
+            Aphi = tf.identity(_Aphi)
+            C1 = tf.identity(_C1)
+            C2 = tf.identity(_C2)
+            Aphi.set_shape([None, None, None, None])
+            C1.set_shape([None, None])
+            C2.set_shape([None, None])
+            # print("caseMidSpec")
+            # print(Aphi.shape)
+            # print(C1.shape)
+            # print(C2.shape)
+            return tf.einsum('tli,ti->tl', tf.einsum('tlij,tj->tli', Aphi, C2), C1)
+
+        def alpha_case_r_non_spec():
+            Aphi = tf.identity(_Aphi)
+            C1 = tf.identity(_C1)
+            C2 = tf.identity(_C2)
+            Aphi.set_shape([None, None, None])
+            C1.set_shape([None, None, None])
+            C2.set_shape([None, None])
+            # print("caseRNonSpec")
+            # print(Aphi.shape)
+            # print(C1.shape)
+            # print(C2.shape)
+            return tf.einsum('ti,tli->tl',  tf.einsum('tij,tj->ti', Aphi, C2), C1)
+
+        def alpha_case_last_non_spec():
+            Aphi = tf.identity(_Aphi)
+            C1 = tf.identity(_C1)
+            C2 = tf.identity(_C2)
+            Aphi.set_shape([None, None, None])
+            C1.set_shape([None, None, None])
+            C2.set_shape([None, None])
+            # print("caselastNonSpec")
+            # print(Aphi.shape)
+            # print(C1.shape)
+            # print(C2.shape)
+            return tf.einsum('ti,tli->tl',  tf.einsum('tij,tj->ti', Aphi, C2), C1)
+
+        def alpha_case_last_spec():
+            Aphi = tf.identity(_Aphi)
+            C1 = tf.identity(_C1)
+            C2 = tf.identity(_C2)
+            Aphi.set_shape([None, None, None, None])
+            C1.set_shape([None, None])
+            C2.set_shape([None, None])
+            # print("caseLastSpec")
+            # print(Aphi.shape)
+            # print(C1.shape)
+            # print(C2.shape)
+            return tf.einsum('tli,ti->tl', tf.einsum('tlij,tj->tli', Aphi, C2), C1)
+
         alpha = tf.case({cond_0_non_spec: alpha_case_0_non_spec,
                         cond_0_spec: alpha_case_0_spec,
                         cond_l_non_spec: alpha_case_l_non_spec,
                         cond_r_non_spec: alpha_case_r_non_spec,
                         cond_last_non_spec: alpha_case_last_non_spec,
                         cond_last_spec: alpha_case_last_spec},
-                        default=alpha_case_mid_spec, exclusive = True)
+                        default=alpha_case_mid_spec, exclusive=True)
+        f_sub_one.set_shape([None, None])
+        print("shapes:")
+        print(_desired_labels.shape)
+        print(alpha.shape)
+        print(f_sub_one.shape)
         reduced_all_but_C = tf.einsum('tl,tl,tl->t', _desired_labels, alpha, f_sub_one)
         gradient_part = tf.tensordot(reduced_all_but_C, C, [[0], [0]])
         indices = [[counter]]

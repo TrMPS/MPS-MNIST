@@ -3,5 +3,5 @@ import numpy as np
 import tensorflow as tensorflow
 
 class GeneratorMPS(MPS):
-    def create(seed):
+    def create(self, seed):
         return super().predict(seed)

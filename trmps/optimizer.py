@@ -119,7 +119,7 @@ class MPSOptimizer(object):
 
         self.feed_dict = None
         self.test = None
-        test_result = list_from(self.updated_nodes, length=self.MPS.input_size)
+        test_result = utils.list_from(self.updated_nodes, length=self.MPS.input_size)
         self.test = optional_parameters.initial_weights
         initial_lr = optional_parameters.rate_of_change
 
