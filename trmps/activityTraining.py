@@ -1,7 +1,5 @@
-from optimizer import *
 import activitypreprocessing as ap
-from squaredDistanceMPS import *
-from singlesiteOptimizer import *
+from trmps import *
 
 # Model parameters
 d_feature = 4
@@ -53,7 +51,7 @@ training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initi
 
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)
-optimizer = SingleSiteMPSOptimizer(network, max_size, optimizer_parameters)
+optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
 
