@@ -1,4 +1,5 @@
 from optimizer import *
+from singlesiteOptimizer import * 
 import MNISTpreprocessing
 from mps import * 
 from squaredDistanceMPS import * 
@@ -14,7 +15,7 @@ shuffled = True
 shrink = True
 if shrink:
     input_size = 196
-special_node_loc = 0
+special_node_loc = 91
 
 # Optimizer parameters
 batch_size = 2000
@@ -26,7 +27,7 @@ use_hessian = False
 rate_of_change = 1e-4
 lr_reg = 0.1
 logging_enabled = False
-verbosity = 0
+verbosity = 10
 
 cutoff = 100
 n_step = 12
@@ -45,9 +46,9 @@ optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_
                                               verbosity=verbosity, use_hessian=use_hessian)
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled)
-network = MPS(d_feature, d_output, input_size, special_node_loc)
-network.prepare(data_source=data_source)
-optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
+network = sqMPS(d_feature, d_output, input_size, special_node_loc)
+network.prepare(data_source=None)
+optimizer = sqMPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
 

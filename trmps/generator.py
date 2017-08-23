@@ -11,70 +11,104 @@ class MPSGenerator(object):
 
     def __init__(self, MPSNetwork):
         self.MPS = MPSNetwork 
-        assert self.MPS._special_node_loc == 0
         assert self.MPS.d_feature == 2
 
     def generate(self, n_samples, digit):
-        samples_ta = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=True, clear_after_read=False)
+        self.samples_ta = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=True, clear_after_read=False)
         self.digit = digit
         self.n_samples = n_samples
 
-        C1 = self.MPS.start_node
-        C1 = tf.tile(C1, [n_samples, 1])
-        cond = lambda c, l, t: tf.less(c, self.MPS.input_size)
-        _, C1, samples_ta = tf.while_loop(cond=cond, 
-                             body=self._generate_from_one_node, 
-                             loop_vars=[0, C1, samples_ta],
+
+        loc = self.MPS._special_node_loc
+        middle = self._sample_from_special_node()
+        cond = lambda c, l, t, f: tf.less(c, self.MPS.input_size)
+        _, middle, self.samples_ta, _ = tf.while_loop(cond=cond, 
+                             body=self._sample_from_node, 
+                             loop_vars=[loc+1, middle, self.samples_ta, True],
                              shape_invariants=[tf.TensorShape([]), 
-                                               tf.TensorShape([n_samples, None]), 
-                                               tf.TensorShape(None)], 
+                                               tf.TensorShape([None, None, None]), 
+                                               tf.TensorShape(None),
+                                               tf.TensorShape([])], 
                              parallel_iterations=5)
-        C2 = tf.squeeze(self.MPS.end_node)
-        probs = tf.einsum('ti,i->t', C1, C2)
-        return samples_ta.stack(), probs
+        cond = lambda c, l, t, f: tf.greater_equal(c, 0)
+        _, middle, self.samples_ta, _ = tf.while_loop(cond=cond, 
+                                    body=self._sample_from_node, 
+                                    loop_vars=[loc-1, middle, self.samples_ta, False],
+                                    shape_invariants=[tf.TensorShape([]), 
+                                                       tf.TensorShape([None, None, None]), 
+                                                       tf.TensorShape(None),
+                                                       tf.TensorShape([])], 
+                                    parallel_iterations=5)
+
+        
+        return self.samples_ta.stack() 
     
-    def _sample_from_vector(self, vector):
-        with tf.name_scope("sample_from_vector"):
-            dist = Quadratic(vector[:, 0], vector[:, 1])
+    def _sample_from_matrices(self, matrices):
+        with tf.name_scope("recover_vectors"):
+            vectors = tf.map_fn(lambda x:tf.diag_part(x), matrices)
+            vectors = tf.sqrt(vectors)
+            signs = tf.map_fn(lambda x:tf.sign(x[0]), matrices)
+            vectors = signs * vectors 
+
+        with tf.name_scope("sample_from_vectors"):
+            # vector = tf.Print(vector, [vector])
+            dist = Quadratic(vectors[:, 0], vectors[:, 1])
             samples = dist.sample()
             del dist 
 
         return samples
 
-    def _matrix_to_vector(self, matrices):
-        '''
-        Go from a matrix of vv^T to v
-        '''
-        vectors = tf.map_fn(lambda x:tf.diag_part(x), matrices)
-        vectors = tf.sqrt(vectors)
-        signs = tf.map_fn(lambda x:tf.sign(x[0]), matrices)
-        return signs * vectors 
+    def _sample_from_special_node(self):
+        loc = self.MPS._special_node_loc
+        with tf.name_scope("normalise_special_node"):
+            special_node = self.MPS.nodes.read(loc)
+            special_node = self._normalise_special_node(special_node)
 
-    def _generate_from_one_node(self, counter, C1, samples_ta):
+        with tf.name_scope("sample_from_special_node"):
+            matrix = tf.einsum('mij,nij->mn', special_node[self.digit], special_node[self.digit])
+            matrix = tf.expand_dims(matrix, 0)
+            matrices = tf.tile(matrix, [self.n_samples, 1, 1])
+
+            samples = self._sample_from_matrices(matrices)
+            self.samples_ta = self.samples_ta.write(loc, samples)
+
+        with tf.name_scope("attach_samples"):
+            features = self._preprocess(samples)
+            contracted_node = tf.einsum('mij,tm->tij', special_node[self.digit], features)
+
+        return contracted_node
+
+
+    def _sample_from_node(self, counter, middle, samples_ta, right_flag):
 
         with tf.name_scope("read_node"):
             node = self.MPS.nodes.read(counter)
-            node = tf.cond(tf.equal(counter, self.MPS._special_node_loc), 
-                           true_fn=lambda: self._normalise_special_node(node)[self.digit],
-                           false_fn=lambda: node)
-
+            node.set_shape([self.MPS.d_feature, None, None])
 
         with tf.name_scope("sample_from_node"):
-            node.set_shape([self.MPS.d_feature, None, None])
-            C1_dot_node = tf.einsum('ti,mij->tmj', C1, node)
-            contracted_C1_dot_node = tf.einsum('tmj,tnj->tmn', C1_dot_node, C1_dot_node)
-            vector = self._matrix_to_vector(contracted_C1_dot_node)
-
-            samples = self._sample_from_vector(vector)
+            middle_dot_node = tf.cond(right_flag, 
+                                      true_fn=lambda: tf.einsum('tij,mjk->tmik', middle, node), 
+                                      false_fn=lambda: tf.einsum('tjk,mij->tmik', middle, node))
+            contracted_node = tf.einsum('tmik,tnik->tmn', middle_dot_node, middle_dot_node)
+            samples = self._sample_from_matrices(contracted_node)
             samples_ta = samples_ta.write(counter, samples) 
 
-        with tf.name_scope("updated_L"):
-            ones = tf.ones_like(samples) 
-            feature = tf.stack([ones, np.sqrt(3) * (2 * samples - 1)], axis=-1)
+        with tf.name_scope("update_middle"):
+            feature = self._preprocess(samples)
+            middle = tf.einsum('tmik,tm->tik', middle_dot_node, feature)
 
-            C1 = tf.einsum('tmj,tm->tj', C1_dot_node, feature)
+        with tf.name_scope("update_counter"):
+            counter = tf.cond(right_flag, 
+                              true_fn=lambda: counter+1, 
+                              false_fn=lambda: counter-1)
 
-        return counter+1, C1, samples_ta
+        return counter, middle, samples_ta, right_flag
+
+    def _preprocess(self, samples):
+        ones = tf.ones_like(samples)
+        feature = tf.stack([ones, np.sqrt(3) * (2 * samples - 1)], axis=-1)
+        return feature
+
 
     def _normalise_special_node(self, special_node):
         special_node.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
@@ -141,9 +175,9 @@ if __name__ == '__main__':
     generator = MPSGenerator(network)
     norm = generator._check_norm()
 
-    digit = 5
+    digit = 1
     n_samples = 100
-    samples, probs = generator.generate(n_samples, digit)
+    samples = generator.generate(n_samples, digit)
 
     feature = tf.stack([tf.ones_like(samples), np.sqrt(3) * (2 * samples - 1)], axis=-1)
     label_np = np.zeros([n_samples, 10])
