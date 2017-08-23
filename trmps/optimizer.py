@@ -86,6 +86,7 @@ class MPSOptimizer(object):
         self.parameters = optional_parameters
         self.MPS = MPSNetwork
         self.use_hessian = self.parameters.use_hessian
+        self._armijo_iterations = self.parameters.armijo_iterations
         self.rate_of_change = tf.placeholder(tf.float32, shape=[])
         self.reg = self.parameters.reg
         self.lr_reg = self.parameters.lr_reg
@@ -560,7 +561,7 @@ class MPSOptimizer(object):
             return counter+1, armijo_cond, learning_rate * 0.5, updated_bond
 
         with tf.name_scope("armijo_loop"):
-            cond = lambda c, f, lr, b: tf.logical_and(f, tf.less(c, 10))
+            cond = lambda c, f, lr, b: tf.logical_and(f, tf.less(c, 20))
             loop_vars = [1, True, lr, bond]
             _, _, lr, updated_bond = tf.while_loop(cond=cond, body=_armijo_step, loop_vars=loop_vars, name="lr_opt")
 
