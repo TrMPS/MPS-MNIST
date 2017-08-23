@@ -3,6 +3,7 @@ import urllib
 import tarfile
 import sys
 import numpy as np
+import matplotlib.pyplot as plt
 
 def check_nan(tensor, name, replace_nan=True):
     s = tf.reduce_sum(tensor)
@@ -106,27 +107,16 @@ def convert_to_onehot(vector, num_classes=None):
     result[np.arange(len(vector)), vector] = 1
     return result.astype(int)
 
-def list_from(tensorArray, length):
-    """
-    list_from is a helper function that produces a list from a tensorArray.
-    It is used to extract the results of training in MPSOptimizer.
-    :param tensorArray: tensorflow TensorArray
-        The tensor array that is to be converted to a list
-    :param length: integer
-        The length of the TensorArray/the list that is to be created
-    :return: list of tensorflow Tensors
-        A list containing all the values of the TensorArray as Tensors.
-        This has to then be evaluated to get actual values.
-    """
-    arr = tensorArray
-    result_list = []
-    with tf.name_scope("createlist"):
-        for i in range(length):
-            result_list.append(arr.read(i))
-    return result_list
+def into_image(snaked_image):
+    length = len(snaked_image)
+    dim = int(np.sqrt(length))
+    if float(dim) != float(np.sqrt(length)):
+        print("something's wrong; please pass in a snaked image that was originally square")
+    image = np.reshape(snaked_image, [dim, dim])
+    return image
 
-
-
+def show(snaked_image):
+    imgplot = plt.imshow(into_image(snaked_image), interpolation='none', cmap='binary')
 
 
 

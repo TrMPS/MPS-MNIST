@@ -1,6 +1,5 @@
-from optimizer import *
 import MNISTpreprocessing
-from squaredDistanceMPS import *
+from trmps import *
 
 # Model parameters
 d_feature = 2
@@ -54,7 +53,7 @@ training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initi
 
 network = sqMPS(d_feature, d_output, input_size, special_node_loc)
 network.prepare(data_source=data_source, learning_rate=lin_reg_learning_rate)
-optimizer = sqMPSOptimizer(network, max_size, optimizer_parameters)
+optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
 

@@ -1,6 +1,5 @@
-from optimizer import *
 import activitypreprocessing as ap
-from squaredDistanceMPS import *
+from trmps import *
 
 # Model parameters
 d_feature = 4
@@ -15,7 +14,7 @@ permuted = False
 shuffled = False
 
 # Optimizer parameters
-max_size = 15
+max_size = 50
 batch_size = 2000
 rate_of_change = 10**(-7)
 lr_reg = 0.0
@@ -32,8 +31,8 @@ data_source = ap.activityDatasource(shuffled=shuffled)
 
 print(data_source.num_train_samples, data_source.num_test_samples)
 
-network = sqMPS(d_feature, d_output, input_size, special_node_loc=special_node_loc)
-network.prepare(data_source=None, iterations=lin_reg_iterations, learning_rate=lin_reg_learning_rate)
+network = MPS(d_feature, d_output, input_size, special_node_loc=special_node_loc)
+network.prepare(data_source=data_source, iterations=lin_reg_iterations, learning_rate=lin_reg_learning_rate)
 
 weights = None
 
@@ -52,7 +51,7 @@ training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initi
 
 feature, label = data_source.next_training_data_batch(1000)
 # network.test(feature, label)
-optimizer = sqMPSOptimizer(network, max_size, optimizer_parameters)
+optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
 
