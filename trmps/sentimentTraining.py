@@ -1,4 +1,4 @@
-from optimizer import *
+from trmps import *
 from word2vec import MovieReviewDatasource
 
 # Model parameters
