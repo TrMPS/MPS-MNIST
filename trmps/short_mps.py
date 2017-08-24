@@ -336,7 +336,7 @@ class shortMPS(object):
 
     def _append_node(self, index, node, shape):
         self.nodes_list.append(tf.placeholder_with_default(node, shape))
-        self.nodes = self.nodes.write(index, node)
+        self.nodes = self.nodes.write(index, self.nodes_list[-1])
 
     def _make_start_node(self):
         """

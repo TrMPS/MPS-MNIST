@@ -178,7 +178,7 @@ if __name__ == '__main__':
     with open('weights', 'rb') as fp:
         weights = pickle.load(fp)
         if len(weights) != input_size:
-            print("weight not of desired shape")
+            print("weights not of desired shape")
             weights = None
 
     # Initialise the model
@@ -187,7 +187,7 @@ if __name__ == '__main__':
 
     generator = MPSGenerator(network)
 
-    digit = 2
+    digit = 1
     n_samples = 100
     samples = generator.generate(n_samples, digit)
 
@@ -202,7 +202,6 @@ if __name__ == '__main__':
     confusion = network.confusion_matrix(f, label)
 
     feed_dict = network.create_feed_dict(weights)
-    print(feed_dict)
 
 
     with tf.Session() as sess: 
