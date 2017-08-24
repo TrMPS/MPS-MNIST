@@ -4,7 +4,44 @@ from mps import MPS
 import MNISTpreprocessing
 
 
-class SimpleMPS(MPS):
+class SGDMPS(MPS):
+    """
+    SimpleMPS is used as the MPS for stochastic gradient descent. 
+    Variables: 
+    d_feature: int 
+        The dimension of the feature vectors
+    d_output: int 
+        The dimension of the output vectors 
+    input_size: int 
+        The input size, i.e. the number of matrices composing the matrix product state
+    feature_reg: float 
+        Parameter for regularising the weights. Set it larger than 1 for better performance.
+    reg: float 
+        Ratio between loss and the regularisation penalty. Set it smaller than 1 for better performance.
+    start_node: tf.Tensor
+        Untrainable tf.Variable, the first node of the MPS 
+    end_node: tf.Tensor
+        Untrainable tf.Variable, the last node of the MPS 
+    nodes: list of tf.Tensor 
+        List of trainable tf.Variable, the middle nodes of the MPS 
+
+    Usage example: 
+    import MNISTpreprocessing
+
+    # Parameters
+    input_size = 196
+    shrink = True
+    d_feature = 2
+    d_output = 10
+    permuted = False
+
+    # Initialise with linear regression
+    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted = permuted)
+    network = SimpleMPS(d_feature, d_output, input_size)
+    network.prepare(data_source=data_source)
+    feature, label = data_source.test_data 
+    network.test(feature, label)
+    """
 
     def __init__(self, d_feature, d_output, input_size, feature_reg=1.1, reg=0.001, special_node_loc=None):
         """
@@ -13,13 +50,15 @@ class SimpleMPS(MPS):
         :param d_feature: integer
             The sizes of the feature vectors.
             (Referred to as 'Local dimension' in the paper)
-            Try to keep this low (if possible), as the optimisation algorithm scales
-            as (d_feature)^3.
         :param d_output: integer
             The size of the output. e.g. with 10-class classification,
             expressed as a one-hot vector, this would be 10
         :param input_size: int
             The input size, i.e. the number of matrices composing the matrix product state
+        :param feature_reg: float 
+            Parameter for regularising the weights. Set it larger than 1 for better performance.
+        :param reg: float 
+            Ratio between loss and the regularisation penalty. Set it smaller than 1 for better performance.
         """
         # structure parameters
         self.feature_reg = feature_reg
@@ -90,7 +129,7 @@ class SimpleMPS(MPS):
     def cost(self, f, label):
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=f)) #tf.reduce_mean((f - label)**2)
         reg_penalty = self.regularisation()
-        return loss + reg_penalty
+        return loss + reg_penalty * self.reg 
 
     def _setup_nodes(self):
         """
