@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from distribution import Quadratic
-from mps import MPS
+from short_mps import * 
 import pickle 
 import utils
 from matplotlib import pyplot as plt
@@ -30,6 +30,8 @@ class MPSGenerator(object):
                                                tf.TensorShape(None),
                                                tf.TensorShape([])], 
                              parallel_iterations=5)
+
+
         cond = lambda c, l, t, f: tf.greater_equal(c, 0)
         _, middle, self.samples_ta, _ = tf.while_loop(cond=cond, 
                                     body=self._sample_from_node, 
@@ -50,13 +52,70 @@ class MPSGenerator(object):
             signs = tf.map_fn(lambda x:tf.sign(x[0]), matrices)
             vectors = signs * vectors 
 
+        return self._sample_from_vectors(vectors)
+
+    def _sample_from_vectors(self, vectors):
         with tf.name_scope("sample_from_vectors"):
-            # vector = tf.Print(vector, [vector])
+            # vectors = tf.Print(vectors, [vectors[0]])
             dist = Quadratic(vectors[:, 0], vectors[:, 1])
             samples = dist.sample()
             del dist 
 
         return samples
+
+    def _sample_from_node(self, counter, middle, samples_ta, right_flag):
+
+        with tf.name_scope("read_node"):
+            node = self._read_node(counter)
+            node = tf.Print(node, [counter, tf.shape(node)])
+
+        with tf.name_scope("sample_from_node"):
+            middle_dot_node = tf.cond(right_flag, 
+                                      true_fn=lambda: tf.einsum('tij,mjk->tmik', middle, node), 
+                                      false_fn=lambda: tf.einsum('tjk,mij->tmik', middle, node))
+            contracted_node = tf.einsum('tmik,tnik->tmn', middle_dot_node, middle_dot_node)
+            samples = self._sample_from_matrices(contracted_node)
+            samples_ta = samples_ta.write(counter, samples) 
+
+        with tf.name_scope("update_middle"):
+            feature = self._preprocess(samples)
+            middle = tf.einsum('tmik,tm->tik', middle_dot_node, feature)
+
+        with tf.name_scope("update_counter"):
+            counter = tf.cond(right_flag, 
+                              true_fn=lambda: counter+1, 
+                              false_fn=lambda: counter-1)
+
+        return counter, middle, samples_ta, right_flag
+
+    def _read_node(self, counter):
+
+        def set_start_node_shape(node):
+            node = tf.squeeze(node)
+            node.set_shape([self.MPS.d_feature, None])
+            node = tf.expand_dims(node, 1)
+            return node
+
+        def set_end_node_shape(node):
+            node = tf.squeeze(node)
+            node.set_shape([self.MPS.d_feature, None])
+            node = tf.expand_dims(node, 2)
+            return node
+
+        def set_middle_node_shape(node):
+            node.set_shape([self.MPS.d_feature, None, None])
+            return node
+
+        node = self.MPS.nodes.read(counter)
+        case1 = (tf.equal(counter, 0), lambda: set_start_node_shape(node))
+        case2 = (tf.equal(counter, self.MPS.input_size-1), lambda: set_end_node_shape(node))
+        default = lambda: set_middle_node_shape(node)
+
+        node = tf.case([case1, case2], default=default)
+
+        return node 
+
+
 
     def _sample_from_special_node(self):
         loc = self.MPS._special_node_loc
@@ -79,31 +138,6 @@ class MPSGenerator(object):
         return contracted_node
 
 
-    def _sample_from_node(self, counter, middle, samples_ta, right_flag):
-
-        with tf.name_scope("read_node"):
-            node = self.MPS.nodes.read(counter)
-            node.set_shape([self.MPS.d_feature, None, None])
-
-        with tf.name_scope("sample_from_node"):
-            middle_dot_node = tf.cond(right_flag, 
-                                      true_fn=lambda: tf.einsum('tij,mjk->tmik', middle, node), 
-                                      false_fn=lambda: tf.einsum('tjk,mij->tmik', middle, node))
-            contracted_node = tf.einsum('tmik,tnik->tmn', middle_dot_node, middle_dot_node)
-            samples = self._sample_from_matrices(contracted_node)
-            samples_ta = samples_ta.write(counter, samples) 
-
-        with tf.name_scope("update_middle"):
-            feature = self._preprocess(samples)
-            middle = tf.einsum('tmik,tm->tik', middle_dot_node, feature)
-
-        with tf.name_scope("update_counter"):
-            counter = tf.cond(right_flag, 
-                              true_fn=lambda: counter+1, 
-                              false_fn=lambda: counter-1)
-
-        return counter, middle, samples_ta, right_flag
-
     def _preprocess(self, samples):
         ones = tf.ones_like(samples)
         feature = tf.stack([ones, np.sqrt(3) * (2 * samples - 1)], axis=-1)
@@ -125,28 +159,6 @@ class MPSGenerator(object):
 
         return special_node
 
-    def _check_norm(self):
-
-        def _multiply_right(counter, L):
-            node = self.MPS.nodes.read(counter)
-            node.set_shape([self.MPS.d_feature, None, None])
-            T = tf.einsum('mij,mkl->ikjl', node, node)
-            L = tf.einsum('ik,ikjl->jl', L, T)
-            counter = counter + 1 
-
-            return counter, L 
-
-        special_node = self._normalise_special_node(self.MPS.nodes.read(0))
-        L = tf.einsum('lnij,lnik->jk', special_node, special_node)
-        cond = lambda c, l: tf.less(c, self.MPS.input_size)
-        _, L = tf.while_loop(cond=cond, 
-                             body=_multiply_right, 
-                             loop_vars=[1, L],
-                             shape_invariants=[tf.TensorShape([]), 
-                                               tf.TensorShape([None, None])],
-                             parallel_iterations=5)
-        return tf.trace(L)
-
 if __name__ == '__main__':
 
     # Model parameters
@@ -154,7 +166,7 @@ if __name__ == '__main__':
     shrink = True
     shuffled = True
     permuted = False
-    special_node_loc = 0
+    special_node_loc = 91
 
     if shrink:
         input_size = 196
@@ -166,16 +178,16 @@ if __name__ == '__main__':
     with open('weights', 'rb') as fp:
         weights = pickle.load(fp)
         if len(weights) != input_size:
+            print("weight not of desired shape")
             weights = None
 
     # Initialise the model
-    network = MPS(d_feature, d_output, input_size, special_node_loc)
+    network = shortMPS(d_feature, d_output, input_size, special_node_loc)
     network.prepare(data_source=None)
 
     generator = MPSGenerator(network)
-    norm = generator._check_norm()
 
-    digit = 1
+    digit = 2
     n_samples = 100
     samples = generator.generate(n_samples, digit)
 
@@ -188,15 +200,16 @@ if __name__ == '__main__':
     cost = network.cost(f, label)
     accuracy = network.accuracy(f, label)
     confusion = network.confusion_matrix(f, label)
-        
 
     feed_dict = network.create_feed_dict(weights)
+    print(feed_dict)
+
 
     with tf.Session() as sess: 
         sess.run(tf.global_variables_initializer())
-        to_eval = [norm, samples, cost, accuracy, confusion]
-        norm, samples, cost, accuracy, confusion = sess.run(to_eval, feed_dict=feed_dict)
-        print('Norm: ', norm)
+
+        to_eval = [samples, cost, accuracy, confusion]
+        samples, cost, accuracy, confusion = sess.run(to_eval, feed_dict=feed_dict)
         print('Cost: ', cost, ', Accuracy: ', accuracy)
         print(confusion)
         print('Pixels with values larger than 1: ')
