@@ -235,21 +235,24 @@ class BaseOptimizer(object):
 
         return accuracy
 
-    def _sweep_left(self):
+    def _sweep_left(self, from_index=None, to_index=0):
         """
 
         :param self:
         :return:
         """
+        if from_index == None: 
+            from_index = self.MPS.input_size - 1 
+            
         # read second from end node
         n1 = self.MPS.nodes.read(self.MPS._special_node_loc)
         n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
 
-        C2 = self.C2s.read(self.MPS.input_size - 1)
+        C2 = self.C2s.read(from_index)
         self.C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=False, clear_after_read=False)
-        self.C2s = self.C2s.write(self.MPS.input_size - 1, C2)
-        cond = lambda counter, *args: tf.greater(counter, 0)
-        wrapped = [self.MPS.input_size-1, self.acc_lr_reg, self.C2s, self.updated_nodes, n1]
+        self.C2s = self.C2s.write(from_index, C2)
+        cond = lambda counter, *args: tf.greater(counter, to_index)
+        wrapped = [from_index, self.acc_lr_reg, self.C2s, self.updated_nodes, n1]
         shape_invariants = [tf.TensorShape([]), tf.TensorShape([]),
                             tf.TensorShape(None), tf.TensorShape(None),
                             tf.TensorShape([None, None, None, None])]
@@ -259,7 +262,7 @@ class BaseOptimizer(object):
                                                             shape_invariants=shape_invariants,
                                                             parallel_iterations=10,
                                                             name="leftSweep")
-        self.updated_nodes = self.updated_nodes.write(0, n1)
+        self.updated_nodes = self.updated_nodes.write(to_index, n1)
         return self.updated_nodes
 
     def _sweep_right(self, from_index, to_index):

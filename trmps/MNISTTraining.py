@@ -12,11 +12,12 @@ shuffled = True
 shrink = True
 if shrink:
     input_size = 196
-special_node_loc = 100
+special_node_loc = 91
 
 # Optimizer parameters
-batch_size = 4000
-max_size = 40 
+sweep_range = (1, input_size-2)
+batch_size = 1000
+max_size = 20
 min_singular_value = 1e-8
 reg = 1e-2
 use_hessian = False
@@ -38,7 +39,7 @@ data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink, permuted=permute
 #     if len(weights) != input_size:
 #         weights = None
 
-network = shortMPS(d_feature, d_output, input_size, special_node_loc)
+network = MPS(d_feature, d_output, input_size, special_node_loc)
 network.prepare(data_source=data_source)
 weights=None
 optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_reg,
@@ -46,7 +47,10 @@ optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled)
 
-optimizer = shortMPSOptimizer(network, max_size, optimizer_parameters)
+optimizer = MPSOptimizer(network, 
+						 	  max_size, 
+							  # sweep_range=sweep_range, 
+							  optional_parameters=optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
 

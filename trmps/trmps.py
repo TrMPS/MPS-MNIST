@@ -5,3 +5,5 @@ from squaredDistanceMPS import *
 from parameterObjects import *
 from sgd_optimizer import *
 from mps_sgd import *
+from shortMPS import * 
+from shortMPSOptimizer import * 

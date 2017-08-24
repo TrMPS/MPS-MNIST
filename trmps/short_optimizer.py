@@ -28,7 +28,7 @@ def list_from(tensorArray, length):
     return result_list
 
 
-class shortMPSOptimizer(object):
+class shortMPSOptimizer(baseoptimizer):
     """
     MPSOptimizer is used to optimize the MPS class for a dataset.
     Implements the DMRG method, as detailed in the paper
