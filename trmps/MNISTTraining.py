@@ -1,8 +1,5 @@
-from short_optimizer import shortMPSOptimizer
-from singlesiteOptimizer import *
 import MNISTpreprocessing
-from short_mps import shortMPS
-from squaredDistanceMPS import *
+from trmps import *
 
 # Model parameters
 d_feature = 2
@@ -48,6 +45,7 @@ optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_
                                               verbosity=verbosity, use_hessian=use_hessian)
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled)
+
 optimizer = shortMPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)

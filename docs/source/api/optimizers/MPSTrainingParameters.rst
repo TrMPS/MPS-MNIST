@@ -7,6 +7,7 @@ Creating a new MPSTrainingParameters object
 ----------
 
 __init__(rate_of_change=1000, initial_weights=None, _logging_enabled=False)
+^^^^^^^^^^^
  *rate_of_change: float*
   The rate of change for the optimisation. Different values should be tried, as there is no 'right answer' that works for all situations, and depending on the data set, the same value can cause overshooting, or make the optimisation slower than it should be.
  *initial_weights: list*

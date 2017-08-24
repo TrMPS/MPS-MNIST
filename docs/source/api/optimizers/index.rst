@@ -10,7 +10,7 @@ A simple example of usage is as below:
 
 .. code-block:: python
 
-    from optimizer import *
+    from trmps import *
     import MNISTpreprocessing
 
     # Model parameters
@@ -67,10 +67,10 @@ Related Classes
 .. toctree::
    :maxdepth: 1
 
-   sqMPSOptimizer
    SGDOptimizer
    MPSOptimizerParameters
    MPSTrainingParameters
+   SingleSiteMPSOptimizer
 
 
 Creating a new MPSOptimizer
@@ -81,8 +81,8 @@ __init__(MPSNetwork, max_size, optional_parameters=MPSOptimizerParameters())
 
  Initialises the optimiser.
 
- *MPSNetwork: MPS*
-  The matrix product state network that will be optimised.
+ *MPSNetwork: MPS or sqMPS*
+  The matrix product state that will be optimised. Take note that if an sqMPS is passed in, the MPSOptimizer cannot use the Hessian when optimizing. Despite being a subclass of MPS, passing in an SGDMPS is not supported. If you want to optimize an SGDMPS, use SGDOptimizer.
  *max_size: integer*
   The maximum size the tensors composing the MPS can grow to.
  *optional_parameters: MPSOptimizerParameters*

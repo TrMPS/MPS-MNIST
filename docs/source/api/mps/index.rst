@@ -8,7 +8,7 @@ MPS represents a 'Matrix Product State', which can be optimised (using MPSOptimi
 
 .. code-block:: python
 
-    from optimizer import *
+    from trmps import *
     import activitypreprocessing as ap
 
     # Model parameters
@@ -58,6 +58,8 @@ MPS represents a 'Matrix Product State', which can be optimised (using MPSOptimi
 
 This creates an MPS, loads in some pre-trained weights, then performs some inference, for the accuracy is then printed out.
 
+The SGDMPS subclass should be used when the MPS is goign to be optimized with stochastic gradient descent.
+
 Subclasses
 -------
 
@@ -65,7 +67,7 @@ Subclasses
    :maxdepth: 1
 
    sqMPS
-   simpleMPS
+   SGDMPS
 
 Properties
 ---------
