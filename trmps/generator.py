@@ -13,10 +13,11 @@ class MPSGenerator(object):
         self.MPS = MPSNetwork
         assert self.MPS.d_feature == 2
 
-    def generate(self, n_samples, digit):
+    def generate(self, n_samples, digit, tol=1e-6):
         self.samples_ta = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=True, clear_after_read=False)
         self.digit = digit
         self.n_samples = n_samples
+        self._tol = tol 
 
 
         loc = self.MPS._special_node_loc
@@ -41,9 +42,9 @@ class MPSGenerator(object):
                                                        tf.TensorShape(None),
                                                        tf.TensorShape([])],
                                     parallel_iterations=5)
+        pdfs = tf.squeeze(middle)
 
-
-        return self.samples_ta.stack()
+        return self.samples_ta.stack(), pdfs
 
     def _sample_from_matrices(self, matrices):
         with tf.name_scope("recover_vectors"):
@@ -57,7 +58,7 @@ class MPSGenerator(object):
     def _sample_from_vectors(self, vectors):
         with tf.name_scope("sample_from_vectors"):
             # vectors = tf.Print(vectors, [vectors[0]])
-            dist = Quadratic(vectors[:, 0], vectors[:, 1])
+            dist = Quadratic(vectors[:, 0], vectors[:, 1], tol=self._tol)
             samples = dist.sample()
             del dist
 
@@ -165,12 +166,15 @@ if __name__ == '__main__':
     shrink = True
     shuffled = True
     permuted = False
-    special_node_loc = 91
+    special_node_loc = 100
 
     if shrink:
         input_size = 196
     d_feature = 2
     d_output = 10
+
+    # Tolerance for generation 
+    tol = 1e-3
 
     # Initialise the model
 
@@ -186,9 +190,9 @@ if __name__ == '__main__':
 
     generator = MPSGenerator(network)
 
-    digit = 3
+    digit = 4
     n_samples = 100
-    samples = generator.generate(n_samples, digit)
+    samples, pdfs = generator.generate(n_samples, digit, tol)
 
     feature = tf.stack([tf.ones_like(samples), np.sqrt(3) * (2 * samples - 1)], axis=-1)
     label_np = np.zeros([n_samples, 10])
@@ -206,18 +210,17 @@ if __name__ == '__main__':
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        to_eval = [samples, cost, accuracy, confusion]
-        samples, cost, accuracy, confusion = sess.run(to_eval, feed_dict=feed_dict)
+        to_eval = [samples, pdfs, cost, accuracy, confusion]
+        samples, pdfs, cost, accuracy, confusion = sess.run(to_eval, feed_dict=feed_dict)
         print('Cost: ', cost, ', Accuracy: ', accuracy)
         print(confusion)
         print('Pixels with values larger than 1: ')
         print(samples[samples > 1])
 
     print(samples.shape)
-    utils.show(samples[:, 0])
+    utils.show(samples[:, np.argmax(pdfs)])
     plt.figure()
     avg_samples = np.mean(samples, axis=1)
-    print(avg_samples.shape)
     utils.show(avg_samples)
     plt.show()
 
