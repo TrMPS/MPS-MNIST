@@ -327,7 +327,7 @@ class BaseOptimizer(object):
     def _get_f_and_cost(self, bond, C):
         f, h = self._get_f_and_h(bond, C)
         cost = self.MPS.cost(f, self._label)
-        if type(self.MPS is sqMPS):
+        if type(self.MPS) is sqMPS:
             h = f
         return h, cost
 
