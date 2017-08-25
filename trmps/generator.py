@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from distribution import Quadratic
-from short_mps import *
+from shortMPS import *
 import pickle
 import utils
 from matplotlib import pyplot as plt
@@ -67,7 +67,8 @@ class MPSGenerator(object):
     def _sample_from_node(self, counter, middle, samples_ta, right_flag):
 
         with tf.name_scope("read_node"):
-            node = self._read_node(counter)
+            node = self.MPS.nodes.read(counter)
+            node.set_shape([self.MPS.d_feature, None, None])
 
         with tf.name_scope("sample_from_node"):
             middle_dot_node = tf.cond(right_flag,
@@ -87,35 +88,6 @@ class MPSGenerator(object):
                               false_fn=lambda: counter-1)
 
         return counter, middle, samples_ta, right_flag
-
-    def _read_node(self, counter):
-
-        def set_start_node_shape(node):
-            node = tf.squeeze(node)
-            node.set_shape([self.MPS.d_feature, None])
-            node = tf.expand_dims(node, 1)
-            return node
-
-        def set_end_node_shape(node):
-            node = tf.squeeze(node)
-            node.set_shape([self.MPS.d_feature, None])
-            node = tf.expand_dims(node, 2)
-            return node
-
-        def set_middle_node_shape(node):
-            node.set_shape([self.MPS.d_feature, None, None])
-            return node
-
-        node = self.MPS.nodes.read(counter)
-        case1 = (tf.equal(counter, 0), lambda: set_start_node_shape(node))
-        case2 = (tf.equal(counter, self.MPS.input_size-1), lambda: set_end_node_shape(node))
-        default = lambda: set_middle_node_shape(node)
-
-        node = tf.case([case1, case2], default=default)
-
-        return node
-
-
 
     def _sample_from_special_node(self):
         loc = self.MPS._special_node_loc
@@ -166,7 +138,7 @@ if __name__ == '__main__':
     shrink = True
     shuffled = True
     permuted = False
-    special_node_loc = 100
+    special_node_loc = 91
 
     if shrink:
         input_size = 196
@@ -190,8 +162,8 @@ if __name__ == '__main__':
 
     generator = MPSGenerator(network)
 
-    digit = 4
-    n_samples = 100
+    digit = 1
+    n_samples = 500
     samples, pdfs = generator.generate(n_samples, digit, tol)
 
     feature = tf.stack([tf.ones_like(samples), np.sqrt(3) * (2 * samples - 1)], axis=-1)
