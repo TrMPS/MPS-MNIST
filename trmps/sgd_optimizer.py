@@ -1,14 +1,58 @@
 import tensorflow as tf
 import time
-from mps_sgd import SimpleMPS
+from mps_sgd import SGDMPS
 import utils
 from tensorflow.python.client import timeline
 from MNISTpreprocessing import MNISTDatasource
 import pickle
 
 class SGDOptimizer(object):
+    """
+    SGDOptimizer is used to optimise SGDMPS using stochastic gradient descent.
+    The stochastic gradient descent is implemented with the tensorflow AdamOptimizer. 
+
+    Variables:
+    MPS: SGDMPS 
+        An SGDMPS object to be optimised  
+
+    Usage example: 
+
+    # Parameters 
+    d_feature = 2
+    d_output = 10
+    batch_size = 100
+    permuted = False
+    shuffled = True
+    shrink = True
+    input_size = 196
+
+    rate_of_change = 0.001
+    feature_reg=1.1
+    reg=0.1/batch_size
+    n_step = 1200
+
+    data_source = MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
+
+    # Make the SGDMPS network and initialise with linear regression 
+    network = SGDMPS(d_feature, d_output, input_size, 
+                        feature_reg=feature_reg, 
+                        reg=reg)
+    network.prepare(data_source)
+
+    # Optimise with stochastic gradient descent 
+    optimizer = SGDOptimizer(network)
+    optimizer.train(data_source, batch_size, n_step, 
+                    rate_of_change=rate_of_change)
+
+
+    """
 
     def __init__(self, network):
+        """
+        Initialise the optimizer 
+        :param MPSNetwork: SGDMPS 
+            THE MPS network to be optimised 
+        """
         self.MPS = network
         print( "_____   Thomas the Tensor Train    . . . . . o o o o o",
            "  __|[_]|__ ___________ _______    ____      o",
@@ -18,6 +62,20 @@ class SGDOptimizer(object):
            " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
 
     def train(self, data_source, batch_size, n_steps, rate_of_change=0.001):
+        """
+        Trains the network. 
+        The weights are saved under weights_sgd as a pickle file at the end of the training
+
+        :param data_source: (some subclass of) MPSDatasource
+            The data/labels that the MPS will be trained on 
+        :param batch_size: integer 
+            The batch size used for one step of stochastic gradient descent
+        :param n_steps: integer 
+            Number of batches to pass to the MPS 
+        :param rate_of_change: float 
+            Rate of change to pass into the AdamOptimizer
+
+        """
         features = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         labels = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
 
@@ -80,7 +138,7 @@ if __name__ == '__main__':
 
     weights = None
 
-    network = SimpleMPS(d_feature, d_output, input_size, 
+    network = SGDMPS(d_feature, d_output, input_size, 
                         feature_reg=feature_reg, 
                         reg=reg)
     network.prepare(data_source)
