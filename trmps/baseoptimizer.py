@@ -126,6 +126,7 @@ class BaseOptimizer(object):
                 with open('weights', 'wb') as fp:
                     pickle.dump(self.test, fp)
                 end = time.time()
+                print(time.strftime("%Y-%m-%d %H:%M:%S"))
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))
                 print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
                 print('f1 score: ', test_f1score)
