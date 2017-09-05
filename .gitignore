@@ -131,3 +131,11 @@ trmps/CardioData.zip
 trmps/weights
 
 trmps/weights_sgd
+
+trmps/FashionMNISTDatasource/t10k-images-idx3-ubyte.gz
+
+trmps/FashionMNISTDatasource/t10k-labels-idx1-ubyte.gz
+
+trmps/FashionMNISTDatasource/train-images-idx3-ubyte.gz
+
+trmps/FashionMNISTDatasource/train-labels-idx1-ubyte.gz
