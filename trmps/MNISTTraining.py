@@ -3,7 +3,7 @@ from trmps import *
 
 # Model parameters
 d_feature = 2
-d_output = 10
+d_output = 11
 input_size = 784
 
 # Data parameters
@@ -30,7 +30,12 @@ verbosity = 100
 cutoff = 100
 n_step = 12
 
-data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
+data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink, 
+												 permuted=permuted, 
+												 shuffled=shuffled, 
+												 add_random=True)
+print(data_source.test_data[0].shape)
+print(data_source.test_data[1].shape)
 
 # Initialise the model
 
