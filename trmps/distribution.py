@@ -1,15 +1,52 @@
 import numpy as np 	
 import tensorflow as tf
-from tensorflow.python.ops.distributions import distribution
 
 
 class Quadratic(object):
+	"""
+	A 'quadratic' distribution where pdf(x) = (a + \sqrt(2x - 1) b)^2 
+
+	Example usage:
+
+	from distribution import Quadratic 
+	import numpy as np 
+	import tensorflow as tf 
+
+	# Create a and b arrays to generate from 
+	a_nparray = np.random.uniform(size=10000, low=-10, high=10).astype(np.float32)
+	b_nparray = np.random.uniform(size=10000, low=-10, high=10).astype(np.float32)
+
+	a = tf.constant(a_nparray)
+	b = tf.constant(b_nparray)
+
+	# Generate from the distribution and calculate the cdf of the generated samples 
+	quad_dist = Quadratic(a, b)
+	samples = quad_dist.sample() 
+	cdfs = quad_dist.cdf(samples)
+
+	# Run a tensorflow session 
+	with tf.Session() as sess:
+		tf.global_variables_initializer()
+		samples, cdfs = sess.run([samples, cdfs])
+		print(samples[samples > 1].shape)
+		print(cdfs[cdfs < 0.5].shape)
+	"""
 
 	def __init__(self, 
 				 a, 
 				 b, 
 				 tol=1e-6,
 				 name="quadratic"):
+		"""
+		Initialise the model with arrays of a and b 
+
+		:param a: tf.Tensor
+			1D Tensor 
+		:param b: tf.Tensor
+			1D Tensor 
+		:param tol: float 
+			if abs(b) is smaller than tol, treat it as zero when generating
+		"""
 
 		norm = tf.sqrt(a * a + b * b) 
 		self._a = a/norm
@@ -20,16 +57,28 @@ class Quadratic(object):
 		self._n_params = tf.shape(a)[0] 
 
 	def sample(self, seed=None):
+		"""
+		Generate one sample from each pair of (a, b)
+		"""
 		cdfs = tf.random_uniform([self._n_params], minval=0, maxval=1, seed=seed)
 		return self._inverse_cdf(cdfs)
 
 	def prob(self, x):
+		"""
+		Calculate the probabilities of an array of x following the 
+		pdfs specified by the a and b arrays 
+
+		Note length(x) must be equal to length(b)
+		"""
 		u = 2 * x - 1
 		middle_term = 2 * np.sqrt(3) * u * self._a * self._b 
 		last_term = 3 * tf.square(u) * self._b_sq 
 		return (self._a_sq + middle_term + last_term)
 
 	def cdf(self, x):
+		"""
+		Calculate the cdfs of an array of x 
+		"""
 		first_term = self._a_sq * x 
 		second_term = 2 * np.sqrt(3) * self._a * self._b * (x - 1) * x 
 		third_term =  self._b_sq * ((2 * x - 1) ** 3 + 1)/2 

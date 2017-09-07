@@ -4,6 +4,14 @@ import tensorflow as tf
 
 
 class shortMPSOptimizer(MPSOptimizer):
+    """
+    Short MPS is a subclass of the MPSOptimizer
+    Instead of sweeping the full MPS, it restricts the sweeping to a range. 
+
+    Note that for the MPS to remain in canonical form at all times, 
+    the nodes that are not updated must be initialised to be of 
+    left/right canonical form. 
+    """
 
     def __init__(self, MPSNetwork, max_size, sweep_range=None, optional_parameters=MPSOptimizerParameters()):
 
