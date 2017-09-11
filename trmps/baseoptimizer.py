@@ -23,6 +23,7 @@ class BaseOptimizer(object):
             See documentation for MPSOptimizerParameters for more detail.
         """
         self.parameters = optional_parameters
+        self.path = self.parameters.path
         self.MPS = MPSNetwork
         self.use_hessian = self.parameters.use_hessian
         if self.use_hessian and type(self.MPS) is sqMPS:
@@ -123,8 +124,7 @@ class BaseOptimizer(object):
                     with open("timeline.json", "w") as f:
                         f.write(ctf)
                     run_metadata = tf.RunMetadata()
-                with open('weights', 'wb') as fp:
-                    pickle.dump(self.test, fp)
+                self.MPS.save(self.test, path=self.path)
                 end = time.time()
                 print(time.strftime("%Y-%m-%d %H:%M:%S"))
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))
