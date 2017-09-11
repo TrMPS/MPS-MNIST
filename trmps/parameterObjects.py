@@ -61,7 +61,8 @@ class MPSTrainingParameters(object):
             overshooting, or make the optimisation slower than it should be.
         :param initial_weights: list
             The initial weights for the network, if it is desired to override the default values
-            from mps.prepare(self, data_source, iterations = 1000)
+            from mps.prepare(self, data_source, iterations = 1000).
+            Deprecated.
         :param _logging_enabled: boolean
             Whether certain things are logged to Tensorboard/ to a Chrome timeline.
         """

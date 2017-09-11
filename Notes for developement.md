@@ -41,3 +41,34 @@ The words feature dimension and local dimension may be used interchangably, and 
 * a_prime_j: (feature dimension, left dimension, right dimension), where the right dimension is now expanded/ condensed according to the results of SVD
 * a_prime_j1: (left dimension, output dimension, right dimension), where the left dimension is now expanded/ condensed according to the results of SVD
 
+## File Format
+Previous to this file format, the weights were saved as a pickled list. The disadvantages of this were that
+* The list didn't explicitly contain higher level data about the MPS, e.g. the input_size
+    - This meant that to initialise an MPS, even if we had the weights, we had to initialise MPSs by feeding in all of the parameters manually
+* Pickle files are Python-specific
+This file format was created to address these issues. An added benefit of the file format is that it is much [more space efficient than a Pickle](https://stackoverflow.com/questions/9619199/best-way-to-preserve-numpy-arrays-on-disk). By using this file format, one can also save the configuration of an MPS without saving the weights.
+It is a binary file currently with the following format:
+
+|Stored Content     |Type   |Bytes  |Total Bytes|
+|-------------------|-------|-------|-----------|
+|contains_weights   |bool   |1      |1          |
+|input_size         |int16  |2      |3          |
+|special_node_loc   |int16  |2      |5          |
+|d_feature          |int16  |2      |7          |
+|d_output           |int16  |2      |9          |
+
+If contains_weights is True, then the dimensions of the weights and the weights themselves are read in as well. Dimension m refers to the right hand side dimension of the tensor at position m. The total bytes for weight m is a little complicated, but can be inferred from the contents of the table below/the implementation of from_file in mps.py can be used as a reference. 
+
+|Stored Content     |Type               |Bytes      |Total Bytes|
+|-------------------|-------------------|-----------|-----------|
+|dim0               |int16              |2          |11         |
+|dim1               |int16              |2          |13         |
+|...                |...                |...        |...        |
+|dim(input_size-1)  |int16              |2          |9 + (input_size-1)\*2|
+|weight 0           |buffer of float32s |2\*input_size\*dim0\*d_feature\*4|...|
+|weight 1           |buffer of float32s |dim0\*dim1\*d_feature\*4|...|
+|...                |...                |...        |...        |
+|weight m (m=special_node_loc)|buffer of float32s|dim(m-1)\*dim(m)\*d_feature\*4|...|
+|...                |...                |...        |...        |
+|final weight       |buffer of float32s |dim(-1)\*2\*input_size\*d_feature\*4|...|
+
