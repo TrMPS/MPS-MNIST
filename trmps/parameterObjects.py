@@ -6,7 +6,7 @@ class MPSOptimizerParameters(object):
     def __init__(self, cutoff=1000,
                  reg=0.001, lr_reg=0.99, min_singular_value=10**(-4),
                  verbosity=0, armijo_coeff=10**(-4), use_hessian=False,
-                 armijo_iterations=10):
+                 armijo_iterations=10, path="MPSconfig"):
         """
         :param cutoff: float
             The cutoff value for the gradient. Anything above this is clipped off.
@@ -45,6 +45,7 @@ class MPSOptimizerParameters(object):
         self.armijo_coeff = armijo_coeff
         self.use_hessian = use_hessian
         self.armijo_iterations = armijo_iterations
+        self.path = path
 
 class MPSTrainingParameters(object):
     """
@@ -60,7 +61,8 @@ class MPSTrainingParameters(object):
             overshooting, or make the optimisation slower than it should be.
         :param initial_weights: list
             The initial weights for the network, if it is desired to override the default values
-            from mps.prepare(self, data_source, iterations = 1000)
+            from mps.prepare(self, data_source, iterations = 1000).
+            Deprecated.
         :param _logging_enabled: boolean
             Whether certain things are logged to Tensorboard/ to a Chrome timeline.
         """

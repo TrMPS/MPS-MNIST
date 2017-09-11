@@ -34,22 +34,23 @@ n_step = 6
 
 data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink, permuted=permuted, shuffled=shuffled)
 
-# Initialise the model
-
-# with open('weights_sgd', 'rb') as fp:
-#     weights = pickle.load(fp)
-#     if len(weights) != input_size:
-#         weights = None
-
 weights=None
+
 optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_reg,
                                               verbosity=verbosity)
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled)
-
+# Create network from scratch
 network = sqMPS(d_feature, d_output, input_size, special_node_loc)
 network.prepare(data_source=data_source, learning_rate=lin_reg_learning_rate)
+
+# Load network from saved configuration
+# network = MPS.from_file()
+
+# Training
 optimizer = MPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
 
+# Testing
+# network.test(data_source.test_data[0], data_source.test_data[1])

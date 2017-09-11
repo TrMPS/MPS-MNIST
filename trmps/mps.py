@@ -2,7 +2,6 @@ import tensorflow as tf
 import numpy as np
 import MNISTpreprocessing
 
-
 class MPS(object):
     """
     MPS represents a 'Matrix Product State', which can be optimised (using MPSOptimizer)
@@ -79,6 +78,77 @@ class MPS(object):
     print("\n\n\n\n Accuracy is:" + str(acc))
     print("\n\n\n\n" + str(conf))
     """
+    @classmethod
+    def from_file(cls, path="MPSconfig"):
+        with open(path, "rb") as f:
+            _results = f.read()
+        contains_weights = bool(_results[0])
+        input_size = int.from_bytes(_results[1:3], byteorder='big')
+        _special_node_loc = int.from_bytes(_results[3:5], byteorder='big')
+        d_feature = int.from_bytes(_results[5:7], byteorder='big')
+        d_output = int.from_bytes(_results[7:9], byteorder='big')
+        self = cls(d_feature, d_output, input_size, special_node_loc=_special_node_loc)
+        weights = []
+        dims = []
+        if contains_weights is True:
+            print("No need to prepare: previous weights will be used")
+            for i in range(9, 9 + (self.input_size - 1) * 2, 2):
+                dim = int.from_bytes(_results[i:i + 2], byteorder='big')
+                dims.append(dim)
+            start_index = 9 + (self.input_size) * 2
+            for i in range(self.input_size):
+                print(start_index)
+                if i == self.input_size - 1:
+                    l_dim = dims[i - 1]
+                    r_dim = self.d_matrix
+                elif i == 0:
+                    l_dim = self.d_matrix
+                    r_dim = dims[i]
+                else:
+                    l_dim = dims[i - 1]
+                    r_dim = dims[i]
+                if i == self._special_node_loc:
+                    end_index = (start_index +
+                                 (l_dim * r_dim * self.d_feature * self.d_output) * 4)
+                    weight = np.frombuffer(_results[start_index:end_index], dtype=np.float32)
+                    weight = np.reshape(weight, (self.d_output, self.d_feature, l_dim, r_dim))
+                else:
+                    end_index = (start_index +
+                                 (l_dim * r_dim * self.d_feature) * 4)
+                    weight = np.frombuffer(_results[start_index:end_index], dtype=np.float32)
+                    weight = np.reshape(weight, (self.d_feature, l_dim, r_dim))
+                weights.append(weight)
+                start_index = end_index
+            self.prepare(_weights=weights)
+        else:
+            print("Please remember to prepare the MPS")
+        return self
+
+    def save(self, weights=None, path="MPSconfig"):
+        contains_weights = True
+        if weights is None:
+            contains_weights = False
+        # Flag for whether contains weights or not
+        results = contains_weights.to_bytes(1, byteorder='big')
+        results += self.input_size.to_bytes(2, byteorder='big')
+        results += self._special_node_loc.to_bytes(2, byteorder='big')
+        results += self.d_feature.to_bytes(2, byteorder='big')
+        results += self.d_output.to_bytes(2, byteorder='big')
+        if contains_weights is False:
+            print("contains_weights False")
+        else:
+            for i in range(len(weights)):
+                shape = weights[i].shape
+                if i == self._special_node_loc:
+                    results += shape[3].to_bytes(2, byteorder='big')
+                else:
+                    results += shape[2].to_bytes(2, byteorder='big')
+            for weight in weights:
+                print(len(results))
+                results += weight.tobytes(order='C')
+            print(len(results))
+        with open(path, "w+b") as f:
+            f.write(results)
 
     def __init__(self, d_feature, d_output, input_size, special_node_loc=None):
         """
@@ -106,7 +176,7 @@ class MPS(object):
         # else:
         #     self._special_node_loc = special_node_loc
 
-    def prepare(self, data_source=None, iterations=1000, learning_rate=0.05):
+    def prepare(self, data_source=None, iterations=1000, learning_rate=0.05, _weights=None):
         """
         Prepares the MPS using linear regression. This can be thought of as pre-training the network,
         and dramatically shortens the required training time. This function must be called immediately
@@ -121,9 +191,12 @@ class MPS(object):
         """
         if data_source is not None:
             self._lin_reg(data_source, iterations, learning_rate)
+            self._setup_nodes()
+        elif _weights is not None:
+            self._prepare_from_previous(weights=_weights)
         else:
             self._random_prepare()
-        self._setup_nodes()
+            self._setup_nodes()
 
     def _random_prepare(self):
         # self.weight = (0.05 * np.random.rand(self.input_size, self.d_feature - 1, self.d_output)
@@ -137,7 +210,6 @@ class MPS(object):
 
 
     def test(self, test_feature, test_label):
-        # TODO: allow passing in weights for testing as well
         """
         A function to test the MPS.
         :param test_feature: a numpy array of type float32 of shape (input_size, batch_size, d_feature)
@@ -154,13 +226,15 @@ class MPS(object):
         f = self.predict(feature)
         cost = self.cost(f, label)
         accuracy = self.accuracy(f, label)
+        confusion_matrix = self.confusion_matrix(f, label)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            test_cost, test_acc, test_f = sess.run(
-                [cost, accuracy, f], {feature: test_feature, label: test_label})
-            print(test_cost)
-            print("sample prediction:", test_f[0])
-            print(test_acc)
+            test_cost, test_acc, test_f, test_conf = sess.run(
+                [cost, accuracy, f, confusion_matrix], {feature: test_feature, label: test_label})
+            print("\n\n\n\n Accuracy is:" + str(test_acc))
+            print("\n\n\n\n Cost is:" + str(test_cost))
+            print("\n\n\n\n" + str(test_conf))
+            print("\n\n\n\n Sample prediction: " + str(test_f[0]))
 
 #     def load_nodes(self, weights):
 #         """
@@ -328,6 +402,26 @@ class MPS(object):
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
                 else:
                     self.nodes_list.append(tf.placeholder_with_default(self._make_middle_node(i),
+                                                                       [self.d_feature, None, None]))
+                    self.nodes = self.nodes.write(i, self.nodes_list[-1])
+
+    def _prepare_from_previous(self, weights):
+        with tf.name_scope("MPSnodes"):
+            self.nodes_list = []
+            self.nodes = tf.TensorArray(tf.float32, size=0, dynamic_size=True,
+                                        clear_after_read=False, infer_shape=False)
+            self.start_node = self._make_start_node()
+            self.end_node = self._make_end_node()
+
+            for i in range(0, self.input_size):
+                if i == self._special_node_loc:
+                    # The Second node with output leg attached
+                    print(weights[i].shape)
+                    self.nodes_list.append(tf.placeholder_with_default(weights[i],
+                                                                       [self.d_output, self.d_feature, None, None]))
+                    self.nodes = self.nodes.write(i, self.nodes_list[-1])
+                else:
+                    self.nodes_list.append(tf.placeholder_with_default(weights[i],
                                                                        [self.d_feature, None, None]))
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
 
