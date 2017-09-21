@@ -22,17 +22,17 @@ min_singular_value = 1e-8
 reg = 1e-2
 use_hessian = False
 
-rate_of_change = 1e-4
+rate_of_change = 1e-6
 lr_reg = 0.1
 logging_enabled = False
-verbosity = 100
+verbosity = 0
 
 cutoff = 100
 n_step = 12
 
-data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink, 
-												 permuted=permuted, 
-												 shuffled=shuffled, 
+data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink,
+												 permuted=permuted,
+												 shuffled=shuffled,
 												 add_random=True)
 print(data_source.test_data[0].shape)
 print(data_source.test_data[1].shape)
@@ -52,9 +52,9 @@ optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled)
 
-optimizer = shortMPSOptimizer(network, 
-						 	  max_size, 
-							  sweep_range=sweep_range, 
+optimizer = shortMPSOptimizer(network,
+						 	  max_size,
+							  sweep_range=sweep_range,
 							  optional_parameters=optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
                 training_parameters)
