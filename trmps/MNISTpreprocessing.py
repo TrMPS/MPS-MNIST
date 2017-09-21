@@ -43,13 +43,13 @@ def _preprocess_images(data, size, shrink = True):
                               strides=[1, 2, 2, 1], padding='SAME')
         #pooled_image = tf.placeholder(tf.float32, shape=[1, 14, 14, 1])
         snaked_image = tf.reshape(pool, shape=[196])
-    
+
         constants = tf.fill([196], 1.0)
     else:
         snaked_image = image
         constants = tf.fill([784], 1.0)
     phi = tf.stack([constants, np.sqrt(3) * (2 * snaked_image - 1)], axis=1)
-    
+
     _spinner = spinner(jump = 300)
 
     # Loop through all the elements in the dataset and resize
@@ -72,17 +72,17 @@ def _preprocess_images(data, size, shrink = True):
                 _spinner.print_spinner(percentage)
     _spinner.print_spinner(100.0)
     return (np.array(data), np.array(labels))
-    
+
 class MNISTDatasource(MPSDatasource):
     """
     MNISTDatasource is a subclass of MPSDatasource which implements data loading for the
     well known MNIST dataset.
-    
+
     Use as you would use any subclass of MPSDatasource.
     This class can also permute the MNIST images pixel-by-pixel.
     This class requires the use of tensorflow to load data.
     """
-    
+
     def __init__(self, shrink = True, permuted = False, shuffled = False, add_random = False):
         """
         Initialises the dataset, and can also permute/shuffle the dataset.
@@ -114,7 +114,7 @@ class MNISTDatasource(MPSDatasource):
             for d in test_data:
                 permuted_test_data.append(np.array(d[permutation]))
             self._test_data = np.array(permuted_test_data), test_labels
-            
+
     def _load_test_data(self):
         """
         Loads test data of the appropriate size.
@@ -126,7 +126,7 @@ class MNISTDatasource(MPSDatasource):
             self._test_data = self._add_random(*self._test_data)
 
         super()._load_test_data()
-    
+
     def _load_training_data(self):
         """
         Loads training data of the appropriate size.
@@ -150,12 +150,12 @@ class MNISTDatasource(MPSDatasource):
         extra_zeros = np.zeros((labels.shape[0], 1))
         labels = np.concatenate((labels, extra_zeros), axis=1)
         random_labels = np.zeros((num_random_samples, 11))
-        random_labels[-1] = 1 
+        random_labels[:, -1] = 1
         labels = np.concatenate((labels, random_labels), axis=0)
 
         return (data, labels)
 
-        
+
 
 
 

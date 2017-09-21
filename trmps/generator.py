@@ -9,23 +9,23 @@ import MNISTpreprocessing
 
 class MPSGenerator(object):
     """
-    A generator object that takes an MPS network 
-    and generate samples from it by unzipping the chain. 
+    A generator object that takes an MPS network
+    and generate samples from it by unzipping the chain.
 
-    It can generate from both MPS and shortMPS. 
+    It can generate from both MPS and shortMPS.
 
     Example usage using the MNIST dataset:
 
     import tensorflow as tf
     import numpy as np
     from shortMPS import *
-    from generator import * 
+    from generator import *
     import pickle
     import utils
     from matplotlib import pyplot as plt
     import MNISTpreprocessing
 
-    # Initialise a shortMPS 
+    # Initialise a shortMPS
 
     input_size = 784
     shrink = True
@@ -41,7 +41,7 @@ class MPSGenerator(object):
     network = shortMPS(d_feature, d_output, input_size, special_node_loc)
     network.prepare(data_source=None)
 
-    # Load the weights 
+    # Load the weights
 
     with open('weights', 'rb') as fp:
     weights = pickle.load(fp)
@@ -53,7 +53,7 @@ class MPSGenerator(object):
 
 
 
-    # Generate samples 
+    # Generate samples
 
     generator = MPSGenerator(network)
 
@@ -67,14 +67,14 @@ class MPSGenerator(object):
     label_np[:, digit] = 1
     label = tf.constant(label_np)
 
-    # Test the generated samples 
+    # Test the generated samples
 
     f = network.predict(feature)
     cost = network.cost(f, label)
     accuracy = network.accuracy(f, label)
     confusion = network.confusion_matrix(f, label)
 
-    # Run tensorflow sesion  
+    # Run tensorflow sesion
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -96,9 +96,9 @@ class MPSGenerator(object):
 
     def __init__(self, MPSNetwork):
         """
-        :param MPSNetwork: MPS 
-            The matrix product state network that will be optimised 
-        :return: 
+        :param MPSNetwork: MPS
+            The matrix product state network that will be optimised
+        :return:
         """
         self.MPS = MPSNetwork
         assert self.MPS.d_feature == 2
@@ -107,16 +107,16 @@ class MPSGenerator(object):
         """
         :param n_samples: integer
             The number of samples required
-        :param digit: integer 
+        :param digit: integer
             The integer we want to sample
-        :param tol: float 
+        :param tol: float
             The tolerance for the Quadratic distribution
-        :return: 
+        :return:
         """
         self.samples_ta = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=True, clear_after_read=False)
         self.digit = digit
         self.n_samples = n_samples
-        self._tol = tol 
+        self._tol = tol
 
 
         loc = self.MPS._special_node_loc
@@ -242,9 +242,9 @@ if __name__ == '__main__':
     if shrink:
         input_size = 196
     d_feature = 2
-    d_output = 10
+    d_output = 11
 
-    # Tolerance for generation 
+    # Tolerance for generation
     tol = 1e-3
 
     # Initialise the model
@@ -261,12 +261,12 @@ if __name__ == '__main__':
 
     generator = MPSGenerator(network)
 
-    digit = 1
+    digit = 5
     n_samples = 500
     samples, pdfs = generator.generate(n_samples, digit, tol)
 
     feature = tf.stack([tf.ones_like(samples), np.sqrt(3) * (2 * samples - 1)], axis=-1)
-    label_np = np.zeros([n_samples, 10])
+    label_np = np.zeros([n_samples, 11])
     label_np[:, digit] = 1
     label = tf.constant(label_np)
 
@@ -293,6 +293,8 @@ if __name__ == '__main__':
     plt.figure()
     avg_samples = np.mean(samples, axis=1)
     utils.show(avg_samples)
+    plt.figure()
+    utils.show(samples[:, 0])
     plt.show()
 
 
