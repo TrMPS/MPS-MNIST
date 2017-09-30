@@ -96,6 +96,31 @@ class MPSDatasource(object):
         np.save(self._test_data_path, self._test_data[0])
         np.save(self._test_labels_path, self._test_data[1])
 
+    def _save_binary(self):
+        _training_data_path = os.path.join(type(self).__name__, "training_data_bin")
+        _test_data_path = os.path.join(type(self).__name__, "test_data_bin")
+        version_number = 1
+
+        results1 = version_number.to_bytes(2, byteorder='little')
+        results1 += self._training_data[0].shape[1].to_bytes(2, byteorder='little')  # MPSLength
+        results1 += self._training_data[0].shape[2].to_bytes(2, byteorder='little')  # localDimension
+        results1 += self._training_data[1].shape[1].to_bytes(2, byteorder='little')  # number of classes
+        results1 += self._training_data[0].shape[0].to_bytes(2, byteorder='little')  # Batch size
+        results1 += self.training_data[0].tobytes(order='C')
+        results1 += self._training_data[1].tobytes(order='C')
+        with open(_training_data_path, "w+b") as f:
+            f.write(results1)
+
+        results = version_number.to_bytes(2, byteorder='little')
+        results += self._test_data[0].shape[1].to_bytes(2, byteorder='little')  # MPSLength
+        results += self._test_data[0].shape[2].to_bytes(2, byteorder='little')  # localDimension
+        results += self._test_data[1].shape[1].to_bytes(2, byteorder='little')  # number of classes
+        results += self._test_data[0].shape[0].to_bytes(2, byteorder='little')  # Batch size
+        results += self.test_data[0].tobytes(order='C')
+        results += self._test_data[1].tobytes(order='C')
+        with open(_test_data_path, "w+b") as f:
+            f.write(results)
+
     @property
     def training_data(self):
         """
