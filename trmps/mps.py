@@ -97,7 +97,6 @@ class MPS(object):
                 dims.append(dim)
             start_index = 9 + (self.input_size) * 2
             for i in range(self.input_size):
-                print(start_index)
                 if i == self.input_size - 1:
                     l_dim = dims[i - 1]
                     r_dim = self.d_matrix
@@ -144,9 +143,7 @@ class MPS(object):
                 else:
                     results += shape[2].to_bytes(2, byteorder='big')
             for weight in weights:
-                print(len(results))
                 results += weight.tobytes(order='C')
-            print(len(results))
         with open(path, "w+b") as f:
             f.write(results)
 
