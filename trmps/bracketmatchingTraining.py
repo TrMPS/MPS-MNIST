@@ -2,7 +2,7 @@ import bracketmatchingpreprocessing
 from trmps import *
 
 # Data parameters
-sequence_length = 30
+sequence_length = 50
 num_bracket_types = 5
 num_noise_types = num_bracket_types
 max_unmatched = 10
@@ -13,23 +13,25 @@ num_train_data = 10000
 d_feature = (num_bracket_types * 2) + num_noise_types
 d_output = num_bracket_types
 input_size = sequence_length
-lin_reg_learning_rate = 10**(-1)
+lin_reg_learning_rate = 10**(-3)
+lin_reg_iterations = 20000
+
 special_node_loc = None
 
 # Optimizer parameters
 batch_size = 10000
-max_size = 30
+max_size = 40
 min_singular_value = 0.001
 reg = 0.01
 armijo_coeff = 10**(-1)
 
-rate_of_change = 5 * 10 ** (-4)
+rate_of_change = 0
 lr_reg = 0.0
 
 logging_enabled = False
-verbosity = -0
+verbosity = -1
 
-cutoff = 100
+cutoff = 10000
 n_step = 6
 
 data_source = bracketmatchingpreprocessing.BracketMatchingDatasource(sequence_length, num_bracket_types, num_noise_types,
@@ -43,8 +45,8 @@ optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled)
 # Create network from scratch
-network = MPS(d_feature, d_output, input_size, special_node_loc)
-network.prepare(data_source=data_source, learning_rate=lin_reg_learning_rate, iterations=10000)
+network = sqMPS(d_feature, d_output, input_size, special_node_loc)
+network.prepare(data_source=data_source, learning_rate=lin_reg_learning_rate, iterations=lin_reg_iterations)
 
 # Load network from saved configuration
 # network = MPS.from_file()
