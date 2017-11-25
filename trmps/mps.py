@@ -341,6 +341,7 @@ class MPS(object):
 
         accuracy = self.accuracy(prediction, label)
         confusion_matrix = self.confusion_matrix(prediction, label)
+        cost = self.cost(prediction, label)
 
         reshaped_weight = tf.transpose(weight)
         reshaped_weight = tf.reshape(
@@ -356,16 +357,22 @@ class MPS(object):
                 sess.run(train_step, feed_dict={
                          feature: batch_feature, label: batch_label})
 
-            train_acc, train_conf = sess.run([accuracy, confusion_matrix], feed_dict={
+            train_acc, train_conf, train_cost = sess.run([accuracy, confusion_matrix, cost], feed_dict={
                                              feature: batch_feature, label: batch_label})
             print('Lin regression gives a training accuracy of {}'.format(train_acc))
             print(train_conf)
+            print('Cost: ', train_cost)
 
             batch_feature, batch_label = data_source.test_data
-            test_acc, test_conf = sess.run([accuracy, confusion_matrix], feed_dict={
+            test_acc, test_conf, test_cost, test_predict = sess.run([accuracy, confusion_matrix, cost, prediction], feed_dict={
                                            feature: batch_feature, label: batch_label})
             print('Lin regression gives a test accuracy of {}'.format(test_acc))
+            print('Cost: ', test_cost)
             print(test_conf)
+            print('Sample prediction:')
+            print(test_predict[0])
+            print('Sample ground truth:')
+            print(batch_label[0])
 
             self.weight, self.bias = sess.run([reshaped_weight, bias])
             del batch_feature, batch_label
