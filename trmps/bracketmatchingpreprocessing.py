@@ -3,32 +3,39 @@ import numpy as np
 from utils import spinner
 from utils import convert_to_onehot
 
-def _create_bracket_data(sequence_length, num_bracket_types, num_noise_types, max_unmatched):
+def _create_bracket_data(sequence_length, num_bracket_types, num_noise_types, max_unmatched, normalised=True):
     total = (num_bracket_types * 2) + num_noise_types
     last_bracket_num = num_bracket_types * 2
     sequence = np.zeros((sequence_length, total))
-    num_unmatched = np.zeros(num_bracket_types)
+    num_unopened = np.zeros(num_bracket_types)
+    num_unclosed = np.zeros(num_bracket_types)
     for i in range(sequence_length):
         rand_int = np.random.randint(low=0, high=total)
         sequence[i][rand_int] = 1.0
         if rand_int < num_bracket_types:
-            if num_unmatched[rand_int] < max_unmatched:
-                num_unmatched[rand_int] = num_unmatched[rand_int] + 1
+            num_unclosed[rand_int] = num_unclosed[rand_int] + 1
         elif rand_int < last_bracket_num:
-            if num_unmatched[rand_int - num_bracket_types] > 0:
-                num_unmatched[rand_int - num_bracket_types] = num_unmatched[rand_int - num_bracket_types] - 1
+            if num_unclosed[rand_int - num_bracket_types] > 0:
+                num_unclosed[rand_int - num_bracket_types] = num_unclosed[rand_int - num_bracket_types] - 1
+            else:
+                num_unopened[rand_int - num_bracket_types] = num_unopened[rand_int - num_bracket_types] + 1
+    num_unmatched = np.minimum(np.add(num_unopened, num_unclosed), max_unmatched)
+    if normalised:
+        num_unmatched = num_unmatched / max_unmatched
     return sequence, num_unmatched
 
 class BracketMatchingDatasource(MPSDatasource):
-    def __init__(self, sequence_length, num_bracket_types, num_noise_types, max_unmatched, num_test_data, num_train_data):
+    def __init__(self, sequence_length, num_bracket_types, num_noise_types, max_unmatched, num_test_data, num_train_data,
+                 normalised=True):
         self.sequence_length = sequence_length
         self.num_bracket_types = num_bracket_types
         self.num_noise_types = num_noise_types
         self.max_unmatched = max_unmatched
         self.num_train_data = num_train_data
         self.num_test_data = num_test_data
+        self.normalised = normalised
         expected_shape = (sequence_length, (num_bracket_types*2) + num_noise_types)
-        super().__init__(expected_shape, shuffled = False)
+        super().__init__(expected_shape, shuffled=False)
 
     def _load_test_data(self):
         test_data = []
@@ -36,7 +43,7 @@ class BracketMatchingDatasource(MPSDatasource):
         _spinner = spinner(jump=300)
         for i in range(self.num_test_data):
             data, label = _create_bracket_data(self.sequence_length, self.num_bracket_types, self.num_noise_types,
-                                               self.max_unmatched)
+                                               self.max_unmatched, self.normalised)
             test_data.append(data)
             test_labels.append(label)
             percentage = float(i) / float(self.num_test_data)
@@ -51,7 +58,7 @@ class BracketMatchingDatasource(MPSDatasource):
         _spinner = spinner(jump=300)
         for i in range(self.num_train_data):
             data, label = _create_bracket_data(self.sequence_length, self.num_bracket_types, self.num_noise_types,
-                                               self.max_unmatched)
+                                               self.max_unmatched, self.normalised)
             train_data.append(data)
             train_labels.append(label)
             percentage = float(i) / float(self.num_train_data)
