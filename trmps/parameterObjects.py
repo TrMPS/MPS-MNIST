@@ -6,7 +6,7 @@ class MPSOptimizerParameters(object):
     def __init__(self, cutoff=1000,
                  reg=0.001, lr_reg=0.99, min_singular_value=10**(-4),
                  verbosity=0, armijo_coeff=10**(-4), use_hessian=False,
-                 armijo_iterations=10, path="MPSconfig"):
+                 armijo_iterations=10, path="MPSconfig", updates_per_step=1):
         """
         :param cutoff: float
             The cutoff value for the gradient. Anything above this is clipped off.
@@ -46,6 +46,7 @@ class MPSOptimizerParameters(object):
         self.use_hessian = use_hessian
         self.armijo_iterations = armijo_iterations
         self.path = path
+        self.updates_per_step = updates_per_step
 
 class MPSTrainingParameters(object):
     """

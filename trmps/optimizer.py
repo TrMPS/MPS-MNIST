@@ -114,7 +114,7 @@ class MPSOptimizer(BaseOptimizer):
             C = self._calculate_C(C2, C1, input2, input1)
 
             # update the bond
-            updated_bond = self._update_bond(bond, C)
+            updated_bond = self._repeatedly_update_bond(bond, C)
 
 
             # Decompose the bond
@@ -170,7 +170,7 @@ class MPSOptimizer(BaseOptimizer):
             C = self._calculate_C(C1, C2, input1, input2)
 
             # Update the bond
-            updated_bond = self._update_bond(bond, C)
+            updated_bond = self._repeatedly_update_bond(bond, C)
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)

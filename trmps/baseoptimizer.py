@@ -41,6 +41,7 @@ class BaseOptimizer(object):
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
         self.verbosity = self.parameters.verbosity
+        self.updates_per_step = self.parameters.updates_per_step
         _ = self.train_step()
 
         print("_____   Thomas the Tensor Train    . . . . . o o o o o",
@@ -289,11 +290,13 @@ class BaseOptimizer(object):
     def _armijo_loop(self, bond, C, lr, cost, delta_bond, gradient_dot_change):
 
         def _armijo_condition(learning_rate, updated_bond):
-            _, updated_cost = self._get_f_and_cost(updated_bond, C)
-            target = cost - self.armijo_coeff * learning_rate * gradient_dot_change
+            f, updated_cost = self._get_f_and_cost(updated_bond, C)
+            _gradient_dot_change = tf.Print(gradient_dot_change, [gradient_dot_change], first_n=self.verbosity,
+                                  message="Gradient dot change")
+            target = cost - self.armijo_coeff * learning_rate * _gradient_dot_change
             if self.verbosity != 0:
-                target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbosity,
-                                  message = "updated_cost, target and cost")
+                target = tf.Print(target, [updated_cost, target, cost, f], first_n=self.verbosity,
+                                  message="updated_cost, target, current cost, and f")
             return tf.greater(updated_cost, target)
 
         def _armijo_step(counter, armijo_cond, learning_rate, updated_bond):
@@ -308,6 +311,16 @@ class BaseOptimizer(object):
             _, _, lr, updated_bond = tf.while_loop(cond=cond, body=_armijo_step, loop_vars=loop_vars, name="lr_opt")
 
         return lr, updated_bond
+
+    def _repeatedly_update_bond(self, bond, C):
+        def _update_bond_once(n, bond, C):
+            updated_bond = self._update_bond(bond, C)
+            return n+1, updated_bond, C
+        with tf.name_scope("update_bond_loop"):
+            cond = lambda n, *args: tf.less(n, self.updates_per_step)
+            loop_vars = [0, bond, C]
+            _, updated_bond, _ = tf.while_loop(cond=cond, body=_update_bond_once, loop_vars=loop_vars, name="bond_update")
+        return updated_bond
 
     def _make_new_nodes(self, nodes):
         """
