@@ -1,4 +1,4 @@
-from mps import MPS
+from mps.mps import MPS
 import tensorflow as tf
 
 # TODO: Deprecate everything in this file and move these things into some sort of configuration for the

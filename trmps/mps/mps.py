@@ -1,6 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import MNISTpreprocessing
 
 class MPS(object):
     """
@@ -576,21 +575,21 @@ class MPS(object):
         return feed_dict
 
 
-if __name__ == '__main__':
-    # Model parameters
-    input_size = 784
-    shrink = True
-    if shrink:
-        input_size = 196
-    d_feature = 2
-    d_output = 10
-    batch_size = 1000
-    permuted = False
+# if __name__ == '__main__':
+#     # Model parameters
+#     input_size = 784
+#     shrink = True
+#     if shrink:
+#         input_size = 196
+#     d_feature = 2
+#     d_output = 10
+#     batch_size = 1000
+#     permuted = False
 
-    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
+#     data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
 
-    # Initialise the model
-    network = MPS(d_feature, d_output, input_size)
-    network.prepare(data_source)
-    feature, label = data_source.test_data
-    network.test(feature, label)
+#     # Initialise the model
+#     network = MPS(d_feature, d_output, input_size)
+#     network.prepare(data_source)
+#     feature, label = data_source.test_data
+#     network.test(feature, label)

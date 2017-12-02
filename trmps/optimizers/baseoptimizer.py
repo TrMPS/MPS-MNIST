@@ -1,12 +1,16 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import tensorflow as tf
 import time
 import numpy as np
-from mps import MPS
+from mps.mps import MPS
 import pickle
 import utils
 from tensorflow.python.client import timeline
-from parameterObjects import MPSOptimizerParameters, MPSTrainingParameters
-from squaredDistanceMPS import sqMPS
+from optimizers.parameterObjects import MPSOptimizerParameters, MPSTrainingParameters
+from mps.squaredDistanceMPS import sqMPS
 
 class BaseOptimizer(object):
 
