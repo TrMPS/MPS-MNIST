@@ -53,7 +53,8 @@ class MPSTrainingParameters(object):
     MPSTrainingParameters is used to pass in optional parameters for MPSOptimizer in the training step,
     as it saves having a large number of optional parameters.
     """
-    def __init__(self, rate_of_change=1000, initial_weights=None, _logging_enabled=False):
+    def __init__(self, rate_of_change=1000, initial_weights=None, verbose_save=True,
+                 _logging_enabled=False,):
         """
         :param rate_of_change: float
             The rate of change for the optimisation.
@@ -70,3 +71,4 @@ class MPSTrainingParameters(object):
         self.rate_of_change = rate_of_change
         self.initial_weights = initial_weights
         self._logging_enabled = _logging_enabled
+        self.verbose_save = verbose_save

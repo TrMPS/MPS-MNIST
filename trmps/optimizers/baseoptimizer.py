@@ -129,7 +129,7 @@ class BaseOptimizer(object):
                     with open("timeline.json", "w") as f:
                         f.write(ctf)
                     run_metadata = tf.RunMetadata()
-                self.MPS.save(self.test, path=self.path)
+                self.MPS.save(self.test, path=self.path, verbose=optional_parameters.verbose_save)
                 end = time.time()
                 print(time.strftime("%Y-%m-%d %H:%M:%S"))
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))

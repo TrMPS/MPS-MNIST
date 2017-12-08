@@ -94,6 +94,7 @@ class MPS(object):
             for i in range(9, 9 + (self.input_size - 1) * 2, 2):
                 dim = int.from_bytes(_results[i:i + 2], byteorder='big')
                 dims.append(dim)
+            print(dims)
             start_index = 9 + (self.input_size) * 2
             for i in range(self.input_size):
                 if i == self.input_size - 1:
@@ -122,7 +123,7 @@ class MPS(object):
             print("Please remember to prepare the MPS")
         return self
 
-    def save(self, weights=None, path="MPSconfig"):
+    def save(self, weights=None, path="MPSconfig", verbose=False):
         contains_weights = True
         if weights is None:
             contains_weights = False
@@ -135,12 +136,24 @@ class MPS(object):
         if contains_weights is False:
             print("contains_weights False")
         else:
+            num_params = 0
+            prev_shape = self.d_matrix
             for i in range(len(weights)):
                 shape = weights[i].shape
                 if i == self._special_node_loc:
                     results += shape[3].to_bytes(2, byteorder='big')
+                    if verbose:
+                        num_params += prev_shape * shape[3] * self.d_output * self.d_feature
+                        prev_shape = shape[3]
                 else:
                     results += shape[2].to_bytes(2, byteorder='big')
+                    if verbose:
+                        num_params += prev_shape * shape[2] * self.d_feature
+                        prev_shape = shape[2]
+            if verbose:
+                num_params += prev_shape * self.d_matrix * self.d_feature
+                print("The number of parameters are:", num_params)
+
             for weight in weights:
                 results += weight.tobytes(order='C')
         with open(path, "w+b") as f:
