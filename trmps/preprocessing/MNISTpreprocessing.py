@@ -1,8 +1,12 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import tensorflow as tf
 import numpy as np
 import sys
 import os
-from preprocessing import *
+from preprocessing.preprocessing import *
 from utils import spinner
 
 from tensorflow.examples.tutorials.mnist import input_data
@@ -43,13 +47,13 @@ def _preprocess_images(data, size, shrink = True):
                               strides=[1, 2, 2, 1], padding='SAME')
         #pooled_image = tf.placeholder(tf.float32, shape=[1, 14, 14, 1])
         snaked_image = tf.reshape(pool, shape=[196])
-    
+
         ones = tf.ones([196], dtype=tf.float32)
     else:
         snaked_image = image
         ones = tf.ones([784], dtype=tf.float32)
     phi = tf.stack([ones, snaked_image], axis=1)
-    
+
     _spinner = spinner(jump = 300)
 
     # Loop through all the elements in the dataset and resize
@@ -72,17 +76,17 @@ def _preprocess_images(data, size, shrink = True):
                 _spinner.print_spinner(percentage)
     _spinner.print_spinner(100.0)
     return (np.array(data), np.array(labels))
-    
+
 class MNISTDatasource(MPSDatasource):
     """
     MNISTDatasource is a subclass of MPSDatasource which implements data loading for the
     well known MNIST dataset.
-    
+
     Use as you would use any subclass of MPSDatasource.
     This class can also permute the MNIST images pixel-by-pixel.
     This class requires the use of tensorflow to load data.
     """
-    
+
     def __init__(self, shrink = True, permuted = False, shuffled = False):
         """
         Initialises the dataset, and can also permute/shuffle the dataset.
@@ -113,7 +117,7 @@ class MNISTDatasource(MPSDatasource):
             for d in test_data:
                 permuted_test_data.append(np.array(d[permutation]))
             self._test_data = np.array(permuted_test_data), test_labels
-            
+
     def _load_test_data(self):
         """
         Loads test data of the appropriate size.
@@ -121,7 +125,7 @@ class MNISTDatasource(MPSDatasource):
         """
         self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)
         super()._load_test_data()
-    
+
     def _load_training_data(self):
         """
         Loads training data of the appropriate size.

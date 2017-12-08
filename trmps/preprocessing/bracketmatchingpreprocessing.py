@@ -1,4 +1,8 @@
-from preprocessing import *
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from preprocessing.preprocessing import *
 import numpy as np
 from utils import spinner
 from utils import convert_to_onehot
