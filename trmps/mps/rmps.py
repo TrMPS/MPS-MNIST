@@ -34,8 +34,7 @@ class RMPS(object):
             The cost of the predictions, as judged by softmax cross entropy with logits
         """
         with tf.name_scope("cost"):
-            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-                labels=labels, logits=f))  # 0.5 * tf.reduce_sum(tf.square(f-label))
+            cost = 0.5 * tf.reduce_mean(tf.square(f-labels))
         return cost
 
     def accuracy(self, f, labels):
@@ -75,8 +74,6 @@ class RMPS(object):
     def predict(self, feature):
         length = tf.shape(feature)[0]
         cond = lambda c, *args: tf.less(c, length)
-        l_dim = tf.shape(self.w)[1]
-        r_dim = tf.shape(self.w)[2]
         with tf.name_scope('calculate_contracted'):
             contracted = tf.TensorArray(tf.float32, size=length,
                                         element_shape=tf.TensorShape([None, None]))
@@ -85,13 +82,13 @@ class RMPS(object):
                                                    shape_invariants=[tf.TensorShape([]), tf.TensorShape(None),
                                                                     tf.TensorShape(None)])
         with tf.name_scope('multiply_chain'):
-            contracted_chain = self.w_zero
+            contracted_chain = tf.tensordot(self.w_zero, contracted.read(0), [[0], [1]])
             _, contracted_chain, _ = tf.while_loop(cond=cond, body=self._contract_chain,
-                                                   loop_vars=[0, contracted_chain, contracted],
+                                                   loop_vars=[1, contracted_chain, contracted],
                                                    shape_invariants=[tf.TensorShape([]), tf.TensorShape([None]),
                                                                     tf.TensorShape(None)])
         with tf.name_scope('multiply_last'):
-            prediction = tf.tensordot(contracted_chain, self.w_final, [[0], [0]])
+            prediction = tf.tensordot(contracted_chain, self.w_final, [[1], [0]])
         return prediction
 
     def _contract_input_with_nodes(self, counter, contracted, feature):
@@ -100,8 +97,17 @@ class RMPS(object):
 
     def _contract_chain(self, counter, contracted_chain, contracted):
         contracted_tensor = contracted.read(counter)
-        contracted_chain = tf.tensordot(contracted_chain, contracted_tensor, [[0],[1]])
+        contracted_chain = tf.einsum('ti,tij->tj', contracted_chain, contracted_tensor)
         return [counter+1, contracted_chain, contracted]
+
+    def create_feed_dict(self, w_zero, w, w_final):
+        # When feeding in, make sure all of the above values are either None or not None.
+        feed_dict = {}
+        if w_zero is not None:
+            feed_dict{self.w_zero} = w_zero
+            feed_dict{self.w} = w
+            feed_dict{self.w_final} = w_final
+        return feed_dict
 
 if __name__ =='__main__':
     test = RMPS(2, 2, 10)
