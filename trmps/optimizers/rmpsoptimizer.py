@@ -118,13 +118,14 @@ class RMPSOptimizer(object):
         s_size = tf.size(filtered_s)
         # s_size = tf.Print(s_size, [s_size], message='bond dim: ')
         # TODO: Have min_Size settable
-        min_size = 3
+        min_size = 1
         case1 = lambda: min_size
         case2 = lambda: self.max_size
         case3 = lambda: s_size
         m = tf.case({tf.less(s_size, min_size): case1, tf.greater(s_size, self.max_size): case2}, default=case3,
                     exclusive=True)
         u_cropped = filtered_u[:, 0:m]
+        # m = tf.Print(m, [m, dims, tf.shape(u_cropped), tf.shape(filtered_u), s_size, tf.shape(gradient), l_dim, r_dim])
         u_cropped = tf.reshape(u_cropped, [dims[0], m, m])
         v_cropped = tf.transpose(filtered_v[:, 0:m])
 
@@ -151,7 +152,8 @@ class RMPSOptimizer(object):
         gradient = tf.einsum('tj,tl->jl', self.C1s.read(self.length - 1), self.dc_dfl)
         gradient = gradient * self.rate_of_change
         _updated_w_final = tf.add(gradient, self.RMPS.w_final)
-        self._updated_w_final = tf.tensordot(self.v_matrix, _updated_w_final, [[0], [1]])
+        _updated_w_final = tf.Print(_updated_w_final, [tf.shape(_updated_w_final), tf.shape(self.v_matrix)])
+        self._updated_w_final = tf.tensordot(self.v_matrix, _updated_w_final, [[1], [0]])
 
     def _contract_chain_l(self, counter, contracted_chain, contracted, previous):
         contracted_tensor = contracted.read(counter)
