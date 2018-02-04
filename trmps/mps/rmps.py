@@ -76,7 +76,7 @@ class RMPS(object):
         cond = lambda c, *args: tf.less(c, length)
         with tf.name_scope('calculate_contracted'):
             contracted = tf.TensorArray(tf.float32, size=length,
-                                        element_shape=tf.TensorShape([None, None]))
+                                        element_shape=tf.TensorShape([None, None, None]))
             _, contracted, _ = tf.while_loop(cond=cond, body=self._contract_input_with_nodes,
                                                    loop_vars=[0, contracted, feature],
                                                    shape_invariants=[tf.TensorShape([]), tf.TensorShape(None),
@@ -85,7 +85,7 @@ class RMPS(object):
             contracted_chain = tf.tensordot(self.w_zero, contracted.read(0), [[0], [1]])
             _, contracted_chain, _ = tf.while_loop(cond=cond, body=self._contract_chain,
                                                    loop_vars=[1, contracted_chain, contracted],
-                                                   shape_invariants=[tf.TensorShape([]), tf.TensorShape([None]),
+                                                   shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                                     tf.TensorShape(None)])
         with tf.name_scope('multiply_last'):
             prediction = tf.tensordot(contracted_chain, self.w_final, [[1], [0]])
@@ -104,9 +104,9 @@ class RMPS(object):
         # When feeding in, make sure all of the above values are either None or not None.
         feed_dict = {}
         if w_zero is not None:
-            feed_dict{self.w_zero} = w_zero
-            feed_dict{self.w} = w
-            feed_dict{self.w_final} = w_final
+            feed_dict[self.w_zero] = w_zero
+            feed_dict[self.w] = w
+            feed_dict[self.w_final] = w_final
         return feed_dict
 
 if __name__ =='__main__':

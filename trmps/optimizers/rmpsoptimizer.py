@@ -6,6 +6,7 @@ import tensorflow as tf
 import time
 import numpy as np
 from mps.rmps import RMPS
+from preprocessing.rmpspreprocessing import RMPSDatasource
 import pickle
 import utils
 from tensorflow.python.client import timeline
@@ -31,7 +32,10 @@ class RMPSOptimizer(object):
         self.min_singular_value = self.parameters.min_singular_value
         self.max_size = max_size
         self.current_length = default_length
-
+        self._feature = tf.placeholder(tf.float32, shape=[None, None, self.RMPS.d_feature])
+        self._label = tf.placeholder(tf.float32, shape=[None, self.RMPS.d_output])
+        self._setup_optimization(self._feature, self._label)
+        self.train_step(self._feature, self._label)
         print("_____   Thomas the Tensor Train Mk.2   . . . o o o o o",
               "  __|[_]|__ ___________ _______    ____      o",
               " |[] [] []| [] [] [] [] [_____(__  ][]]_n_n__][.",
@@ -47,30 +51,31 @@ class RMPSOptimizer(object):
         condr = lambda c, *args: tf.greater(c, -1)
         with tf.name_scope('setup_optimisation'):
             contracted = tf.TensorArray(tf.float32, size=length,
-                                        element_shape=tf.TensorShape([None, None]),
+                                        element_shape=tf.TensorShape([None, None, None]),
                                         clear_after_read=False)
             _, contracted, _ = tf.while_loop(cond=cond, body=self.RMPS._contract_input_with_nodes,
                                                    loop_vars=[0, contracted, feature],
                                                    shape_invariants=[tf.TensorShape([]), tf.TensorShape(None),
                                                                     tf.TensorShape(None)])
-            C1s = tf.Tensorarray(tf.float32, size=length, element_shape=tf.TensorShape([None, None]), clear_after_read=False)
-            C2s = tf.Tensorarray(tf.float32, size=length, element_shape=tf.TensorShape([None, None, None]), clear_after_read=False)
-            C1_0 = tf.einsum('i,tij->tj', contracted.read(0), self.RMPS.w_zero)
+            C1s = tf.TensorArray(tf.float32, size=length, element_shape=tf.TensorShape([None, None]), clear_after_read=False)
+            C2s = tf.TensorArray(tf.float32, size=length, element_shape=tf.TensorShape([None, None, None]), clear_after_read=False)
+            C1_0 = tf.einsum('i,tij->tj', self.RMPS.w_zero, contracted.read(0))
             C1s = C1s.write(0, C1_0)
             C2_l = tf.einsum('tij,jl->til', contracted.read(length - 1), self.RMPS.w_final)
             C2s = C2s.write(length-1, C2_l)
             _, C1s, _, _ = tf.while_loop(cond=cond, body=self._contract_chain_l,
                                                    loop_vars=[1, C1s, contracted, C1_0],
                                                    shape_invariants=[tf.TensorShape([]), tf.TensorShape(None),
-                                                                    tf.TensorShape(None), tf.TensorShape(None)])
+                                                                    tf.TensorShape(None), tf.TensorShape([None, None])])
             _, C2s, _, _ = tf.while_loop(cond=condr, body=self._contract_chain_r,
                                                    loop_vars=[length-2, C2s, contracted, C2_l],
                                                    shape_invariants=[tf.TensorShape([]), tf.TensorShape(None),
-                                                                    tf.TensorShape(None), tf.TensorShape(None)])
+                                                                    tf.TensorShape(None), tf.TensorShape([None, None, None])])
         self.C1s = C1s
         self.C2s = C2s
         self.predictions = tf.einsum('til,i->tl', self.C2s.read(0), self.RMPS.w_zero)
         self.dc_dfl = self.predictions - labels
+        self.dc_dfl.set_shape([None, None])
 
     def train_step(self, features, labels):
         self._update_w(features)
@@ -84,9 +89,11 @@ class RMPSOptimizer(object):
     def _update_w(self, features):
         cond = lambda c, *args: tf.less(c, self.length - 1)
         initial_right = self.C2s.read(1)
+        initial_right.set_shape([None, None, None])
         initial_left = self.RMPS.w_zero
+        initial_left.set_shape([None])
         right_with_dc_dfl = tf.einsum('til,tl->ti', initial_right, self.dc_dfl)
-        combined_l_feature = tf.einsum('tj,tn->tjn', initial_left, features[0])
+        combined_l_feature = tf.einsum('j,tn->tjn', initial_left, features[0])
         initial_gradient = tf.einsum('tj,tin->nij', right_with_dc_dfl, combined_l_feature)
         _, gradient, _ = tf.while_loop(cond=cond, body=self._get_gradient_for_w,
                                                    loop_vars=[1, initial_gradient, features],
@@ -94,12 +101,12 @@ class RMPSOptimizer(object):
                                                                     tf.TensorShape([None, None, None])])
         final_right = self.RMPS.w_final
         final_left = self.C1s.read(self.length - 1)
-        right_with_dc_dfl = tf.einsum('til,tl->ti', final_right, self.dc_dfl)
+        right_with_dc_dfl = tf.einsum('il,tl->ti', final_right, self.dc_dfl)
         combined_l_feature = tf.einsum('tj,tn->tjn', final_left, features[self.length - 1])
         combined_all = tf.einsum('tj,tin->nij', right_with_dc_dfl, combined_l_feature)
         gradient = tf.add(gradient, combined_all) * self.rate_of_change
         updated_w = tf.add(self.RMPS.w, gradient)
-        dims = tf.shape(_updated_w)
+        dims = tf.shape(updated_w)
         l_dim = dims[0] * dims[1]
         r_dim = dims[2]
         flattened_updated_w = tf.reshape(updated_w, [l_dim, r_dim])
@@ -117,12 +124,12 @@ class RMPSOptimizer(object):
         case3 = lambda: s_size
         m = tf.case({tf.less(s_size, min_size): case1, tf.greater(s_size, self.max_size): case2}, default=case3,
                     exclusive=True)
-        s_mat = tf.diag(s[0:m])
         u_cropped = filtered_u[:, 0:m]
+        u_cropped = tf.reshape(u_cropped, [dims[0], m, m])
         v_cropped = tf.transpose(filtered_v[:, 0:m])
 
         self.v_matrix = v_cropped
-        self._updated_w = tf.einsum('ij,jnl->inl', v_cropped, s_mat)
+        self._updated_w = tf.einsum('ij,jnl->inl', v_cropped, u_cropped)
 
 
     def _get_gradient_for_w(self, counter, gradient, features):
@@ -148,15 +155,31 @@ class RMPSOptimizer(object):
 
     def _contract_chain_l(self, counter, contracted_chain, contracted, previous):
         contracted_tensor = contracted.read(counter)
+        contracted_tensor.set_shape([None, None, None])
         previous = tf.einsum('ti,tij->tj', previous, contracted_tensor)
         contracted_chain = contracted_chain.write(counter, previous)
         return [counter + 1, contracted_chain, contracted, previous]
 
     def _contract_chain_r(self, counter, contracted_chain, contracted, previous):
         contracted_tensor = contracted.read(counter)
+        contracted_tensor.set_shape([None, None, None])
         previous = tf.einsum('tij,tjl->til', contracted_tensor, previous)
         contracted_chain = contracted_chain.write(counter, previous)
         return [counter - 1, contracted_chain, contracted, previous]
+
+    def _test_step(self, feature, label):
+        """
+        A single step of training
+        :param self:
+        :param feature:
+        :param label:
+        :return:
+        """
+        f = self.RMPS.predict(feature)
+        cost = self.RMPS.cost(f, label)
+        accuracy = self.RMPS.accuracy(f, label)
+        confusion = self.RMPS.confusion_matrix(f, label)
+        return cost, accuracy, confusion
 
     def train(self, data_source, batch_size, n_step, length=None, optional_parameters=MPSTrainingParameters()):
         """
@@ -165,21 +188,52 @@ class RMPSOptimizer(object):
         #TODO: Doesn't support learning rate changing in training
         if length is None and self.current_length is None:
             raise ValueError("Need either default_length to be an integer or length to be a function that returns an integer")
+        elif self.current_length is None:
+            self.current_length = length(0)
         run_options = []
         run_metadata = []
         if optional_parameters._logging_enabled:
-                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-                run_metadata = tf.RunMetadata()
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
         self.feed_dict = None
-        self.optimised_w = None
-        self.optimised_w_zero = None
-        self.optimised_w_final = None
+        optimised_w = None
+        optimised_w_zero = None
+        optimised_w_final = None
         lr = optional_parameters.rate_of_change
-        feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
-        label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
+        train_cost, train_accuracy, train_confusion = self._test_step(self._feature, self._label)
+        actual_length, (test_feature, test_label) = data_source.test_data_of_length(self.current_length)
+        print("Length of test data:", actual_length)
+
+        feature = tf.placeholder(tf.float32, shape=[None, None, self.RMPS.d_feature])
+        label = tf.placeholder(tf.float32, shape=[None, self.RMPS.d_output])
+        test_cost, test_accuracy, test_confusion = self._test_step(feature, label)
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
+            for i in range(n_step):
+                start = time.time()
+                if length is not None:
+                    self.current_length = length(i)
+                actual_length, (batch_feature, batch_label) = data_source.next_training_data_batch(batch_size, self.current_length)
+                print("Length of training data:", actual_length)
+                self.feed_dict = self.RMPS.create_feed_dict(optimised_w_zero, optimised_w, optimised_w_final)
+                self.feed_dict[self._feature] = batch_feature
+                self.feed_dict[self._label] = batch_label
+                self.feed_dict[self.rate_of_change] = lr
+                self.feed_dict[feature] = test_feature
+                self.feed_dict[label] = test_label
+                to_eval = [train_cost, train_accuracy, test_cost, test_accuracy, test_confusion, self.RMPS.w, self.RMPS.w_zero, self.RMPS.w_final]
+                train_c, train_acc, test_c, test_acc, test_conf, optimised_w, optimised_w_zero, optimised_w_final = sess.run(to_eval,
+                                                                                                                  feed_dict=self.feed_dict,
+                                                                                                                  options=run_options,
+                                                                                                                  run_metadata=run_metadata)
+                end = time.time()
+                print(time.strftime("%Y-%m-%d %H:%M:%S"))
+                print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))
+                print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
+                print('confusion matrix: \n' + str(test_conf))
+
+
 
 
 

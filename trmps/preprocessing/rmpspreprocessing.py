@@ -4,6 +4,7 @@ import sys
 import os
 
 #TODO: Implement shuffling
+#TODO: _available_training_lengths can be implemented more elegantly as a property
 
 class RMPSDatasource(object):
 
@@ -36,6 +37,7 @@ class RMPSDatasource(object):
         self._num_training_samples = None
         self._num_test_samples = None
         self._available_training_lengths = []
+        self._available_test_lengths = []
         self._training_data_path = os.path.join(type(self).__name__, "training_data.npy")
         if not os.path.isdir(type(self).__name__):
             os.mkdir(type(self).__name__)
@@ -68,6 +70,7 @@ class RMPSDatasource(object):
         for key, _ in self._training_data.items():
             self.current_index[key] = 0
         self._initialise_available_training_lengths()
+        self._initialise_available_test_lengths()
         self._swapped_test_data = None
         self._swapped_training_data = None
 
@@ -75,6 +78,12 @@ class RMPSDatasource(object):
         for key, _ in self._training_data.items():
             self._available_training_lengths.append(key)
         self._available_training_lengths = np.array(self._available_training_lengths)
+
+    def _initialise_available_test_lengths(self):
+        for key, _ in self._test_data.items():
+            self._available_test_lengths.append(key)
+        self._available_test_lengths = np.array(self._available_test_lengths)
+
 
     @property
     def test_data(self):
@@ -149,6 +158,21 @@ class RMPSDatasource(object):
 
     def shuffle(self):
         print("Shuffling isn't supported yet, please don't call rmpsdatasource.shuffle()")
+
+    def test_data_of_length(self, expected_length):
+        if self._test_data is None:
+            self._load_test_data()
+        if expected_length in self._test_data:
+            actual_length = expected_length
+        else:
+            differences = np.abs(self._available_test_lengths - expected_length)
+            mininimum_loc = np.argmin(differences)
+            actual_length = self._available_test_lengths[mininimum_loc]
+        data, labels = self._test_data[actual_length]
+        data = np.array(data)
+        data = np.swapaxes(data, 0, 1)
+
+        return (actual_length, (data, labels))
 
     def next_training_data_batch(self, batch_size, expected_length):
         """

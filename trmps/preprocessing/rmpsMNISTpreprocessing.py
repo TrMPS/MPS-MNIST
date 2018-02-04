@@ -88,7 +88,7 @@ class RMPSMNISTDatasource(RMPSDatasource):
     This class requires the use of tensorflow to load data.
     """
 
-    def __init__(self, shrink = True, permuted = False, shuffled = False):
+    def __init__(self, shrink=True, permuted=False, shuffled=False):
         """
         Initialises the dataset, and can also permute/shuffle the dataset.
         :param shrink: boolean
