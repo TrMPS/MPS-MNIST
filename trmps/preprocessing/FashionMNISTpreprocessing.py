@@ -1,7 +1,7 @@
 import numpy as np
 import sys
 import os
-from MNISTpreprocessing import MNISTDatasource
+from preprocessing.MNISTpreprocessing import MNISTDatasource
 from utils import convert_to_onehot, spinner
 import gzip
 from enum import Enum
