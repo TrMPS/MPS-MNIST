@@ -6,7 +6,7 @@ import tensorflow as tf
 import numpy as np
 import sys
 import os
-from preprocessing.rmpspreprocessing import *
+from preprocessing.umpspreprocessing import *
 #from rmpspreprocessing import *
 from utils import spinner
 
@@ -78,7 +78,7 @@ def _preprocess_images(data, size, shrink = True):
     _spinner.print_spinner(100.0)
     return (np.array(data), np.array(labels))
 
-class RMPSMNISTDatasource(RMPSDatasource):
+class UMPSMNISTDatasource(UMPSDatasource):
     """
     MNISTDatasource is a subclass of MPSDatasource which implements data loading for the
     well known MNIST dataset.

@@ -6,7 +6,7 @@ import os
 #TODO: Implement shuffling
 #TODO: _available_training_lengths can be implemented more elegantly as a property
 
-class RMPSDatasource(object):
+class UMPSDatasource(object):
 
     """
     MPSDatasource offers the interfaces for the MPS class and the MPSOptimiser class to get data.
