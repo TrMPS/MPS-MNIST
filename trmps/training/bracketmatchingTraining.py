@@ -2,12 +2,12 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import preprocessing.bracketmatchingpreprocessing
+import preprocessing.bracketmatchingpreprocessing as bmp
 from trmps import *
 
 # Data parameters
-sequence_length = 30
-num_bracket_types = 5
+sequence_length = 5
+num_bracket_types = 6
 num_noise_types = num_bracket_types
 max_unmatched = 10
 num_test_data = 60000
@@ -15,7 +15,7 @@ num_train_data = 20000
 normalised = False
 
 # Model parameters
-d_feature = (num_bracket_types * 2) + num_noise_types
+d_feature = (num_bracket_types * 2) + num_noise_types + 1
 d_output = num_bracket_types
 input_size = sequence_length
 lin_reg_learning_rate = 10**(-3)
@@ -30,16 +30,16 @@ min_singular_value = 0.001
 reg = 0.01
 armijo_coeff = 0.0
 
-rate_of_change = 10**38
+rate_of_change = 1
 lr_reg = 0.0
 
 logging_enabled = False
-verbosity = -1
+verbosity = -0
 
 cutoff = 100
 n_step = 6
 
-data_source = bracketmatchingpreprocessing.BracketMatchingDatasource(sequence_length, num_bracket_types, num_noise_types,
+data_source = bmp.BracketMatchingDatasource(sequence_length, num_bracket_types, num_noise_types,
                                             max_unmatched, num_test_data, num_train_data, normalised)
 # data_source._save_binary()
 

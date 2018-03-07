@@ -91,13 +91,13 @@ class BaseOptimizer(object):
         self.test = optional_parameters.initial_weights
         initial_lr = optional_parameters.rate_of_change
 
-        train_cost, train_accuracy, train_confusion, _ = self._test_step(self._feature, self._label)
+        train_cost, train_accuracy, train_confusion, _, train_f = self._test_step(self._feature, self._label)
 
         test_feature, test_label = data_source.test_data
 
         feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
-        test_cost, test_accuracy, test_confusion, test_f1 = self._test_step(feature, label)
+        test_cost, test_accuracy, test_confusion, test_f1, test_f = self._test_step(feature, label)
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -116,8 +116,8 @@ class BaseOptimizer(object):
                 self.feed_dict[self.rate_of_change] = rate_of_change
                 self.feed_dict[feature] = test_feature
                 self.feed_dict[label] = test_label
-                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1]
-                train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score = sess.run(to_eval,
+                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1, test_f]
+                train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score, test_prediction = sess.run(to_eval,
                                                                                                     feed_dict=self.feed_dict,
                                                                                                     options=run_options,
                                                                                                     run_metadata=run_metadata)
@@ -135,6 +135,8 @@ class BaseOptimizer(object):
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))
                 print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
                 print('f1 score: ', test_f1score)
+                print('sample prediction: ', test_prediction[0])
+                print('sample truth: ', test_label[0])
                 print('confusion matrix: \n' + str(test_conf))
                 # print("prediction:" + str(prediction[0]))
             if optional_parameters._logging_enabled:
@@ -153,7 +155,7 @@ class BaseOptimizer(object):
         accuracy = self.MPS.accuracy(f, label)
         confusion = self.MPS.confusion_matrix(f, label)
         f1 = self.MPS.f1score(f, label, confusion)
-        return cost, accuracy, confusion, f1
+        return cost, accuracy, confusion, f1, f
 
     def _find_C1(self, counter, C1, C1s):
         """
@@ -300,7 +302,7 @@ class BaseOptimizer(object):
             target = cost - self.armijo_coeff * learning_rate * _gradient_dot_change
             if self.verbosity != 0:
                 target = tf.Print(target, [updated_cost, target, cost, f], first_n=self.verbosity,
-                                  message="updated_cost, target, current cost, and f")
+                                  message="updated_cost, target, current cost, and f", summarize=10)
             return tf.greater(updated_cost, target)
 
         def _armijo_step(counter, armijo_cond, learning_rate, updated_bond):

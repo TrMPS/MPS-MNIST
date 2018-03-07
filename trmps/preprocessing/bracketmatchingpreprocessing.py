@@ -10,12 +10,13 @@ from utils import convert_to_onehot
 def _create_bracket_data(sequence_length, num_bracket_types, num_noise_types, max_unmatched, normalised=True):
     total = (num_bracket_types * 2) + num_noise_types
     last_bracket_num = num_bracket_types * 2
-    sequence = np.zeros((sequence_length, total))
+    sequence = np.zeros((sequence_length, total + 1))
+    sequence[:, 0] = 1.0
     num_unopened = np.zeros(num_bracket_types)
     num_unclosed = np.zeros(num_bracket_types)
     for i in range(sequence_length):
         rand_int = np.random.randint(low=0, high=total)
-        sequence[i][rand_int] = 1.0
+        sequence[i][rand_int + 1] = 1.0
         if rand_int < num_bracket_types:
             num_unclosed[rand_int] = num_unclosed[rand_int] + 1
         elif rand_int < last_bracket_num:
@@ -38,7 +39,7 @@ class BracketMatchingDatasource(MPSDatasource):
         self.num_train_data = num_train_data
         self.num_test_data = num_test_data
         self.normalised = normalised
-        expected_shape = (sequence_length, (num_bracket_types*2) + num_noise_types)
+        expected_shape = (sequence_length, (num_bracket_types*2) + num_noise_types + 1)
         super().__init__(expected_shape, shuffled=False)
 
     def _load_test_data(self):

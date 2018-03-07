@@ -158,7 +158,7 @@ class MPSOptimizer(BaseOptimizer):
             n2.set_shape([self.MPS.d_feature, None, None])
 
             # Calculate the C matrix
-            C2 = self.C2s.read(counter+1)
+            C2 = self.C2s.read(counter + 1)
             C1 = C1s.read(counter)
             C1.set_shape([None, None])
             C2.set_shape([None, None])
