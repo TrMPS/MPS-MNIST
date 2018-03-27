@@ -148,9 +148,8 @@ class MPSGenerator(object):
 
     def _sample_from_matrices(self, matrices):
         with tf.name_scope("recover_vectors"):
-            # vectors = tf.map_fn(lambda x: tf.diag_part(x), matrices)
             vectors = tf.svd(matrices, compute_uv=False)
-            vectors = tf.Print(vectors, [tf.shape(vectors)], message="vectors shape")
+            # vectors = tf.map_fn(lambda x: tf.diag_part(x), matrices)
             # vectors = tf.sqrt(vectors)
             # signs = tf.map_fn(lambda x: tf.sign(x[0]), matrices)
             # vectors = signs * vectors
@@ -287,6 +286,7 @@ if __name__ == '__main__':
         to_eval = [samples, pdfs, cost, accuracy, confusion, f]
         samples, pdfs, cost, accuracy, confusion, prediction = sess.run(to_eval, feed_dict=feed_dict)
         print('sample prediction: ', prediction[0])
+        print('average prediction: ', np.mean(prediction, axis=0))
         print('Cost: ', cost, ', Accuracy: ', accuracy)
         print(confusion)
         print('Pixels with values larger than 1: ')
@@ -299,6 +299,11 @@ if __name__ == '__main__':
     utils.show(avg_samples)
     plt.figure()
     utils.show(samples[:, 0])
+    plt.figure()
+    plt.hist(avg_samples)
+    plt.figure()
+    plt.hist(samples[:, np.argmax(pdfs)])
+
     plt.show()
 
 
