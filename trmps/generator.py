@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
-from distribution import Quadratic, quad_sample
+# from distribution import Quadratic, quad_sample
+from samplers import quad_sample
 from shortMPS import *
 import pickle
 import utils
@@ -162,7 +163,7 @@ class MPSGenerator(object):
             # dist = Quadratic(vectors[:, 0], vectors[:, 1], tol=self._tol)
             # samples = dist.sample()
             # del dist
-            samples = quad_sample(vectors[:, 0], vectors[:, 1], tol=self._tol)
+            samples = quad_sample(vectors[:, 0], vectors[:, 1], n=10)
 
         return samples
     def _sample_from_node(self, counter, middle, samples_ta, right_flag):
