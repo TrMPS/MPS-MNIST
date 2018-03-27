@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from distribution import Quadratic
+from distribution import Quadratic, quad_sample
 from shortMPS import *
 import pickle
 import utils
@@ -147,22 +147,24 @@ class MPSGenerator(object):
 
     def _sample_from_matrices(self, matrices):
         with tf.name_scope("recover_vectors"):
-            vectors = tf.map_fn(lambda x:tf.diag_part(x), matrices)
-            vectors = tf.sqrt(vectors)
-            signs = tf.map_fn(lambda x:tf.sign(x[0]), matrices)
-            vectors = signs * vectors
+            # vectors = tf.map_fn(lambda x: tf.diag_part(x), matrices)
+            vectors = tf.svd(matrices, compute_uv=False)
+            vectors = tf.Print(vectors, [tf.shape(vectors)], message="vectors shape")
+            # vectors = tf.sqrt(vectors)
+            # signs = tf.map_fn(lambda x: tf.sign(x[0]), matrices)
+            # vectors = signs * vectors
 
         return self._sample_from_vectors(vectors)
 
     def _sample_from_vectors(self, vectors):
         with tf.name_scope("sample_from_vectors"):
             # vectors = tf.Print(vectors, [vectors[0]])
-            dist = Quadratic(vectors[:, 0], vectors[:, 1], tol=self._tol)
-            samples = dist.sample()
-            del dist
+            # dist = Quadratic(vectors[:, 0], vectors[:, 1], tol=self._tol)
+            # samples = dist.sample()
+            # del dist
+            samples = quad_sample(vectors[:, 0], vectors[:, 1], tol=self._tol)
 
         return samples
-
     def _sample_from_node(self, counter, middle, samples_ta, right_flag):
 
         with tf.name_scope("read_node"):
@@ -183,8 +185,8 @@ class MPSGenerator(object):
 
         with tf.name_scope("update_counter"):
             counter = tf.cond(right_flag,
-                              true_fn=lambda: counter+1,
-                              false_fn=lambda: counter-1)
+                              true_fn=lambda: counter + 1,
+                              false_fn=lambda: counter - 1)
 
         return counter, middle, samples_ta, right_flag
 
@@ -281,8 +283,9 @@ if __name__ == '__main__':
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        to_eval = [samples, pdfs, cost, accuracy, confusion]
-        samples, pdfs, cost, accuracy, confusion = sess.run(to_eval, feed_dict=feed_dict)
+        to_eval = [samples, pdfs, cost, accuracy, confusion, f]
+        samples, pdfs, cost, accuracy, confusion, prediction = sess.run(to_eval, feed_dict=feed_dict)
+        print('sample prediction: ', prediction[0])
         print('Cost: ', cost, ', Accuracy: ', accuracy)
         print(confusion)
         print('Pixels with values larger than 1: ')
