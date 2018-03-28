@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import MNISTpreprocessing
-from mps import MPS 
+from mps import MPS
 
 class shortMPS(MPS):
 
@@ -13,11 +13,11 @@ class shortMPS(MPS):
 
         with tf.name_scope("MPSnodes"):
 
-            # Make the end nodes 
+            # Make the end nodes
             self.start_node = tf.Variable(np.ones([1, 1], dtype=np.float32), trainable=False)
             self.end_node = tf.Variable(np.ones([1, 1], dtype=np.float32), trainable=False)
 
-            # Make the node chain 
+            # Make the node chain
             self.nodes_list = []
             self.nodes = tf.TensorArray(tf.float32, size=0, dynamic_size=True,
                                         clear_after_read=False, infer_shape=False)
@@ -25,7 +25,7 @@ class shortMPS(MPS):
             first_node, sv = self._make_first_node()
             self._append_node(0, first_node, [self.d_feature, None, None])
 
-            node, shape = self._make_node(1) 
+            node, shape = self._make_node(1)
             node = tf.einsum('ij,mjk->mik', sv, node)
             self._append_node(1, node, shape)
 
@@ -34,7 +34,7 @@ class shortMPS(MPS):
                 self._append_node(i, node, shape)
 
             node, shape = self._make_node(self.input_size-2)
-            last_node, sv = self._make_last_node() 
+            last_node, sv = self._make_last_node()
             node = tf.einsum('mij,jk->mik', node, sv)
             self._append_node(self.input_size-2, node, shape)
             self._append_node(self.input_size-1, last_node, [self.d_feature, None, None])
@@ -49,16 +49,16 @@ class shortMPS(MPS):
         :return:
         """
         start_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
-        start_vector[0, self.d_output:] = 1 
+        start_vector[0, self.d_output:] = 1
         start_vector[1:, 0:self.d_output] = self.weight[0]
         first_node = tf.Variable(start_vector, dtype=tf.float32,
                            trainable=False, name='first_node')
         s, u, v = tf.svd(first_node)
         sv = tf.einsum('i,ji->ij', s, v)
         u = tf.expand_dims(u, 1)
-        u = tf.Print(u, [tf.shape(u), u])
+        u = tf.Print(u, [tf.shape(u), u], message='first node shape')
 
-        return u, sv 
+        return u, sv
 
     def _make_last_node(self):
         """
@@ -68,7 +68,7 @@ class shortMPS(MPS):
 
         end_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
         end_vector[0, 0:self.d_output] = 1
-        end_vector[1:, self.d_output:] = self.weight[-1] 
+        end_vector[1:, self.d_output:] = self.weight[-1]
 
         last_node = tf.Variable(end_vector, dtype=tf.float32,
                            trainable=False, name='last_node')
@@ -76,14 +76,14 @@ class shortMPS(MPS):
         s = tf.expand_dims(s, 0)
         sv = tf.multiply(s, v)
         u = tf.expand_dims(u, 2)
-        u = tf.Print(u, [tf.shape(u), u])
+        u = tf.Print(u, [tf.shape(u), u], message='last node shape')
 
         return u, sv
 
     def _make_node(self, index):
         if index == self._special_node_loc:
             return self._make_special_node(index)
-        else: 
+        else:
             return self._make_middle_node(index)
 
     def _make_special_node(self, index):
@@ -104,7 +104,7 @@ class shortMPS(MPS):
                            trainable=True, name='special')
         shape = [self.d_output, self.d_feature, None, None]
 
-        return special_node, shape 
+        return special_node, shape
 
     def _make_middle_node(self, index):
         """
@@ -130,7 +130,7 @@ if __name__ == '__main__':
     if shrink:
         input_size = 196
     d_feature = 2
-    d_output = 10
+    d_output = 11
     batch_size = 1000
     permuted = False
 
