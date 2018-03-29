@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 # from distribution import Quadratic, quad_sample
-from samplers import quad_sample, higher_order_sample
+from samplers import quad_sample, higher_order_sample, quad_sample_alt
 from shortMPS import *
 import pickle
 import utils
@@ -147,14 +147,19 @@ class MPSGenerator(object):
         return self.samples_ta.stack(), pdfs
 
     def _sample_from_matrices(self, matrices):
-        with tf.name_scope("recover_vectors"):
-            vectors = tf.svd(matrices, compute_uv=False)
-            # vectors = tf.map_fn(lambda x: tf.diag_part(x), matrices)
-            # vectors = tf.sqrt(vectors)
-            # signs = tf.map_fn(lambda x: tf.sign(x[0]), matrices)
-            # vectors = signs * vectors
+        # with tf.name_scope("recover_vectors"):
+        #     vectors = tf.svd(matrices, compute_uv=False)
+        #     # vectors = tf.map_fn(lambda x: tf.diag_part(x), matrices)
+        #     # vectors = tf.sqrt(vectors)
+        #     # signs = tf.map_fn(lambda x: tf.sign(x[0]), matrices)
+        #     # vectors = signs * vectors
 
-        return self._sample_from_vectors(vectors)
+        # return self._sample_from_vectors(vectors)
+        return self._new_sample_from_matrices(matrices)
+
+    def _new_sample_from_matrices(self, matrices):
+        samples = quad_sample_alt(matrices, n=10)
+        return samples
 
     def _sample_from_vectors(self, vectors):
         with tf.name_scope("sample_from_vectors"):
@@ -165,6 +170,7 @@ class MPSGenerator(object):
             samples = higher_order_sample(vectors[:, 0], vectors[:, 1], n=10)
 
         return samples
+
     def _sample_from_node(self, counter, middle, samples_ta, right_flag):
 
         with tf.name_scope("read_node"):
@@ -266,7 +272,7 @@ if __name__ == '__main__':
 
     generator = MPSGenerator(network)
 
-    digit = 5
+    digit = 6
     n_samples = 500
     samples, pdfs = generator.generate(n_samples, digit, tol)
 
@@ -281,7 +287,6 @@ if __name__ == '__main__':
     confusion = network.confusion_matrix(f, label)
 
     feed_dict = network.create_feed_dict(weights)
-
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
