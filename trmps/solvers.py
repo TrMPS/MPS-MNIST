@@ -27,7 +27,7 @@ def _bisection_solver(f, x_dim, n=9):
     def _bisection_solver_helper(counter, a, b):
         midpoint = (a + b) / 2
         f_mid = f(midpoint)
-        f_mid = tf.Print(f_mid, [f_mid, midpoint], summarize=10)
+        # f_mid = tf.Print(f_mid, [f_mid, midpoint], summarize=10)
 
         # def _new_b_finder(_f_mid):
         #     cond = tf.less(_f_mid, 0.0)
@@ -38,7 +38,7 @@ def _bisection_solver(f, x_dim, n=9):
         new_b_1 = mid_mask_inverted * midpoint
         new_b_2 = mid_mask * b
         new_b = new_b_1 + new_b_2
-        new_b = tf.Print(new_b, [mid_mask, new_b, b], summarize=10)
+        # new_b = tf.Print(new_b, [mid_mask, new_b, b], summarize=10)
         new_a_1 = mid_mask_inverted * a
         new_a_2 = mid_mask * midpoint
         new_a = new_a_1 + new_a_2
