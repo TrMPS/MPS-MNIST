@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 # from distribution import Quadratic, quad_sample
-from samplers import quad_sample
+from samplers import quad_sample, higher_order_sample
 from shortMPS import *
 import pickle
 import utils
@@ -162,7 +162,7 @@ class MPSGenerator(object):
             # dist = Quadratic(vectors[:, 0], vectors[:, 1], tol=self._tol)
             # samples = dist.sample()
             # del dist
-            samples = quad_sample(vectors[:, 0], vectors[:, 1], n=10)
+            samples = higher_order_sample(vectors[:, 0], vectors[:, 1], n=10)
 
         return samples
     def _sample_from_node(self, counter, middle, samples_ta, right_flag):
@@ -256,6 +256,9 @@ if __name__ == '__main__':
         if len(weights) != input_size:
             print("weights not of desired shape")
             weights = None
+
+    # weights = None
+    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
 
     # Initialise the model
     network = shortMPS(d_feature, d_output, input_size, special_node_loc)
