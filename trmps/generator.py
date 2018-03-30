@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 # from distribution import Quadratic, quad_sample
-from samplers import quad_sample, higher_order_sample, quad_sample_alt, higher_order_sample_alt
+from samplers import quad_sample, higher_order_sample
 from shortMPS import *
 import pickle
 import utils
@@ -159,7 +159,7 @@ class MPSGenerator(object):
 
     def _new_sample_from_matrices(self, matrices):
         # samples = quad_sample_alt(matrices, n=10)
-        samples = higher_order_sample_alt(matrices, n=10)
+        samples = higher_order_sample(matrices, n=10)
         return samples
 
     def _sample_from_vectors(self, vectors):
