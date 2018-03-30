@@ -307,7 +307,7 @@ if __name__ == '__main__':
     utils.show(samples[:, np.argmax(pdfs)])
     plt.figure()
     avg_samples = np.mean(samples, axis=1)
-    utils.show(avg_samples)
+    utils.show(avg_samples, normalise=True)
     plt.figure()
     utils.show(samples[:, 0])
     plt.figure()
