@@ -158,6 +158,7 @@ class MPSGenerator(object):
         return self._new_sample_from_matrices(matrices)
 
     def _new_sample_from_matrices(self, matrices):
+        # samples = quad_sample_alt(matrices, n=10)
         samples = higher_order_sample_alt(matrices, n=10)
         return samples
 
@@ -172,6 +173,7 @@ class MPSGenerator(object):
         return samples
 
     def _sample_from_node(self, counter, middle, samples_ta, right_flag):
+        # middle = tf.Print(middle, [tf.shape(middle), right_flag, middle[0]], message='middle', summarize=1000)
 
         with tf.name_scope("read_node"):
             node = self.MPS.nodes.read(counter)
@@ -182,6 +184,7 @@ class MPSGenerator(object):
                                       true_fn=lambda: tf.einsum('tij,mjk->tmik', middle, node),
                                       false_fn=lambda: tf.einsum('tjk,mij->tmik', middle, node))
             contracted_node = tf.einsum('tmik,tnik->tmn', middle_dot_node, middle_dot_node)
+            contracted_node = tf.Print(contracted_node, [right_flag, contracted_node[0]], message='contracted_node', summarize=100)
             samples = self._sample_from_matrices(contracted_node)
             samples_ta = samples_ta.write(counter, samples)
 
@@ -272,7 +275,7 @@ if __name__ == '__main__':
 
     generator = MPSGenerator(network)
 
-    digit = 5
+    digit = 3
     n_samples = 500
     samples, pdfs = generator.generate(n_samples, digit, tol)
 

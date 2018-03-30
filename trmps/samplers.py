@@ -51,13 +51,26 @@ def higher_order_sample_alt(matrices, n, name='quadratic', seed=None):
             + 6 * (np.sqrt(3) * b_c + 6 * d) * (b_c**2 + 10 * np.sqrt(3) * b_c * d + 6 * d * (a + 5 * d))
             + (432 * d * (b_c**2 + 5 * np.sqrt(3) * b_c * d + d * (a + 15 * d))) / 5 + 144 * d**2 * (np.sqrt(3) * b_c + 6 * d)
             + (1728 * d**3) / 7)
-    _a = a / norm
-    _b_c = b_c / norm
-    _d = d / norm
     ys = tf.random_uniform([tf.shape(a)[0]], minval=0, maxval=1, seed=seed)
-    cdfs, _ = _alt_generate_higher_order_dist_funcs(_a, _b_c, _d, ys)
+    cdfs, _ = _alt_generate_higher_order_dist_funcs(a, b_c, d, ys * norm)
     x_dim = tf.reshape(tf.shape(a)[0], [1])
     return _bisection_solver(f=cdfs, x_dim=x_dim, n=n)
+
+def _higher_order_sample_alt_test(matrices, n=10, name='quadratic', seed=None):
+    a = matrices[:, 0, 0]
+    b_c = matrices[:, 0, 1] + matrices[:, 1, 0]
+    d = matrices[:, 1, 1]
+    norm = ((a + np.sqrt(3) * b_c + 3 * d)**3
+            + 3 * (a + np.sqrt(3) * b_c + 3 * d)**2 * (np.sqrt(3) * b_c + 6 * d)
+            + 12 * (np.sqrt(3) * b_c**3 + a**2 * d + 18 * b_c**2 * d + 30 * np.sqrt(3) * b_c * d**2 + 45 * d**3 + a * (b_c**2 + 6 * np.sqrt(3) * b_c * d + 18 * d**2))
+            + 6 * (np.sqrt(3) * b_c + 6 * d) * (b_c**2 + 10 * np.sqrt(3) * b_c * d + 6 * d * (a + 5 * d))
+            + (432 * d * (b_c**2 + 5 * np.sqrt(3) * b_c * d + d * (a + 15 * d))) / 5 + 144 * d**2 * (np.sqrt(3) * b_c + 6 * d)
+            + (1728 * d**3) / 7)
+    ys = tf.random_uniform([tf.shape(a)[0]], minval=0, maxval=1, seed=seed)
+    cdfs, pdfs = _alt_generate_higher_order_dist_funcs(a, b_c, d, ys * norm)
+    x_dim = tf.reshape(tf.shape(a)[0], [1])
+    xs = _bisection_solver(f=cdfs, x_dim=x_dim, n=10)
+    return ys, xs, pdfs(xs)
 
 
 def _quad_sample_alt_test(matrices, name='quadratic', seed=None):
@@ -158,11 +171,11 @@ if __name__ == '__main__':
     # a = tf.constant(a_nparray)
     # b = tf.constant(b_nparray)
 
-    arrays = [np.array([[0.0, 0.0], [1.0, 0.0]]).astype(np.float32) for _ in range(100)]
+    arrays = [np.array([[0.0333175, -0.0023912771], [-0.0023912771, 0.00089279143]]).astype(np.float32) for _ in range(100)]
     mat = np.stack(arrays)
     matrices = tf.constant(mat)
 
-    cdfs, samples, cdfs_inv = _quad_sample_alt_test(matrices)
+    cdfs, samples, cdfs_inv = _higher_order_sample_alt_test(matrices)
 
     with tf.Session() as sess:
         tf.global_variables_initializer()
