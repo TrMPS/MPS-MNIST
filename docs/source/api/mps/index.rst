@@ -103,6 +103,13 @@ __init__(d_feature, d_output, input_size, special_node_loc=None)
  *special_node_loc: int or None*
   The location of the "special node", i.e. the tensor which has the extra index  on it, which is where we obtain the prediction from. If loading in weights,  make sure that this location coincides with where the special node location  is in the weights you are loading in. If this value is set to None, then if  in the prepare method, no data_source is passed in, the special node location  is set automatically to be at the middle of the MPS. If this value is set to  None and a data_source is passed into the prepare method, then the special  node location is set to be the location where the weight from linear  regression was largest.
 
+from_file(path="MPSconfig")
+^^^^^^^^^
+ Initialises the MPS from the file at the path specified. If the file only contains the configuration of the MPS, and not the weights, the prepare method must be called after this before anything else can be done. More information on the file format can be found `here <https://github.com/TrMPS/MPS-MNIST/blob/master/Notes%20for%20developement.md>`_.
+
+ *path: string*
+  Specifies the path where the MPS configuration is stored.
+
 prepare(data_source=None, iterations=1000, learning_rate=0.05)
 ^^^^^^^^
  Prepares the MPS. Optionally uses linear regression, which can be thought of  as pre-training the network, and dramatically shortens the required training  time. This function must be called after the initialiser, before anything can  be done with the MPS.
@@ -210,4 +217,18 @@ f1score(f, labels, _confusion_matrix=None)
   The correct labels.
  *_confusion_matrix: a tensorflow Tensor of shape (d_output, d_output), or None*
   If the confusion matrix has already been evaluated elsewhere for other reasons, it can be passed in via this parameter, so that it does not have to be evaluated again. If passing in a confusion matrix, then f and labels are never used.
+
+Storing the MPS
+---------
+
+save(weights=None, path="MPSconfig")
+^^^^^^^^^
+ Saves the MPS configuration at the path given. If weights are given, then the weights will be stored as well. A new MPS can be created from the saved weights using from_file.
+
+ *weights: list of numpy arrays*
+  A list containing the trained weights of the MPS that are to be saved. If no value is passed in, only the configuration of the MPS will be stored.
+ *path: string*
+  Specifies the path where the MPS configuration is stored.
+
+
 

@@ -1,6 +1,50 @@
-from baseoptimizer import *
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from optimizers.baseoptimizer import *
 
-class SingleSiteMPSOptimizer(BaseOptimizer):
+class MPSOptimizer(BaseOptimizer):
+    """
+    MPSOptimizer is used to optimize the MPS class for a dataset.
+    Implements the DMRG method, as detailed in the paper
+    Supervised learning with Quantum-Inspired Tensor Networks
+    by E.Miles Stoudenmire and David J.Schwab
+    Example usage using the MNIST dataset:
+
+    from optimizer import *
+    import MNISTpreprocessing
+
+    # Model parameters
+    d_feature = 2
+    d_output = 10
+    batch_size = 1000
+    permuted = False
+    shuffled = False
+    shrink = True
+    input_size = 784
+    if shrink:
+        input_size = 196
+
+    max_size = 20
+
+    rate_of_change = 10 ** (-7)
+    logging_enabled = False
+
+    cutoff = 10 # change this next
+    n_step = 10
+
+    data_source = MNISTpreprocessing.MNISTDatasource(shrink = shrink, permuted = permuted, shuffled = shuffled)
+
+    weights = None
+
+    network = MPS(d_feature, d_output, input_size)
+    network.prepare(data_source)
+    optimizer = MPSOptimizer(network, max_size, None, cutoff=cutoff)
+    optimizer.train(data_source, batch_size, n_step,
+                    rate_of_change=rate_of_change,
+                    logging_enabled=logging_enabled,
+                    initial_weights=weights)
+    """
 
     def _setup_optimization(self):
         """
@@ -35,7 +79,7 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=False, clear_after_read=False)
             C2 = tf.tile(self.MPS.end_node, [batch_size, 1])
             C2s = C2s.write(self.MPS.input_size-1, C2)
-            cond = lambda counter, *args: tf.greater(counter, special_loc)
+            cond = lambda counter, *args: tf.greater(counter, special_loc+1)
             _, _, self.C2s = tf.while_loop(cond=cond, body=self._find_C2, loop_vars=[self.MPS.input_size-1, C2, C2s],
                                            shape_invariants=[tf.TensorShape([]), tf.TensorShape([None, None]),
                                                              tf.TensorShape(None)],
@@ -43,35 +87,43 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
                                            name="initialFindC2")
 
     def _update_left(self, counter, acc_lr_reg, C2s, updated_nodes, previous_node):
+        """
+
+        :param self:
+        :param counter:
+        :param C2s:
+        :param updated_nodes:
+        :param previous_node:
+        :return:
+        """
 
         with tf.name_scope("update_left"):
             # Read in the nodes
-            new_node = self.MPS.nodes.read(counter - 1)
-            new_node.set_shape([self.MPS.d_feature, None, None])
+            n1 = previous_node
+            n2 = self.MPS.nodes.read(counter - 1)
+            n2.set_shape([self.MPS.d_feature, None, None])
 
             # Calculate the C matrix
             C2 = C2s.read(counter)
-            C1 = self.C1s.read(counter)
+            C1 = self.C1s.read(counter - 1)
             C1.set_shape([None, None])
             C2.set_shape([None, None])
-            input = self._feature[counter]
+            input1 = self._feature[counter - 1]
+            input2 = self._feature[counter]
 
             # Calculate the bond
-            bond = previous_node
-            bond = tf.transpose(bond, [0, 1, 3, 2])
+            bond = tf.einsum('nkj,lmji->lmnik', n2, n1)
 
-            C = self._calculate_C(C2, C1, input)
+            C = self._calculate_C(C2, C1, input2, input1)
 
             # update the bond
-            updated_bond = self._update_bond(bond, C)
+            updated_bond = self._repeatedly_update_bond(bond, C)
 
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
             aj = tf.transpose(aj, perm=[0, 2, 1])
-            aj1 = tf.transpose(aj1, perm=[2, 1, 0])
-            new_node = tf.tensordot(aj1, new_node,[[0], [2]])
-            new_node = tf.transpose(new_node, [0, 2, 3, 1])
+            aj1 = tf.transpose(aj1, perm=[1, 2, 3, 0])
 
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
@@ -81,39 +133,51 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             with tf.name_scope("einsumC2"):
                 C2 = tf.einsum('tij,tj->ti', contracted_aj, C2)
             C2s = C2s.write(counter - 1, C2)
-            # counter = tf.Print(counter, [counter])
+            #counter = tf.Print(counter, [counter])
             updated_counter = counter - 1
             acc_lr_reg = acc_lr_reg * self.lr_reg
 
-        return [updated_counter, acc_lr_reg, C2s, updated_nodes, new_node]
+
+
+        return [updated_counter, acc_lr_reg, C2s, updated_nodes, aj1]
 
     def _update_right(self, counter, acc_lr_reg, C1s, updated_nodes, previous_node):
+        """
+
+        :param self:
+        :param counter:
+        :param C1s:
+        :param updated_nodes:
+        :param previous_node:
+        :return:
+        """
         with tf.name_scope("update_right"):
             # Read in the nodes
-            new_node = self.MPS.nodes.read(counter + 1)
-            new_node.set_shape([self.MPS.d_feature, None, None])
+            n1 = previous_node
+            n2 = self.MPS.nodes.read(counter + 1)
+            n2.set_shape([self.MPS.d_feature, None, None])
 
             # Calculate the C matrix
-            C2 = self.C2s.read(counter)
+            C2 = self.C2s.read(counter + 1)
             C1 = C1s.read(counter)
             C1.set_shape([None, None])
             C2.set_shape([None, None])
-            input = self._feature[counter]
+            input1 = self._feature[counter]
+            input2 = self._feature[counter + 1]
 
             # Calculate the bond
-            bond = previous_node
+            bond = tf.einsum('lmij,njk->lmnik', n1, n2)
             # bond = tf.transpose(tf.tensordot(n1, n2, [[3],[1]]), [0, 1, 3, 2, 4])
             # einsum is actually faster in this case
 
-            C = self._calculate_C(C1, C2, input)
+            C = self._calculate_C(C1, C2, input1, input2)
 
             # Update the bond
-            updated_bond = self._update_bond(bond, C)
+            updated_bond = self._repeatedly_update_bond(bond, C)
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
-            new_node = tf.tensordot(aj1, new_node,[[2], [1]])
-            new_node = tf.transpose(new_node, [1, 2, 0, 3])
+            aj1 = tf.transpose(aj1, perm=[1, 2, 0, 3])
 
             # Transpose the values and add to the new variables
             updated_nodes = updated_nodes.write(counter, aj)
@@ -124,36 +188,45 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             with tf.name_scope("einsumC1"):
                 C1 = tf.einsum('tij,ti->tj', contracted_aj, C1)
             C1s = C1s.write(counter+1, C1)
-            # counter = tf.Print(counter, [counter])
+            #counter = tf.Print(counter, [counter])
             updated_counter = counter + 1
             acc_lr_reg = acc_lr_reg * self.lr_reg
 
-        return [updated_counter, acc_lr_reg, C1s, updated_nodes, new_node]
+        return [updated_counter, acc_lr_reg, C1s, updated_nodes, aj1]
 
-    def _calculate_C(self, C1, C2, input):
+    def _calculate_C(self, C1, C2, input1, input2):
+        """
+
+        :param self:
+        :param C1:
+        :param C2:
+        :param input1:
+        :param input2:
+        :return:
+        """
         # C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, input1, input2)
-        # C = tf.einsum('ti,tk,tm->tmik', C1, C2, input)
         d1 = tf.shape(C1)[1]
         d2 = tf.shape(C2)[1]
 
         with tf.name_scope("calculateC"):
-            C1 = tf.reshape(C1, [self.batch_size, 1, d1, 1])
-            C2 = tf.reshape(C2, [self.batch_size, 1, 1, d2])
-            input = tf.reshape(input, [self.batch_size, self.MPS.d_feature, 1, 1])
-            C = C1 * C2 * input
+            C1 = tf.reshape(C1, [self.batch_size, 1, 1, d1, 1])
+            C2 = tf.reshape(C2, [self.batch_size, 1, 1, 1, d2])
+            input1 = tf.reshape(input1, [self.batch_size, self.MPS.d_feature, 1, 1, 1])
+            input2 = tf.reshape(input2, [self.batch_size, 1, self.MPS.d_feature, 1, 1])
+            intermediate_1 = C1 * C2
+            intermediate_2 = input1 * input2
+            C = intermediate_1 * intermediate_2
 
         return C
 
     def _get_f_and_h(self, bond, C):
         with tf.name_scope("tensordotf"):
-            # f = tf.einsum('lmik,tmik->tl', bond, C)
-            f = tf.tensordot(C, bond, [[1, 2, 3], [1, 2, 3]])
+            # f = tf.einsum('lmnik,tmnik->tl', bond, C)
+            f = tf.tensordot(C, bond, [[1, 2, 3, 4], [1, 2, 3, 4]])
             h = tf.nn.softmax(f)
         return f, h
 
     def _calculate_hessian(self, f, C):
-        # TODO: IMPLEMENT
-        print("WARNING: Calculating the Hessian for Single Site DMRG is not yet implemented; this will probably cause your script to not work/ crash")
         with tf.name_scope('hessian'):
             d1 = tf.shape(C)[-2]
             d2 = tf.shape(C)[-1]
@@ -177,7 +250,7 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             delta_bond = gradient / h
         gradient_dot_change = tf.tensordot(gradient,
                                            delta_bond,
-                                           [[0, 1, 2, 3], [0, 1, 2, 3]])/tf.cast(self.batch_size, tf.float32)
+                                           [[0, 1, 2, 3, 4],[0, 1, 2, 3, 4]])/tf.cast(self.batch_size, tf.float32)
         lr = self.rate_of_change
         lr, updated_bond = self._armijo_loop(bond, C, lr, cost, delta_bond, gradient_dot_change)
 
@@ -191,13 +264,28 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
         return updated_bond
 
     def _bond_decomposition(self, bond, max_size, min_size=3):
+        """
+
+        :param self:
+        :param bond:
+        :param max_size:
+        :param min_size:
+        :param min_singular_value:
+        :return:
+        """
+        """
+        Decomposes bond, so that the next step can be done.
+        :param bond:
+        :param m:
+        :return:
+        """
         with tf.name_scope("bond_decomposition"):
-            bond_reshaped = tf.transpose(bond, perm=[1, 2, 0, 3])
+            bond_reshaped = tf.transpose(bond, perm=[1, 3, 0, 2, 4])
             # bond_reshaped = tf.Print(bond_reshaped, [tf.shape(bond_reshaped), tf.shape(bond)], summarize = 1000, message = "bond reshaped, bond")
 
             dims = tf.shape(bond_reshaped)
             l_dim = dims[0] * dims[1]
-            r_dim = dims[2] * dims[3]
+            r_dim = dims[2] * dims[3] * dims[4]
             bond_flattened = tf.reshape(bond_reshaped, [l_dim, r_dim])
             s, u, v = tf.svd(bond_flattened)
             filtered_u = utils.check_nan(u, 'u', replace_nan=True)
@@ -226,9 +314,8 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             a_prime_j = tf.reshape(u_cropped, [dims[0], dims[1], m])
 
             sv = tf.matmul(s_mat, v_cropped)
-            a_prime_j1 = tf.reshape(sv, [m, dims[2], dims[3]])
+            a_prime_j1 = tf.reshape(sv, [m, dims[2], dims[3], dims[4]])
             # a_prime_j1 = tf.transpose(a_prime_j1_mixed, perm=[1, 2, 0, 3])
             # will do this in the update_right/update_left functions from now on as else transpose twice for udpate_left
 
         return (a_prime_j, a_prime_j1)
-

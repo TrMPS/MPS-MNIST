@@ -1,8 +1,9 @@
-import tensorflow as tf
 import numpy as np
 import sys
 import os
-from preprocessing import *
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from preprocessing.preprocessing import *
 import urllib.request
 from rarfile import RarFile
 import csv

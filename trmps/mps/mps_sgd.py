@@ -1,7 +1,10 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import tensorflow as tf
 import numpy as np
-from mps import MPS
-import MNISTpreprocessing
+from mps.mps import MPS
+# import MNISTpreprocessing
 
 
 class SGDMPS(MPS):
@@ -151,24 +154,24 @@ class SGDMPS(MPS):
 
 
 
-if __name__ == '__main__':
-    # Model parameters
-    input_size = 784
-    shrink = True
-    if shrink:
-        input_size = 196
-    d_feature = 2
-    d_output = 10
-    batch_size = 1000
-    permuted = False
+# if __name__ == '__main__':
+#     # Model parameters
+#     input_size = 784
+#     shrink = True
+#     if shrink:
+#         input_size = 196
+#     d_feature = 2
+#     d_output = 10
+#     batch_size = 1000
+#     permuted = False
 
-    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted = permuted)
+#     data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted = permuted)
 
-    # Initialise the model
-    network = SimpleMPS(d_feature, d_output, input_size)
-    network.prepare(data_source)
-    feature, label = data_source.next_training_data_batch(1000)
-    network.test(feature, label)
+#     # Initialise the model
+#     network = SimpleMPS(d_feature, d_output, input_size)
+#     network.prepare(data_source)
+#     feature, label = data_source.next_training_data_batch(1000)
+#     network.test(feature, label)
 
 
 

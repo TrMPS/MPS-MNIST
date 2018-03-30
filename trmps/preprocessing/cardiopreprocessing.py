@@ -1,8 +1,12 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import tensorflow as tf
 import numpy as np
 import sys
 import os
-from preprocessing import *
+from preprocessing.preprocessing import *
 import csv
 from utils import spinner
 from utils import convert_to_onehot

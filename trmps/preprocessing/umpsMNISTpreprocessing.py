@@ -1,8 +1,13 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import tensorflow as tf
 import numpy as np
 import sys
 import os
-from preprocessing import *
+from preprocessing.umpspreprocessing import *
+#from rmpspreprocessing import *
 from utils import spinner
 
 from tensorflow.examples.tutorials.mnist import input_data
@@ -44,11 +49,11 @@ def _preprocess_images(data, size, shrink = True):
         #pooled_image = tf.placeholder(tf.float32, shape=[1, 14, 14, 1])
         snaked_image = tf.reshape(pool, shape=[196])
 
-        constants = tf.fill([196], 1.0)
+        ones = tf.ones([196], dtype=tf.float32)
     else:
         snaked_image = image
-        constants = tf.fill([784], 1.0)
-    phi = tf.stack([constants, np.sqrt(3) * (2 * snaked_image - 1)], axis=1)
+        ones = tf.ones([784], dtype=tf.float32)
+    phi = tf.stack([ones, snaked_image], axis=1)
 
     _spinner = spinner(jump = 300)
 
@@ -73,7 +78,7 @@ def _preprocess_images(data, size, shrink = True):
     _spinner.print_spinner(100.0)
     return (np.array(data), np.array(labels))
 
-class MNISTDatasource(MPSDatasource):
+class UMPSMNISTDatasource(UMPSDatasource):
     """
     MNISTDatasource is a subclass of MPSDatasource which implements data loading for the
     well known MNIST dataset.
@@ -83,7 +88,7 @@ class MNISTDatasource(MPSDatasource):
     This class requires the use of tensorflow to load data.
     """
 
-    def __init__(self, shrink = True, permuted = False, shuffled = False, add_random = False):
+    def __init__(self, shrink=True, permuted=False, shuffled=False):
         """
         Initialises the dataset, and can also permute/shuffle the dataset.
         :param shrink: boolean
@@ -94,37 +99,33 @@ class MNISTDatasource(MPSDatasource):
         :param shuffled: boolean
             Pass true to shuffle the dataset.
         """
-        expected_shape = (784, 2)
+        self.expected_shape = (784, 2)
         if shrink:
-            expected_shape = (196,2)
+            self.expected_shape = (196,2)
         self.shrink = shrink
-        self.add_random = add_random
-        super().__init__(expected_shape, shuffled)
+        expected_d_input = self.expected_shape[1]
+        super().__init__(expected_d_input, shuffled)
         if permuted:
             print("permuting")
-            data, labels = self._training_data
+            data, labels = self._training_data[self.expected_shape[0]]
             print(len(data[0]))
             permutation = np.random.permutation(len(data[0]))
             permuted_data = []
             for d in data:
                 permuted_data.append(np.array(d[permutation]))
-            self._training_data = np.array(permuted_data), labels
-            test_data, test_labels = self._test_data
+            self._training_data = {self.expected_shape[0]: (np.array(permuted_data), labels)}
+            test_data, test_labels = self._test_data[self.expected_shape[0]]
             permuted_test_data = []
             for d in test_data:
                 permuted_test_data.append(np.array(d[permutation]))
-            self._test_data = np.array(permuted_test_data), test_labels
+            self._test_data = {self.expected_shape[0]: (np.array(permuted_test_data), test_labels)}
 
     def _load_test_data(self):
         """
         Loads test data of the appropriate size.
         :return: nothing
         """
-        self._test_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)
-
-        if self.add_random:
-            self._test_data = self._add_random(*self._test_data)
-
+        self._test_data = {self.expected_shape[0]: _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)}
         super()._load_test_data()
 
     def _load_training_data(self):
@@ -132,42 +133,16 @@ class MNISTDatasource(MPSDatasource):
         Loads training data of the appropriate size.
         :return: nothing
         """
-        self._training_data = _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train,
-                                                     size=60000, shrink=self.shrink)
-        if self.add_random:
-            self._training_data = self._add_random(*self._training_data)
-
+        self._training_data = {self.expected_shape[0]: _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train,
+                                                     size=60000, shrink=self.shrink)}
         super()._load_training_data()
-
-    def _add_random(self, data, labels):
-        num_random_samples = int(data.shape[0]/2)
-        shape = (num_random_samples, data.shape[1])
-        random = np.random.random(shape)
-        constant = np.ones(shape)
-        random_data = np.stack([constant, np.sqrt(3) * (2 * random - 1)], axis=2)
-        data = np.concatenate((data, random_data), axis=0)
-
-        extra_zeros = np.zeros((labels.shape[0], 1))
-        labels = np.concatenate((labels, extra_zeros), axis=1)
-        random_labels = np.zeros((num_random_samples, 11))
-        random_labels[:, -1] = 1
-        labels = np.concatenate((labels, random_labels), axis=0)
-
-        return (data, labels)
-
-
-
 
 
 if __name__ == "__main__":
     # If main, processes the images and also prints the number of images
-    data_source = MNISTDatasource(shrink=False, add_random=True)
-    data, labels = data_source.next_training_data_batch(1000)
+    print("Testing")
+    data_source = RMPSMNISTDatasource(shrink = False)
+    (length, (data, labels)) = data_source.next_training_data_batch(1000, 784)
+    print(length)
     print(data.shape)
     print(len(labels))
-    data, labels = data_source.next_training_data_batch(1000)
-    print(data.shape)
-    print(len(labels))
-    data, labels = data_source.next_training_data_batch(1000)
-    print(len(labels))
-    data, labels = data_source.next_training_data_batch(500)

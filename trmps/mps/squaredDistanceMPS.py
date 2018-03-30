@@ -1,5 +1,8 @@
-from mps import MPS
+from mps.mps import MPS
 import tensorflow as tf
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # TODO: Deprecate everything in this file and move these things into some sort of configuration for the
 #       MPS and MPSOptimizer classes

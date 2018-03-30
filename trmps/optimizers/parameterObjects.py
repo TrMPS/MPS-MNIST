@@ -6,7 +6,7 @@ class MPSOptimizerParameters(object):
     def __init__(self, cutoff=1000,
                  reg=0.001, lr_reg=0.99, min_singular_value=10**(-4),
                  verbosity=0, armijo_coeff=10**(-4), use_hessian=False,
-                 armijo_iterations=10):
+                 armijo_iterations=10, path="MPSconfig", updates_per_step=1):
         """
         :param cutoff: float
             The cutoff value for the gradient. Anything above this is clipped off.
@@ -45,13 +45,16 @@ class MPSOptimizerParameters(object):
         self.armijo_coeff = armijo_coeff
         self.use_hessian = use_hessian
         self.armijo_iterations = armijo_iterations
+        self.path = path
+        self.updates_per_step = updates_per_step
 
 class MPSTrainingParameters(object):
     """
     MPSTrainingParameters is used to pass in optional parameters for MPSOptimizer in the training step,
     as it saves having a large number of optional parameters.
     """
-    def __init__(self, rate_of_change=1000, initial_weights=None, _logging_enabled=False):
+    def __init__(self, rate_of_change=1000, initial_weights=None, verbose_save=True,
+                 _logging_enabled=False,):
         """
         :param rate_of_change: float
             The rate of change for the optimisation.
@@ -60,10 +63,12 @@ class MPSTrainingParameters(object):
             overshooting, or make the optimisation slower than it should be.
         :param initial_weights: list
             The initial weights for the network, if it is desired to override the default values
-            from mps.prepare(self, data_source, iterations = 1000)
+            from mps.prepare(self, data_source, iterations = 1000).
+            Deprecated.
         :param _logging_enabled: boolean
             Whether certain things are logged to Tensorboard/ to a Chrome timeline.
         """
         self.rate_of_change = rate_of_change
         self.initial_weights = initial_weights
         self._logging_enabled = _logging_enabled
+        self.verbose_save = verbose_save

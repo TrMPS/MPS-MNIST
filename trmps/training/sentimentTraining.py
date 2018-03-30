@@ -1,5 +1,9 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from trmps import *
-from word2vec import MovieReviewDatasource
+from preprocessing.word2vec import MovieReviewDatasource
 
 # Model parameters
 d_feature = 2

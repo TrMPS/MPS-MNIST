@@ -60,21 +60,22 @@ class spinner(object):
     def print_spinner(self, percentage):
         if float(percentage) == 100.0:
             sys.stdout.flush()
-            print("\r" + str(100) + " % done")
+            print("\r" + str(100) + " % done      ")
         elif self.index % self.jump == 0:
+            percentage_str = "{:.2f}".format(percentage)
             sys.stdout.flush()
             # Spinner to show progress
             if self.counter == 0:
-                print("\r" + str(percentage) + " % done", end="|")
+                print("\r" + percentage_str + " % done", end="|")
                 self.counter += 1
             elif self.counter == 1:
-                print("\r" + str(percentage) + " % done", end="/")
+                print("\r" + percentage_str + " % done", end="/")
                 self.counter += 1
             elif self.counter == 2:
-                print("\r" + str(percentage) + " % done", end="-")
+                print("\r" + percentage_str + " % done", end="-")
                 self.counter += 1
             elif self.counter == 3:
-                print("\r" + str(percentage) + " % done", end="\\")
+                print("\r" + percentage_str + " % done", end="\\")
                 self.counter = 0
         self.index += 1
 

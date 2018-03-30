@@ -132,12 +132,20 @@ trmps/weights
 
 trmps/weights_sgd
 
-*.csv
+trmps/FashionMNISTDatasource/t10k-images-idx3-ubyte.gz
 
-*.rar
+trmps/FashionMNISTDatasource/t10k-labels-idx1-ubyte.gz
 
-trmps/training/DataSet/Readme.txt
+trmps/FashionMNISTDatasource/train-images-idx3-ubyte.gz
+
+trmps/FashionMNISTDatasource/train-labels-idx1-ubyte.gz
 
 trmps/MPSconfig
+
+*.csv
+
+trmps/training/ActivityData.rar
+
+trmps/training/DataSet/Readme.txt
 
 trmps/training/MPSconfig

@@ -1,12 +1,16 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import tensorflow as tf
 import time
 import numpy as np
-from mps import MPS
+from mps.mps import MPS
 import pickle
 import utils
 from tensorflow.python.client import timeline
-from parameterObjects import MPSOptimizerParameters, MPSTrainingParameters
-from squaredDistanceMPS import sqMPS
+from optimizers.parameterObjects import MPSOptimizerParameters, MPSTrainingParameters
+from mps.squaredDistanceMPS import sqMPS
 
 class BaseOptimizer(object):
 
@@ -23,6 +27,7 @@ class BaseOptimizer(object):
             See documentation for MPSOptimizerParameters for more detail.
         """
         self.parameters = optional_parameters
+        self.path = self.parameters.path
         self.MPS = MPSNetwork
         self.use_hessian = self.parameters.use_hessian
         if self.use_hessian and type(self.MPS) is sqMPS:
@@ -40,6 +45,7 @@ class BaseOptimizer(object):
         self._label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
         self._setup_optimization()
         self.verbosity = self.parameters.verbosity
+        self.updates_per_step = self.parameters.updates_per_step
         _ = self.train_step()
 
         print("_____   Thomas the Tensor Train    . . . . . o o o o o",
@@ -85,13 +91,13 @@ class BaseOptimizer(object):
         self.test = optional_parameters.initial_weights
         initial_lr = optional_parameters.rate_of_change
 
-        train_cost, train_accuracy, train_confusion, _ = self._test_step(self._feature, self._label)
+        train_cost, train_accuracy, train_confusion, _, train_f = self._test_step(self._feature, self._label)
 
         test_feature, test_label = data_source.test_data
 
         feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
-        test_cost, test_accuracy, test_confusion, test_f1 = self._test_step(feature, label)
+        test_cost, test_accuracy, test_confusion, test_f1, test_f = self._test_step(feature, label)
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -110,8 +116,8 @@ class BaseOptimizer(object):
                 self.feed_dict[self.rate_of_change] = rate_of_change
                 self.feed_dict[feature] = test_feature
                 self.feed_dict[label] = test_label
-                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1]
-                train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score = sess.run(to_eval,
+                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1, test_f]
+                train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score, test_prediction = sess.run(to_eval,
                                                                                                     feed_dict=self.feed_dict,
                                                                                                     options=run_options,
                                                                                                     run_metadata=run_metadata)
@@ -123,12 +129,14 @@ class BaseOptimizer(object):
                     with open("timeline.json", "w") as f:
                         f.write(ctf)
                     run_metadata = tf.RunMetadata()
-                with open('weights', 'wb') as fp:
-                    pickle.dump(self.test, fp)
+                self.MPS.save(self.test, path=self.path, verbose=optional_parameters.verbose_save)
                 end = time.time()
+                print(time.strftime("%Y-%m-%d %H:%M:%S"))
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))
                 print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
                 print('f1 score: ', test_f1score)
+                print('sample prediction: ', test_prediction[0])
+                print('sample truth: ', test_label[0])
                 print('confusion matrix: \n' + str(test_conf))
                 # print("prediction:" + str(prediction[0]))
             if optional_parameters._logging_enabled:
@@ -147,7 +155,7 @@ class BaseOptimizer(object):
         accuracy = self.MPS.accuracy(f, label)
         confusion = self.MPS.confusion_matrix(f, label)
         f1 = self.MPS.f1score(f, label, confusion)
-        return cost, accuracy, confusion, f1
+        return cost, accuracy, confusion, f1, f
 
     def _find_C1(self, counter, C1, C1s):
         """
@@ -291,11 +299,13 @@ class BaseOptimizer(object):
     def _armijo_loop(self, bond, C, lr, cost, delta_bond, gradient_dot_change):
 
         def _armijo_condition(learning_rate, updated_bond):
-            _, updated_cost = self._get_f_and_cost(updated_bond, C)
-            target = cost - self.armijo_coeff * learning_rate * gradient_dot_change
+            f, updated_cost = self._get_f_and_cost(updated_bond, C)
+            _gradient_dot_change = tf.Print(gradient_dot_change, [gradient_dot_change], first_n=self.verbosity,
+                                  message="Gradient dot change")
+            target = cost - self.armijo_coeff * learning_rate * _gradient_dot_change
             if self.verbosity != 0:
-                target = tf.Print(target, [updated_cost, target, cost], first_n=self.verbosity,
-                                  message = "updated_cost, target and cost")
+                target = tf.Print(target, [updated_cost, target, cost, f], first_n=self.verbosity,
+                                  message="updated_cost, target, current cost, and f", summarize=10)
             return tf.greater(updated_cost, target)
 
         def _armijo_step(counter, armijo_cond, learning_rate, updated_bond):
@@ -310,6 +320,16 @@ class BaseOptimizer(object):
             _, _, lr, updated_bond = tf.while_loop(cond=cond, body=_armijo_step, loop_vars=loop_vars, name="lr_opt")
 
         return lr, updated_bond
+
+    def _repeatedly_update_bond(self, bond, C):
+        def _update_bond_once(n, bond, C):
+            updated_bond = self._update_bond(bond, C)
+            return n+1, updated_bond, C
+        with tf.name_scope("update_bond_loop"):
+            cond = lambda n, *args: tf.less(n, self.updates_per_step)
+            loop_vars = [0, bond, C]
+            _, updated_bond, _ = tf.while_loop(cond=cond, body=_update_bond_once, loop_vars=loop_vars, name="bond_update")
+        return updated_bond
 
     def _make_new_nodes(self, nodes):
         """

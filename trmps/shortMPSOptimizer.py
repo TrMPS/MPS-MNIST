@@ -6,19 +6,19 @@ import tensorflow as tf
 class shortMPSOptimizer(MPSOptimizer):
     """
     Short MPS is a subclass of the MPSOptimizer
-    Instead of sweeping the full MPS, it restricts the sweeping to a range. 
+    Instead of sweeping the full MPS, it restricts the sweeping to a range.
 
-    Note that for the MPS to remain in canonical form at all times, 
-    the nodes that are not updated must be initialised to be of 
-    left/right canonical form. 
+    Note that for the MPS to remain in canonical form at all times,
+    the nodes that are not updated must be initialised to be of
+    left/right canonical form.
     """
 
     def __init__(self, MPSNetwork, max_size, sweep_range=None, optional_parameters=MPSOptimizerParameters()):
 
         if sweep_range == None:
             sweep_range = (0, MPSNetwork.input_size-1)
-        self._left_lim = sweep_range[0] 
-        self._right_lim = sweep_range[1] 
+        self._left_lim = sweep_range[0]
+        self._right_lim = sweep_range[1]
         super().__init__(MPSNetwork, max_size, optional_parameters)
 
 
@@ -81,12 +81,12 @@ class shortMPSOptimizer(MPSOptimizer):
             size = nodes.size()
             new_nodes = tf.TensorArray(tf.float32, size=size, infer_shape=False, clear_after_read=False)
 
-            _, _, new_nodes = tf.while_loop(cond=lambda i, a, b: tf.less(i, self._left_lim), 
-                                            body=self._transfer_to_array, 
-                                            loop_vars=[0, nodes, new_nodes], 
+            _, _, new_nodes = tf.while_loop(cond=lambda i, a, b: tf.less(i, self._left_lim),
+                                            body=self._transfer_to_array,
+                                            loop_vars=[0, nodes, new_nodes],
                                             name="copy_start_nodes")
-            _, _, new_nodes = tf.while_loop(cond=lambda i, a, b: tf.less(i, size), 
-                                            body=self._transfer_to_array, 
+            _, _, new_nodes = tf.while_loop(cond=lambda i, a, b: tf.less(i, size),
+                                            body=self._transfer_to_array,
                                             loop_vars=[self._right_lim+1, nodes, new_nodes],
                                             name="copy_end_nodes")
 

@@ -1,6 +1,9 @@
 import tensorflow as tf
 import numpy as np
+<<<<<<< HEAD:trmps/mps.py
 import MNISTpreprocessing
+=======
+>>>>>>> master:trmps/mps/mps.py
 
 class MPS(object):
     """
@@ -78,8 +81,89 @@ class MPS(object):
     print("\n\n\n\n Accuracy is:" + str(acc))
     print("\n\n\n\n" + str(conf))
     """
+    @classmethod
+    def from_file(cls, path="MPSconfig"):
+        with open(path, "rb") as f:
+            _results = f.read()
+        contains_weights = bool(_results[0])
+        input_size = int.from_bytes(_results[1:3], byteorder='big')
+        _special_node_loc = int.from_bytes(_results[3:5], byteorder='big')
+        d_feature = int.from_bytes(_results[5:7], byteorder='big')
+        d_output = int.from_bytes(_results[7:9], byteorder='big')
+        self = cls(d_feature, d_output, input_size, special_node_loc=_special_node_loc)
+        weights = []
+        dims = []
+        if contains_weights is True:
+            print("No need to prepare: previous weights will be used")
+            for i in range(9, 9 + (self.input_size - 1) * 2, 2):
+                dim = int.from_bytes(_results[i:i + 2], byteorder='big')
+                dims.append(dim)
+            print(dims)
+            start_index = 9 + (self.input_size) * 2
+            for i in range(self.input_size):
+                if i == self.input_size - 1:
+                    l_dim = dims[i - 1]
+                    r_dim = self.d_matrix
+                elif i == 0:
+                    l_dim = self.d_matrix
+                    r_dim = dims[i]
+                else:
+                    l_dim = dims[i - 1]
+                    r_dim = dims[i]
+                if i == self._special_node_loc:
+                    end_index = (start_index +
+                                 (l_dim * r_dim * self.d_feature * self.d_output) * 4)
+                    weight = np.frombuffer(_results[start_index:end_index], dtype=np.float32)
+                    weight = np.reshape(weight, (self.d_output, self.d_feature, l_dim, r_dim))
+                else:
+                    end_index = (start_index +
+                                 (l_dim * r_dim * self.d_feature) * 4)
+                    weight = np.frombuffer(_results[start_index:end_index], dtype=np.float32)
+                    weight = np.reshape(weight, (self.d_feature, l_dim, r_dim))
+                weights.append(weight)
+                start_index = end_index
+            self.prepare(_weights=weights)
+        else:
+            print("Please remember to prepare the MPS")
+        return self
 
-    def __init__(self, d_feature, d_output, input_size, special_node_loc=None):
+    def save(self, weights=None, path="MPSconfig", verbose=False):
+        contains_weights = True
+        if weights is None:
+            contains_weights = False
+        # Flag for whether contains weights or not
+        results = contains_weights.to_bytes(1, byteorder='big')
+        results += self.input_size.to_bytes(2, byteorder='big')
+        results += self._special_node_loc.to_bytes(2, byteorder='big')
+        results += self.d_feature.to_bytes(2, byteorder='big')
+        results += self.d_output.to_bytes(2, byteorder='big')
+        if contains_weights is False:
+            print("contains_weights False")
+        else:
+            num_params = 0
+            prev_shape = self.d_matrix
+            for i in range(len(weights)):
+                shape = weights[i].shape
+                if i == self._special_node_loc:
+                    results += shape[3].to_bytes(2, byteorder='big')
+                    if verbose:
+                        num_params += prev_shape * shape[3] * self.d_output * self.d_feature
+                        prev_shape = shape[3]
+                else:
+                    results += shape[2].to_bytes(2, byteorder='big')
+                    if verbose:
+                        num_params += prev_shape * shape[2] * self.d_feature
+                        prev_shape = shape[2]
+            if verbose:
+                num_params += prev_shape * self.d_matrix * self.d_feature
+                print("The number of parameters are:", num_params)
+
+            for weight in weights:
+                results += weight.tobytes(order='C')
+        with open(path, "w+b") as f:
+            f.write(results)
+
+    def __init__(self, d_feature, d_output, input_size, special_node_loc=None, round=False,):
         """
         Initialises the MPS. Currently, the prepare method must be called immediately
         after this before anything else can be done.
@@ -100,12 +184,13 @@ class MPS(object):
         self.d_feature = d_feature
         self.d_output = d_output
         self._special_node_loc = special_node_loc
+        self.round = round
         # if special_node_loc is None:
         #     self._special_node_loc = int(np.floor(self.input_size / 2))
         # else:
         #     self._special_node_loc = special_node_loc
 
-    def prepare(self, data_source=None, iterations=1000, learning_rate=0.05):
+    def prepare(self, data_source=None, iterations=1000, learning_rate=0.05, _weights=None):
         """
         Prepares the MPS using linear regression. This can be thought of as pre-training the network,
         and dramatically shortens the required training time. This function must be called immediately
@@ -120,9 +205,12 @@ class MPS(object):
         """
         if data_source is not None:
             self._lin_reg(data_source, iterations, learning_rate)
+            self._setup_nodes()
+        elif _weights is not None:
+            self._prepare_from_previous(weights=_weights)
         else:
             self._random_prepare()
-        self._setup_nodes()
+            self._setup_nodes()
 
     def _random_prepare(self):
         # self.weight = (0.05 * np.random.rand(self.input_size, self.d_feature - 1, self.d_output)
@@ -136,7 +224,6 @@ class MPS(object):
 
 
     def test(self, test_feature, test_label):
-        # TODO: allow passing in weights for testing as well
         """
         A function to test the MPS.
         :param test_feature: a numpy array of type float32 of shape (input_size, batch_size, d_feature)
@@ -153,13 +240,15 @@ class MPS(object):
         f = self.predict(feature)
         cost = self.cost(f, label)
         accuracy = self.accuracy(f, label)
+        confusion_matrix = self.confusion_matrix(f, label)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            test_cost, test_acc, test_f = sess.run(
-                [cost, accuracy, f], {feature: test_feature, label: test_label})
-            print(test_cost)
-            print("sample prediction:", test_f[0])
-            print(test_acc)
+            test_cost, test_acc, test_f, test_conf = sess.run(
+                [cost, accuracy, f, confusion_matrix], {feature: test_feature, label: test_label})
+            print("\n\n\n\n Accuracy is:" + str(test_acc))
+            print("\n\n\n\n Cost is:" + str(test_cost))
+            print("\n\n\n\n" + str(test_conf))
+            print("\n\n\n\n Sample prediction: " + str(test_f[0]))
 
 #     def load_nodes(self, weights):
 #         """
@@ -269,6 +358,7 @@ class MPS(object):
 
         accuracy = self.accuracy(prediction, label)
         confusion_matrix = self.confusion_matrix(prediction, label)
+        cost = self.cost(prediction, label)
 
         reshaped_weight = tf.transpose(weight)
         reshaped_weight = tf.reshape(
@@ -284,16 +374,22 @@ class MPS(object):
                 sess.run(train_step, feed_dict={
                          feature: batch_feature, label: batch_label})
 
-            train_acc, train_conf = sess.run([accuracy, confusion_matrix], feed_dict={
+            train_acc, train_conf, train_cost = sess.run([accuracy, confusion_matrix, cost], feed_dict={
                                              feature: batch_feature, label: batch_label})
             print('Lin regression gives a training accuracy of {}'.format(train_acc))
             print(train_conf)
+            print('Cost: ', train_cost)
 
             batch_feature, batch_label = data_source.test_data
-            test_acc, test_conf = sess.run([accuracy, confusion_matrix], feed_dict={
+            test_acc, test_conf, test_cost, test_predict = sess.run([accuracy, confusion_matrix, cost, prediction], feed_dict={
                                            feature: batch_feature, label: batch_label})
             print('Lin regression gives a test accuracy of {}'.format(test_acc))
+            print('Cost: ', test_cost)
             print(test_conf)
+            print('Sample prediction:')
+            print(test_predict[0])
+            print('Sample ground truth:')
+            print(batch_label[0])
 
             self.weight, self.bias = sess.run([reshaped_weight, bias])
             del batch_feature, batch_label
@@ -327,6 +423,26 @@ class MPS(object):
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
                 else:
                     self.nodes_list.append(tf.placeholder_with_default(self._make_middle_node(i),
+                                                                       [self.d_feature, None, None]))
+                    self.nodes = self.nodes.write(i, self.nodes_list[-1])
+
+    def _prepare_from_previous(self, weights):
+        with tf.name_scope("MPSnodes"):
+            self.nodes_list = []
+            self.nodes = tf.TensorArray(tf.float32, size=0, dynamic_size=True,
+                                        clear_after_read=False, infer_shape=False)
+            self.start_node = self._make_start_node()
+            self.end_node = self._make_end_node()
+
+            for i in range(0, self.input_size):
+                if i == self._special_node_loc:
+                    # The Second node with output leg attached
+                    print(weights[i].shape)
+                    self.nodes_list.append(tf.placeholder_with_default(weights[i],
+                                                                       [self.d_output, self.d_feature, None, None]))
+                    self.nodes = self.nodes.write(i, self.nodes_list[-1])
+                else:
+                    self.nodes_list.append(tf.placeholder_with_default(weights[i],
                                                                        [self.d_feature, None, None]))
                     self.nodes = self.nodes.write(i, self.nodes_list[-1])
 
@@ -443,7 +559,8 @@ class MPS(object):
                 'lnij,tn->tlij', sp_node, feature[self._special_node_loc])
             C1 = tf.einsum('ti,tlij->tlj', C1, contracted_sp_node)
             f = tf.einsum('tli,ti->tl', C1, C2)
-
+        if self.round:
+            f = tf.round(f)
         return f
 
     def create_feed_dict(self, weights):
@@ -477,21 +594,21 @@ class MPS(object):
         return feed_dict
 
 
-if __name__ == '__main__':
-    # Model parameters
-    input_size = 784
-    shrink = True
-    if shrink:
-        input_size = 196
-    d_feature = 2
-    d_output = 10
-    batch_size = 1000
-    permuted = False
+# if __name__ == '__main__':
+#     # Model parameters
+#     input_size = 784
+#     shrink = True
+#     if shrink:
+#         input_size = 196
+#     d_feature = 2
+#     d_output = 10
+#     batch_size = 1000
+#     permuted = False
 
-    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
+#     data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
 
-    # Initialise the model
-    network = MPS(d_feature, d_output, input_size)
-    network.prepare(data_source)
-    feature, label = data_source.test_data
-    network.test(feature, label)
+#     # Initialise the model
+#     network = MPS(d_feature, d_output, input_size)
+#     network.prepare(data_source)
+#     feature, label = data_source.test_data
+#     network.test(feature, label)
