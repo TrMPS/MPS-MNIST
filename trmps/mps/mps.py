@@ -1,9 +1,5 @@
 import tensorflow as tf
 import numpy as np
-<<<<<<< HEAD:trmps/mps.py
-import MNISTpreprocessing
-=======
->>>>>>> master:trmps/mps/mps.py
 
 class MPS(object):
     """

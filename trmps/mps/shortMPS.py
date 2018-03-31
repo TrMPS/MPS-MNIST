@@ -1,9 +1,35 @@
 import tensorflow as tf
 import numpy as np
-import MNISTpreprocessing
-from mps import MPS
+from mps.mps import MPS
 
 class shortMPS(MPS):
+
+    def __init__(self, d_feature, d_output, input_size, special_node_loc=None, round=False,):
+        """
+        Initialises the MPS. Currently, the prepare method must be called immediately
+        after this before anything else can be done.
+        :param d_feature: integer
+            The sizes of the feature vectors.
+            (Referred to as 'Local dimension' in the paper)
+            Try to keep this low (if possible), as the optimisation algorithm scales
+            as (d_feature)^3.
+        :param d_output: integer
+            The size of the output. e.g. with 10-class classification,
+            expressed as a one-hot vector, this would be 10
+        :param input_size: int
+            The input size, i.e. the number of matrices composing the matrix product state
+        """
+        # structure parameters
+        self.input_size = input_size
+        self.d_matrix = 1
+        self.d_feature = d_feature
+        self.d_output = d_output
+        self._special_node_loc = special_node_loc
+        self.round = round
+        # if special_node_loc is None:
+        #     self._special_node_loc = int(np.floor(self.input_size / 2))
+        # else:
+        #     self._special_node_loc = special_node_loc
 
     def _setup_nodes(self):
         """
@@ -14,8 +40,8 @@ class shortMPS(MPS):
         with tf.name_scope("MPSnodes"):
 
             # Make the end nodes
-            self.start_node = tf.Variable(np.ones([1, 1], dtype=np.float32), trainable=False)
-            self.end_node = tf.Variable(np.ones([1, 1], dtype=np.float32), trainable=False)
+            self.start_node = self._make_start_node()
+            self.end_node = self._make_end_node()
 
             # Make the node chain
             self.nodes_list = []
@@ -38,6 +64,14 @@ class shortMPS(MPS):
             node = tf.einsum('mij,jk->mik', node, sv)
             self._append_node(self.input_size-2, node, shape)
             self._append_node(self.input_size-1, last_node, [self.d_feature, None, None])
+
+    def _make_start_node(self):
+        start_vector = tf.Variable(np.ones([1, 1], dtype=np.float32), trainable=False)
+        return start_vector
+
+    def _make_end_node(self):
+        end_node = tf.Variable(np.ones([1, 1], dtype=np.float32), trainable=False)
+        return end_node
 
     def _append_node(self, index, node, shape):
         self.nodes_list.append(tf.placeholder_with_default(node, shape))

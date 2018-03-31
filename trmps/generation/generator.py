@@ -1,12 +1,14 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import tensorflow as tf
 import numpy as np
-# from distribution import Quadratic, quad_sample
-from samplers import quad_sample, higher_order_sample
-from shortMPS import *
-import pickle
+from generation.samplers import quad_sample, higher_order_sample
+from mps.shortMPS import *
 import utils
 from matplotlib import pyplot as plt
-import MNISTpreprocessing
+import preprocessing.MNISTpreprocessing as MNISTpreprocessing
 
 class MPSGenerator(object):
     """
@@ -258,20 +260,11 @@ if __name__ == '__main__':
     # Tolerance for generation
     tol = 1e-3
 
-    # Initialise the model
-
-    with open('weights', 'rb') as fp:
-        weights = pickle.load(fp)
-        if len(weights) != input_size:
-            print("weights not of desired shape")
-            weights = None
-
     # weights = None
     data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
 
     # Initialise the model
-    network = shortMPS(d_feature, d_output, input_size, special_node_loc)
-    network.prepare(data_source=None)
+    network = shortMPS.from_file()
 
     generator = MPSGenerator(network)
 
@@ -289,7 +282,7 @@ if __name__ == '__main__':
     accuracy = network.accuracy(f, label)
     confusion = network.confusion_matrix(f, label)
 
-    feed_dict = network.create_feed_dict(weights)
+    feed_dict = network.create_feed_dict(None)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())

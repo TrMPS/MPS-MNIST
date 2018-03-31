@@ -1,6 +1,10 @@
-from optimizer import MPSOptimizer
-from parameterObjects import MPSOptimizerParameters, MPSTrainingParameters
+import sys
+import os
 import tensorflow as tf
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from optimizers.optimizer import MPSOptimizer
+from optimizers.parameterObjects import MPSOptimizerParameters, MPSTrainingParameters
 
 
 class shortMPSOptimizer(MPSOptimizer):

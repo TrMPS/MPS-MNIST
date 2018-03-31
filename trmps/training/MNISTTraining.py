@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import preprocessing.MNISTpreprocessing
+import preprocessing.MNISTpreprocessing as mp
 from trmps import *
 
 # Model parameters
@@ -21,8 +21,8 @@ special_node_loc = 91
 
 # Optimizer parameters
 sweep_range = (1, input_size-2)
-batch_size = 2000
-max_size = 30
+batch_size = 10000
+max_size = 40
 min_singular_value = 1e-8
 reg = 1e-2
 use_hessian = False
@@ -35,34 +35,25 @@ verbosity = 0
 cutoff = 100
 n_step = 12
 
-data_source = MNISTpreprocessing.MNISTDatasource(shrink=shrink,
-												 permuted=permuted,
-												 shuffled=shuffled,
-												 add_random=True)
+data_source = mp.MNISTDatasource(shrink=shrink,
+								 permuted=permuted,
+								 shuffled=shuffled,
+								 add_random=True)
 print(data_source.test_data[0].shape)
 print(data_source.test_data[1].shape)
 
-# Initialise the model
-
-# with open('weights', 'rb') as fp:
-#     weights = pickle.load(fp)
-#     if len(weights) != input_size:
-#         weights = None
-
-network = shortMPS(d_feature, d_output, input_size, special_node_loc)
-network.prepare(data_source=data_source)
-weights=None
 
 optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_reg,
                                               verbosity=verbosity, use_hessian=use_hessian)
-training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
+training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change,
                                             _logging_enabled=logging_enabled)
+
 # Create network from scratch
-# network = MPS(d_feature, d_output, input_size, special_node_loc)
+# network = shortMPS(d_feature, d_output, input_size, special_node_loc)
 # network.prepare(data_source=data_source, learning_rate=lin_reg_learning_rate, iterations=10000)
 
 # Load network from saved configuration - Don't use for a shortMPS
-# network = MPS.from_file()
+network = shortMPS.from_file()
 
 #ShortMPS training
 optimizer = shortMPSOptimizer(network,

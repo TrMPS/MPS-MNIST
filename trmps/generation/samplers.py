@@ -1,7 +1,10 @@
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from solvers import _bisection_solver
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from generation.solvers import _bisection_solver
 
 
 def quad_sample(matrices, n, name='quadratic', seed=None):
