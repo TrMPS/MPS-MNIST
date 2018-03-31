@@ -1,4 +1,4 @@
 What's new
 ================
 
-Everything!
+Everything! But especially anything to do with generation.

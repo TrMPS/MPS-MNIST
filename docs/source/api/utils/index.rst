@@ -94,10 +94,12 @@ into_image(snaked_image)
  *returns: numpy array of size (n, n)*
   The snaked image converted back into a square one.
 
-show(snaked_image)
+show(snaked_image, normalise=False)
 ^^^^^^^^^
- Takes a snaked image, and plots it as a square image using matplotlib.
+ Takes a snaked image, and plots it as a square black and white image using matplotlib.
 
  *snaked_image: numpy array of size (any integer) squared*
   The 1D array that will be converted into a 2D square numpy array that will represent the image.
+ *normalise: boolean, default False*
+  Represents whether the image is already normalised. If this parameter is True, regardless of the values in the image, a value of 1.0 will represent black, and a value of 0.0 will represent white. If this is False, then the image will be plotted with the largest value in the image being black and the smallest value in the image being white.
 

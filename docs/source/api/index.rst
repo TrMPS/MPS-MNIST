@@ -10,3 +10,4 @@ TrMPS consists of the following parts. Click through to find out more!
    optimizers/index
    mps/index
    utils/index
+   generating/index

@@ -1,3 +1,5 @@
+from mps.shortMPS import *
+from optimizers.shortMPSOptimizer import *
 from mps.mps import *
 from mps.squaredDistanceMPS import *
 from mps.mps_sgd import *
