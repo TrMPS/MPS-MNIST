@@ -82,7 +82,7 @@ class shortMPS(MPS):
 
         :return:
         """
-        start_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
+        start_vector = np.zeros([self.d_feature, self.d_output * 2], dtype=np.float32)
         start_vector[0, self.d_output:] = 1
         start_vector[1:, 0:self.d_output] = self.weight[0]
         first_node = tf.Variable(start_vector, dtype=tf.float32,
@@ -100,7 +100,7 @@ class shortMPS(MPS):
         :return:
         """
 
-        end_vector = np.zeros([self.d_feature, self.d_matrix], dtype=np.float32)
+        end_vector = np.zeros([self.d_feature, self.d_output * 2], dtype=np.float32)
         end_vector[0, 0:self.d_output] = 1
         end_vector[1:, self.d_output:] = self.weight[-1]
 
@@ -123,7 +123,7 @@ class shortMPS(MPS):
     def _make_special_node(self, index):
 
         def _make_matrix(i):
-            m = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
+            m = np.zeros([self.d_feature, self.d_output * 2, self.d_output * 2], dtype=np.float32)
             m[0, i, i] = 1
             m[0, i+self.d_output, i+self.d_output] = 1
             m[0, i+self.d_output, i] = self.bias[i]
@@ -147,8 +147,8 @@ class shortMPS(MPS):
         :return:
         """
 
-        middle_node = np.zeros([self.d_feature, self.d_matrix, self.d_matrix], dtype=np.float32)
-        middle_node[0] = np.identity(self.d_matrix)
+        middle_node = np.zeros([self.d_feature, self.d_output * 2, self.d_output * 2], dtype=np.float32)
+        middle_node[0] = np.identity(self.d_output * 2)
         for i in range(1, self.d_feature):
             middle_node[i, self.d_output:, 0:self.d_output] = np.diag(self.weight[index, i-1])
 
