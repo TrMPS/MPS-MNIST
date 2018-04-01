@@ -151,3 +151,11 @@ trmps/training/DataSet/Readme.txt
 trmps/training/MPSconfig
 
 trmps/generation/MPSconfig
+
+trmps/generation/MPSconfig bonddim 30 withrandom
+
+trmps/generation/MPSConfig MNIST Bonddim 50 withoutrandom
+
+trmps/generation/MPSconfig
+
+trmps/generation/MPSconfig
