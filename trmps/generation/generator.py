@@ -160,7 +160,7 @@ class MPSGenerator(object):
         return self._new_sample_from_matrices(matrices)
 
     def _new_sample_from_matrices(self, matrices):
-        # samples = quad_sample_alt(matrices, n=10)
+        # samples = quad_sample(matrices, n=10)
         samples = higher_order_sample(matrices, n=10)
         return samples
 
@@ -268,12 +268,12 @@ if __name__ == '__main__':
 
     generator = MPSGenerator(network)
 
-    digit = 3
+    digit = 5
     n_samples = 500
     samples, pdfs = generator.generate(n_samples, digit, tol)
 
     feature = tf.stack([tf.ones_like(samples), np.sqrt(3) * (2 * samples - 1)], axis=-1)
-    label_np = np.zeros([n_samples, 11])
+    label_np = np.zeros([n_samples, d_output])
     label_np[:, digit] = 1
     label = tf.constant(label_np)
 

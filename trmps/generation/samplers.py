@@ -11,12 +11,13 @@ def quad_sample(matrices, n, name='quadratic', seed=None):
     a = matrices[:, 0, 0]
     b_c = matrices[:, 0, 1] + matrices[:, 1, 0]
     d = matrices[:, 1, 1]
-    norm = a + 2 * np.sqrt(3) * b_c + 13.5 * d
-    _a = a / norm
-    _b_c = b_c / norm
-    _d = d / norm
+    norm = (a + np.sqrt(3) * (b_c)
+            - np.sqrt(3) * b_c
+            + d * 4
+            - d * 6
+            + 3 * d)
     ys = tf.random_uniform([tf.shape(a)[0]], minval=0, maxval=1, seed=seed)
-    cdfs, _ = _generate_dist_funcs(_a, _b_c, _d, ys)
+    cdfs, _ = _generate_dist_funcs(a, b_c, d, ys * norm)
     x_dim = tf.reshape(tf.shape(a)[0], [1])
     return _bisection_solver(f=cdfs, x_dim=x_dim, n=n)
 
@@ -41,11 +42,12 @@ def _higher_order_sample_test(matrices, n=10, name='quadratic', seed=None):
     a = matrices[:, 0, 0]
     b_c = matrices[:, 0, 1] + matrices[:, 1, 0]
     d = matrices[:, 1, 1]
-    norm = ((a + np.sqrt(3) * b_c + 3 * d)**3
-            + 3 * (a + np.sqrt(3) * b_c + 3 * d)**2 * (np.sqrt(3) * b_c + 6 * d)
-            + 12 * (np.sqrt(3) * b_c**3 + a**2 * d + 18 * b_c**2 * d + 30 * np.sqrt(3) * b_c * d**2 + 45 * d**3 + a * (b_c**2 + 6 * np.sqrt(3) * b_c * d + 18 * d**2))
-            + 6 * (np.sqrt(3) * b_c + 6 * d) * (b_c**2 + 10 * np.sqrt(3) * b_c * d + 6 * d * (a + 5 * d))
-            + (432 * d * (b_c**2 + 5 * np.sqrt(3) * b_c * d + d * (a + 15 * d))) / 5 + 144 * d**2 * (np.sqrt(3) * b_c + 6 * d)
+    norm = ((a - np.sqrt(3) * b_c + 3 * d)**3
+            + 3 * (np.sqrt(3) * b_c - 6 * d) * (a - np.sqrt(3) * b_c + 3 * d)**2
+            + 12 * (-(np.sqrt(3) * b_c**3) + a**2 * d + 18 * b_c**2 * d - 30 * np.sqrt(3) * b_c * d**2 + 45 * d**3 + a * (b_c**2 - 6 * np.sqrt(3) * b_c * d + 18 * d**2))
+            - 6 * (np.sqrt(3) * b_c - 6 * d) * (-b_c**2 + 10 * np.sqrt(3) * b_c * d - 6 * d * (a + 5 * d))
+            + (432 * d * (b_c**2 - 5 * np.sqrt(3) * b_c * d + d * (a + 15 * d))) / 5
+            + 144 * (np.sqrt(3) * b_c - 6 * d) * d**2
             + (1728 * d**3) / 7)
     ys = tf.random_uniform([tf.shape(a)[0]], minval=0, maxval=1, seed=seed)
     cdfs, pdfs = _generate_higher_order_dist_funcs(a, b_c, d, ys * norm)
@@ -75,28 +77,31 @@ def _quad_sample_test(matrices, name='quadratic', seed=None):
 def _generate_dist_funcs(a, b_c, d, offsets):
     def f(x):
         return (a * x + np.sqrt(3) * x**2 * (b_c)
-                + np.sqrt(3) * x * b_c
-                + 0.5 * d * (2 * x + 1)**3 - offsets)
+                - np.sqrt(3) * x * b_c
+                + d * 4 * x**3
+                - d * 6 * x**2
+                + 3 * d * x - offsets)
 
     def df(x):
-        return (a + b_c * np.sqrt(3) * (1 + 2 * x)
-                + 3 * d * (1 + 2 * x)**2)
+        return (a + b_c * np.sqrt(3) * (2 * x - 1)
+                + 3 * d * (2 * x - 1)**2)
 
     return f, df
 
 
 def _generate_higher_order_dist_funcs(a, b_c, d, offsets):
     def f(x):
-        return (x * (a + np.sqrt(3) * b_c + 3 * d)**3
-                + 3 * (a + np.sqrt(3) * b_c + 3 * d)**2 * (np.sqrt(3) * b_c + 6 * d) * x**2
-                + 12 * (np.sqrt(3) * b_c**3 + a**2 * d + 18 * b_c**2 * d + 30 * np.sqrt(3) * b_c * d**2 + 45 * d**3 + a * (b_c**2 + 6 * np.sqrt(3) * b_c * d + 18 * d**2)) * x**3
-                + 6 * (np.sqrt(3) * b_c + 6 * d) * (b_c**2 + 10 * np.sqrt(3) * b_c * d + 6 * d * (a + 5 * d)) * x**4
-                + (432 * d * (b_c**2 + 5 * np.sqrt(3) * b_c * d + d * (a + 15 * d)) * x**5) / 5 + 144 * d**2 * (np.sqrt(3) * b_c + 6 * d) * x**6
+        return ((a - np.sqrt(3) * b_c + 3 * d)**3 * x
+                + 3 * (np.sqrt(3) * b_c - 6 * d) * (a - np.sqrt(3) * b_c + 3 * d)**2 * x**2
+                + 12 * (-(np.sqrt(3) * b_c**3) + a**2 * d + 18 * b_c**2 * d - 30 * np.sqrt(3) * b_c * d**2 + 45 * d**3 + a * (b_c**2 - 6 * np.sqrt(3) * b_c * d + 18 * d**2)) * x**3
+                - 6 * (np.sqrt(3) * b_c - 6 * d) * (-b_c**2 + 10 * np.sqrt(3) * b_c * d - 6 * d * (a + 5 * d)) * x**4
+                + (432 * d * (b_c**2 - 5 * np.sqrt(3) * b_c * d + d * (a + 15 * d)) * x**5) / 5
+                + 144 * (np.sqrt(3) * b_c - 6 * d) * d**2 * x**6
                 + (1728 * d**3 * x**7) / 7 - offsets)
 
     def df(x):
-        return (a + b_c * np.sqrt(3) * (1 + 2 * x)
-                + 3 * d * (1 + 2 * x)**2)**3
+        return (a + b_c * np.sqrt(3) * (2 * x - 1)
+                + 3 * d * (2 * x - 1)**2)**3
 
     return f, df
 
