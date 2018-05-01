@@ -46,7 +46,7 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
                                            parallel_iterations=10,
                                            name="initialFindC2")
 
-    def _update_left(self, counter, acc_lr_reg, C2s, updated_nodes, previous_node):
+    def _update_left(self, counter, acc_lr_reg, C2s, updated_nodes, previous_node, costs):
 
         with tf.name_scope("update_left"):
             # Read in the nodes
@@ -67,7 +67,8 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             C = self._calculate_C(C2, C1, input)
 
             # update the bond
-            updated_bond = self._repeatedly_update_bond(bond, C)
+            updated_bond, cost = self._repeatedly_update_bond(bond, C)
+            costs = costs.write(counter - 1, cost)
 
 
             # Decompose the bond
@@ -89,9 +90,9 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             updated_counter = counter - 1
             acc_lr_reg = acc_lr_reg * self.lr_reg
 
-        return [updated_counter, acc_lr_reg, C2s, updated_nodes, new_node]
+        return [updated_counter, acc_lr_reg, C2s, updated_nodes, new_node, costs]
 
-    def _update_right(self, counter, acc_lr_reg, C1s, updated_nodes, previous_node):
+    def _update_right(self, counter, acc_lr_reg, C1s, updated_nodes, previous_node, costs):
         with tf.name_scope("update_right"):
             # Read in the nodes
             new_node = self.MPS.nodes.read(counter + 1)
@@ -112,7 +113,8 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             C = self._calculate_C(C1, C2, input)
 
             # Update the bond
-            updated_bond = self._repeatedly_update_bond(bond, C)
+            updated_bond, cost = self._repeatedly_update_bond(bond, C)
+            costs = costs.write(counter, cost)
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
@@ -132,7 +134,7 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
             updated_counter = counter + 1
             acc_lr_reg = acc_lr_reg * self.lr_reg
 
-        return [updated_counter, acc_lr_reg, C1s, updated_nodes, new_node]
+        return [updated_counter, acc_lr_reg, C1s, updated_nodes, new_node, costs]
 
     def _calculate_C(self, C1, C2, input):
         # C = tf.einsum('ti,tk,tm,tn->tmnik', C1, C2, input1, input2)
@@ -192,7 +194,7 @@ class SingleSiteMPSOptimizer(BaseOptimizer):
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
                                false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
 
-        return updated_bond
+        return updated_bond, cost
 
     def _bond_decomposition(self, bond, max_size, min_size=3):
         with tf.name_scope("bond_decomposition"):

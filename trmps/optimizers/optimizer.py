@@ -86,7 +86,7 @@ class MPSOptimizer(BaseOptimizer):
                                            parallel_iterations=10,
                                            name="initialFindC2")
 
-    def _update_left(self, counter, acc_lr_reg, C2s, updated_nodes, previous_node):
+    def _update_left(self, counter, acc_lr_reg, C2s, updated_nodes, previous_node, costs):
         """
 
         :param self:
@@ -117,7 +117,8 @@ class MPSOptimizer(BaseOptimizer):
             C = self._calculate_C(C2, C1, input2, input1)
 
             # update the bond
-            updated_bond = self._repeatedly_update_bond(bond, C)
+            updated_bond, cost = self._repeatedly_update_bond(bond, C)
+            costs = costs.write(counter - 1, cost)
 
 
             # Decompose the bond
@@ -139,9 +140,9 @@ class MPSOptimizer(BaseOptimizer):
 
 
 
-        return [updated_counter, acc_lr_reg, C2s, updated_nodes, aj1]
+        return [updated_counter, acc_lr_reg, C2s, updated_nodes, aj1, costs]
 
-    def _update_right(self, counter, acc_lr_reg, C1s, updated_nodes, previous_node):
+    def _update_right(self, counter, acc_lr_reg, C1s, updated_nodes, previous_node, costs):
         """
 
         :param self:
@@ -173,7 +174,8 @@ class MPSOptimizer(BaseOptimizer):
             C = self._calculate_C(C1, C2, input1, input2)
 
             # Update the bond
-            updated_bond = self._repeatedly_update_bond(bond, C)
+            updated_bond, cost = self._repeatedly_update_bond(bond, C)
+            costs = costs.write(counter, cost)
 
             # Decompose the bond
             aj, aj1 = self._bond_decomposition(updated_bond, self.max_size)
@@ -192,7 +194,7 @@ class MPSOptimizer(BaseOptimizer):
             updated_counter = counter + 1
             acc_lr_reg = acc_lr_reg * self.lr_reg
 
-        return [updated_counter, acc_lr_reg, C1s, updated_nodes, aj1]
+        return [updated_counter, acc_lr_reg, C1s, updated_nodes, aj1, costs]
 
     def _calculate_C(self, C1, C2, input1, input2):
         """
@@ -261,7 +263,7 @@ class MPSOptimizer(BaseOptimizer):
         updated_bond = tf.cond(cond_change_bond, true_fn=(lambda: updated_bond),
                                false_fn=(lambda: tf.Print(bond, [cost, cost1], message='Gradient may be too big/too small')))
 
-        return updated_bond
+        return updated_bond, cost
 
     def _bond_decomposition(self, bond, max_size, min_size=3):
         """

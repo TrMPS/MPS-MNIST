@@ -120,6 +120,15 @@ def show(snaked_image):
     imgplot = plt.imshow(into_image(snaked_image), interpolation='none', cmap='binary')
 
 
+def plot_func(optimizer, costs1, costs2, i):
+    start = optimizer.MPS._special_node_loc
+    to_plot = costs1[start:]
+    to_plot = np.append(to_plot, costs2[::-1])
+    to_plot = np.append(to_plot, costs1[:start])
+    print(start, optimizer.MPS.input_size)
+    if i == 2:
+        plt.plot(to_plot)
+    plt.show()
 
 
 

@@ -46,6 +46,8 @@ class BaseOptimizer(object):
         self._setup_optimization()
         self.verbosity = self.parameters.verbosity
         self.updates_per_step = self.parameters.updates_per_step
+        self.costs1 = tf.TensorArray(tf.float32, size=self.MPS.input_size-1, infer_shape=True, clear_after_read=False)
+        self.costs2 = tf.TensorArray(tf.float32, size=self.MPS.input_size-1, infer_shape=True, clear_after_read=False)
         _ = self.train_step()
 
         print("_____   Thomas the Tensor Train    . . . . . o o o o o",
@@ -55,7 +57,7 @@ class BaseOptimizer(object):
               "  oo    oo 'oo      oo ' oo    oo 'oo 0000---oo\_",
               " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", sep="\n")
 
-    def train(self, data_source, batch_size, n_step, optional_parameters=MPSTrainingParameters()):
+    def train(self, data_source, batch_size, n_step, optional_parameters=MPSTrainingParameters(), plot_func=None):
         """
         Trains the network.
         If it is required to chain the training with other tensorflow steps, do not use this function.
@@ -116,8 +118,9 @@ class BaseOptimizer(object):
                 self.feed_dict[self.rate_of_change] = rate_of_change
                 self.feed_dict[feature] = test_feature
                 self.feed_dict[label] = test_label
-                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1]
-                train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score = sess.run(to_eval,
+                to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1,
+                           self.costs1_stacked, self.costs2_stacked]
+                train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score, costs1, costs2 = sess.run(to_eval,
                                                                                                     feed_dict=self.feed_dict,
                                                                                                     options=run_options,
                                                                                                     run_metadata=run_metadata)
@@ -136,6 +139,8 @@ class BaseOptimizer(object):
                 print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
                 print('f1 score: ', test_f1score)
                 print('confusion matrix: \n' + str(test_conf))
+                if plot_func is not None:
+                    plot_func(self, costs1, costs2, i)
                 # print("prediction:" + str(prediction[0]))
             if optional_parameters._logging_enabled:
                 writer.close()
@@ -239,6 +244,8 @@ class BaseOptimizer(object):
             f = self.MPS.predict(self._feature)
             accuracy = self.MPS.accuracy(f, self._label)
 
+        self.costs1_stacked = self.costs1.stack()
+        self.costs2_stacked = self.costs2.stack()
         return accuracy
 
     def _sweep_left(self):
@@ -255,12 +262,13 @@ class BaseOptimizer(object):
         self.C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=False, clear_after_read=False)
         self.C2s = self.C2s.write(self.MPS.input_size - 1, C2)
         cond = lambda counter, *args: tf.greater(counter, 0)
-        wrapped = [self.MPS.input_size-1, self.acc_lr_reg, self.C2s, self.updated_nodes, n1]
+        wrapped = [self.MPS.input_size-1, self.acc_lr_reg, self.C2s, self.updated_nodes, n1, self.costs2]
         shape_invariants = [tf.TensorShape([]), tf.TensorShape([]),
                             tf.TensorShape(None), tf.TensorShape(None),
-                            tf.TensorShape([None, None, None, None])]
+                            tf.TensorShape([None, None, None, None]),
+                            tf.TensorShape(None)]
 
-        _, self.acc_lr_reg, self.C2s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_left,
+        _, self.acc_lr_reg, self.C2s, self.updated_nodes, n1, self.costs2 = tf.while_loop(cond=cond, body=self._update_left,
                                                             loop_vars=wrapped,
                                                             shape_invariants=shape_invariants,
                                                             parallel_iterations=10,
@@ -280,11 +288,12 @@ class BaseOptimizer(object):
         n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
 
         cond = lambda counter, *args: tf.less(counter, to_index)
-        wrapped = [from_index, self.acc_lr_reg, self.C1s, self.updated_nodes, n1]
+        wrapped = [from_index, self.acc_lr_reg, self.C1s, self.updated_nodes, n1, self.costs1]
         shape_invariants = [tf.TensorShape([]), tf.TensorShape([]),
                             tf.TensorShape(None), tf.TensorShape(None),
-                            tf.TensorShape([None, None, None, None])]
-        _, self.acc_lr_reg, self.C1s, self.updated_nodes, n1 = tf.while_loop(cond=cond, body=self._update_right,
+                            tf.TensorShape([None, None, None, None]),
+                            tf.TensorShape(None)]
+        _, self.acc_lr_reg, self.C1s, self.updated_nodes, n1, self.costs1 = tf.while_loop(cond=cond, body=self._update_right,
                                                             loop_vars=wrapped,
                                                             shape_invariants=shape_invariants,
                                                             parallel_iterations=10, name="rightSweep")
@@ -317,14 +326,14 @@ class BaseOptimizer(object):
         return lr, updated_bond
 
     def _repeatedly_update_bond(self, bond, C):
-        def _update_bond_once(n, bond, C):
-            updated_bond = self._update_bond(bond, C)
-            return n+1, updated_bond, C
+        def _update_bond_once(n, bond, C, _):
+            updated_bond, cost = self._update_bond(bond, C)
+            return n+1, updated_bond, C, cost
         with tf.name_scope("update_bond_loop"):
             cond = lambda n, *args: tf.less(n, self.updates_per_step)
-            loop_vars = [0, bond, C]
-            _, updated_bond, _ = tf.while_loop(cond=cond, body=_update_bond_once, loop_vars=loop_vars, name="bond_update")
-        return updated_bond
+            loop_vars = [0, bond, C, 1.0]
+            _, updated_bond, _, cost = tf.while_loop(cond=cond, body=_update_bond_once, loop_vars=loop_vars, name="bond_update")
+        return updated_bond, cost
 
     def _make_new_nodes(self, nodes):
         """

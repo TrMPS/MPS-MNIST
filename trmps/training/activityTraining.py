@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import preprocessing.activitypreprocessing as ap
 from trmps import *
+from utils import plot_func
 
 # Model parameters
 d_feature = 4
@@ -55,4 +56,4 @@ training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change,
 feature, label = data_source.next_training_data_batch(1000)
 optimizer = SingleSiteMPSOptimizer(network, max_size, optimizer_parameters)
 optimizer.train(data_source, batch_size, n_step,
-                training_parameters)
+                training_parameters, plot_func=plot_func)
