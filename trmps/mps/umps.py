@@ -1,19 +1,54 @@
 import tensorflow as tf
 import numpy as np
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+import utils
 
 class UMPS(object):
-    def __init__(self, expected_length, d_feature, d_output, centre_loc=10, initial_bond_dim=2):
+    def __init__(self, expected_length, d_feature, centre_loc=10, initial_bond_dim=2):
         self.d_feature = d_feature
         self.centre_loc = centre_loc
-        self.d_output = d_output
         self._rand_initalise(expected_length, initial_bond_dim)
 
     def _rand_initalise(self, expected_length, initial_bond_dim=2):
         if (initial_bond_dim / 2.0) - np.floor(initial_bond_dim / 2.0) != 0.0:
             raise ValueError('Initial bond dim should be an even number')
         _w_c = np.identity(initial_bond_dim)
-        _w_c = np.tile(_w_c, (self.d_output, self.d_feature, 1, 1))
-        self.weight_centre = _w_c
+        _w_c = np.tile(_w_c, (self.d_feature, 1, 1))
+        self.weight_centre = tf.placeholder_with_default(_w_c, [self.d_feature, None, None])
+        print(_w_c.shape)
+        _c = np.identity(initial_bond_dim)
+        print(_c.shape)
+        self._c = tf.placeholder_with_default(_c, [None, None])
+
+        _left = np.einsum('mij,kj->mik', _w_c, _c)
+        _left_dims = _left.shape
+        print(_left_dims)
+        _left_flattened = np.reshape(_left, [_left_dims[0] * _left_dims[1], _left_dims[2]])
+        print(_left_flattened.shape)
+        u, s, v = np.linalg.svd(_left_flattened)
+        # In the case of NumPy, the value of V returned is actually V^dagger, so don't need to worry about transposing
+        filtered_u = u[:, :v.shape[1]]
+        filtered_v = v
+        uv = np.matmul(filtered_u, filtered_v)
+        print(uv.shape)
+        _w_l = np.reshape(uv, [_left_dims[0], _left_dims[1], _left_dims[2]])
+        self.weight_left = tf.placeholder_with_default(_w_l, [self.d_feature, None, None])
+        print(_c.shape)
+
+        _right = np.einsum('ik,mij->mkj', _c, _w_c)
+        _right_dims = _right.shape
+        _right_flattened = np.reshape(_right, [_right_dims[0] * _right_dims[1], _right_dims[2]])
+        u, s, v = np.linalg.svd(_right_flattened)
+        filtered_u = u[:, :v.shape[1]]
+        filtered_v = v
+        uv = np.matmul(filtered_u, filtered_v)
+        _w_r = np.reshape(uv, [_right_dims[0], _right_dims[1], _right_dims[2]])
+        self._weight_right = tf.placeholder_with_default(_w_r, [self.d_feature, None, None])
+        print(_w_r)
+        print(_w_l)
 
 
     def cost(self, f, labels):
@@ -27,7 +62,7 @@ class UMPS(object):
             The cost of the predictions, as judged by softmax cross entropy with logits
         """
         with tf.name_scope("cost"):
-            cost = 0.5 * tf.reduce_mean(tf.square(f-labels))
+            cost = 0.5 * tf.reduce_mean(tf.square(f - labels))
         return cost
 
     def accuracy(self, f, labels):
@@ -83,13 +118,11 @@ class UMPS(object):
                                       []), tf.TensorShape([None, None, None])],
                                   parallel_iterations=5)
         contracted_sp_node = tf.einsum(
-            'lnij,tn->tlij', self.weight_centre, feature[self.centre_loc])
-        C1_sp = tf.einsum('tij,tljk->tlik', C1, contracted_sp_node)
-        all_contracted = tf.einsum('tlij,tjk->tlik', C1_sp, C2)
-        predictions = tf.einsum('tlij,tlij->tl', all_contracted, all_contracted)
+            'nij,tn->tij', self.weight_centre, feature[self.centre_loc])
+        C1_sp = tf.einsum('tij,tjk->tik', C1, contracted_sp_node)
+        all_contracted = tf.einsum('tij,tjk->tik', C1_sp, C2)
+        predictions = tf.einsum('tij,tij->t', all_contracted, all_contracted)
         return predictions
-
-
 
     def _chain_multiply_l(self, counter, C2):
         with tf.name_scope('chain_multiply_left'):
@@ -113,11 +146,11 @@ class UMPS(object):
     def create_feed_dict(self, weight_left, weight_right, weight_centre):
         # When feeding in, make sure all of the above values are either None or not None.
         feed_dict = {}
-        if w_zero is not None:
+        if weight_left is not None:
             feed_dict[self.weight_left] = weight_left
             feed_dict[self.weight_centre] = weight_centre
             feed_dict[self.weight_right] = weight_right
         return feed_dict
 
 if __name__ == '__main__':
-    test = UMPS(2, 3, 5)
+    test = UMPS(2, 5)
