@@ -126,8 +126,9 @@ def plot_func(optimizer, costs1, costs2, i):
     to_plot = np.append(to_plot, costs2[::-1])
     to_plot = np.append(to_plot, costs1[:start])
     print(start, optimizer.MPS.input_size)
-    if i == 2:
-        plt.plot(to_plot)
+    plt.plot(to_plot)
+    plt.xlabel('Iterations')
+    plt.ylabel('Loss')
     plt.show()
 
 
