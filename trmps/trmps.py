@@ -6,3 +6,4 @@ from optimizers.singlesiteOptimizer import *
 from optimizers.parameterObjects import *
 from optimizers.sgd_optimizer import *
 from optimizers.umpsoptimizer import *
+from optimizers.optimizer import *

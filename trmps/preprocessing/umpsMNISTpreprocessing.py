@@ -12,7 +12,7 @@ from utils import spinner
 
 from tensorflow.examples.tutorials.mnist import input_data
 
-def _preprocess_images(data, size, shrink = True):
+def _preprocess_images(data, size, selected_digit, shrink = True):
     """
     This function preprocesses images into format from the paper
     Supervised learning with quantum-inspired tensor networks
@@ -59,9 +59,9 @@ def _preprocess_images(data, size, shrink = True):
 
     # Loop through all the elements in the dataset and resize
     with sess.as_default():
-        sess.run(tf.global_variables_initializer())
-        writer = tf.summary.FileWriter("output", sess.graph)
-        writer.close()
+        # sess.run(tf.global_variables_initializer())
+        # writer = tf.summary.FileWriter("output", sess.graph)
+        # writer.close()
         counter = 0
 
         for i in range(20):
@@ -72,8 +72,9 @@ def _preprocess_images(data, size, shrink = True):
                 #pooled = sess.run(pool,
                 #                  feed_dict={reshaped_image: sess.run(reshaped_image,
                 #                                                      feed_dict={image: element})})
-                data.append(np.array(sess.run(phi, feed_dict={image: element})))
-                labels.append(np.array(batch[1][index]))
+                if batch[1][index][selected_digit] == 1 or batch[1][index][selected_digit+1] == 1:
+                    data.append(np.array(sess.run(phi, feed_dict={image: element})))
+                    labels.append(2 * (np.array(batch[1][index][selected_digit]) - 0.5))
                 _spinner.print_spinner(percentage)
     _spinner.print_spinner(100.0)
     return (np.array(data), np.array(labels))
@@ -88,7 +89,7 @@ class UMPSMNISTDatasource(UMPSDatasource):
     This class requires the use of tensorflow to load data.
     """
 
-    def __init__(self, shrink=True, permuted=False, shuffled=False):
+    def __init__(self, label_index, shrink=True, permuted=False, shuffled=False):
         """
         Initialises the dataset, and can also permute/shuffle the dataset.
         :param shrink: boolean
@@ -101,8 +102,9 @@ class UMPSMNISTDatasource(UMPSDatasource):
         """
         self.expected_shape = (784, 2)
         if shrink:
-            self.expected_shape = (196,2)
+            self.expected_shape = (196, 2)
         self.shrink = shrink
+        self.label_index = label_index
         expected_d_input = self.expected_shape[1]
         super().__init__(expected_d_input, shuffled)
         if permuted:
@@ -125,7 +127,7 @@ class UMPSMNISTDatasource(UMPSDatasource):
         Loads test data of the appropriate size.
         :return: nothing
         """
-        self._test_data = {self.expected_shape[0]: _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, shrink=self.shrink)}
+        self._test_data = {self.expected_shape[0]: _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).test, size=10000, selected_digit=self.label_index, shrink=self.shrink)}
         super()._load_test_data()
 
     def _load_training_data(self):
@@ -134,7 +136,7 @@ class UMPSMNISTDatasource(UMPSDatasource):
         :return: nothing
         """
         self._training_data = {self.expected_shape[0]: _preprocess_images(input_data.read_data_sets('MNIST_data', one_hot=True).train,
-                                                     size=60000, shrink=self.shrink)}
+                                                     size=60000, selected_digit=self.label_index, shrink=self.shrink)}
         super()._load_training_data()
 
 

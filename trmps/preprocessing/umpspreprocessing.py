@@ -234,6 +234,7 @@ class UMPSDatasource(object):
             The number of training samples
         """
         if self._num_training_samples is None:
+            self._num_training_samples = {}
             for key, value in self._training_data.items():
                 self._num_training_samples[key] = len(value[0])
         return self._num_training_samples
@@ -247,6 +248,7 @@ class UMPSDatasource(object):
             The number of test samples
         """
         if self._num_test_samples is None:
+            self._num_training_samples = {}
             for key, value in self._test_data.items():
                 self._num_test_samples[key] = len(value[0])
         return self._num_test_samples
