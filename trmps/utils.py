@@ -4,6 +4,7 @@ import tarfile
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
 
 def check_nan(tensor, name, replace_nan=True):
     s = tf.reduce_sum(tensor)
@@ -116,8 +117,15 @@ def into_image(snaked_image):
     image = np.reshape(snaked_image, [dim, dim])
     return image
 
-def show(snaked_image):
-    imgplot = plt.imshow(into_image(snaked_image), interpolation='none', cmap='binary')
+def show(snaked_image, normalise=False, colorbar=True):
+    norm = Normalize(vmin=0.0, vmax=1.0)
+    if normalise:
+        imgplot = plt.imshow(into_image(snaked_image), interpolation='none', cmap='binary',
+                            norm=norm)
+    else:
+        imgplot = plt.imshow(into_image(snaked_image), interpolation='none', cmap='binary')
+    if colorbar:
+        plt.colorbar()
 
 
 def plot_func(optimizer, costs1, costs2, i):

@@ -159,7 +159,7 @@ class MPS(object):
         with open(path, "w+b") as f:
             f.write(results)
 
-    def __init__(self, d_feature, d_output, input_size, special_node_loc=None):
+    def __init__(self, d_feature, d_output, input_size, special_node_loc=None, round=False,):
         """
         Initialises the MPS. Currently, the prepare method must be called immediately
         after this before anything else can be done.
@@ -180,6 +180,7 @@ class MPS(object):
         self.d_feature = d_feature
         self.d_output = d_output
         self._special_node_loc = special_node_loc
+        self.round = round
         # if special_node_loc is None:
         #     self._special_node_loc = int(np.floor(self.input_size / 2))
         # else:
@@ -554,7 +555,8 @@ class MPS(object):
                 'lnij,tn->tlij', sp_node, feature[self._special_node_loc])
             C1 = tf.einsum('ti,tlij->tlj', C1, contracted_sp_node)
             f = tf.einsum('tli,ti->tl', C1, C2)
-
+        if self.round:
+            f = tf.round(f)
         return f
 
     def create_feed_dict(self, weights):

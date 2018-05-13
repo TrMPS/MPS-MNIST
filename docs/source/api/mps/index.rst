@@ -68,6 +68,7 @@ Subclasses
 
    sqMPS
    SGDMPS
+   shortMPS
 
 Properties
 ---------

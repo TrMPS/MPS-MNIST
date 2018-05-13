@@ -93,13 +93,13 @@ class BaseOptimizer(object):
         self.test = optional_parameters.initial_weights
         initial_lr = optional_parameters.rate_of_change
 
-        train_cost, train_accuracy, train_confusion, _ = self._test_step(self._feature, self._label)
+        train_cost, train_accuracy, train_confusion, _, train_f = self._test_step(self._feature, self._label)
 
         test_feature, test_label = data_source.test_data
 
         feature = tf.placeholder(tf.float32, shape=[self.MPS.input_size, None, self.MPS.d_feature])
         label = tf.placeholder(tf.float32, shape=[None, self.MPS.d_output])
-        test_cost, test_accuracy, test_confusion, test_f1 = self._test_step(feature, label)
+        test_cost, test_accuracy, test_confusion, test_f1, test_f = self._test_step(feature, label)
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -119,8 +119,8 @@ class BaseOptimizer(object):
                 self.feed_dict[feature] = test_feature
                 self.feed_dict[label] = test_label
                 to_eval = [train_cost, test_result, train_accuracy, test_cost, test_accuracy, test_confusion, test_f1,
-                           self.costs1_stacked, self.costs2_stacked]
-                train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score, costs1, costs2 = sess.run(to_eval,
+                           self.costs1_stacked, self.costs2_stacked, test_f]
+                train_c, self.test, train_acc, test_c, test_acc, test_conf, test_f1score, costs1, costs2, test_prediction = sess.run(to_eval,
                                                                                                     feed_dict=self.feed_dict,
                                                                                                     options=run_options,
                                                                                                     run_metadata=run_metadata)
@@ -138,6 +138,8 @@ class BaseOptimizer(object):
                 print('step {}, training cost {}, accuracy {}. Took {} s'.format(i, train_c, train_acc, end - start))
                 print('step {}, testing cost {}, accuracy {}'.format(i, test_c, test_acc))
                 print('f1 score: ', test_f1score)
+                print('sample prediction: ', test_prediction[0])
+                print('sample truth: ', test_label[0])
                 print('confusion matrix: \n' + str(test_conf))
                 if plot_func is not None:
                     plot_func(self, costs1, costs2, i)
@@ -158,7 +160,7 @@ class BaseOptimizer(object):
         accuracy = self.MPS.accuracy(f, label)
         confusion = self.MPS.confusion_matrix(f, label)
         f1 = self.MPS.f1score(f, label, confusion)
-        return cost, accuracy, confusion, f1
+        return cost, accuracy, confusion, f1, f
 
     def _find_C1(self, counter, C1, C1s):
         """
@@ -248,21 +250,24 @@ class BaseOptimizer(object):
         self.costs2_stacked = self.costs2.stack()
         return accuracy
 
-    def _sweep_left(self):
+    def _sweep_left(self, from_index=None, to_index=0):
         """
 
         :param self:
         :return:
         """
+        if from_index == None:
+            from_index = self.MPS.input_size - 1
+
         # read second from end node
         n1 = self.MPS.nodes.read(self.MPS._special_node_loc)
         n1.set_shape([self.MPS.d_output, self.MPS.d_feature, None, None])
 
-        C2 = self.C2s.read(self.MPS.input_size - 1)
+        C2 = self.C2s.read(from_index)
         self.C2s = tf.TensorArray(tf.float32, size=self.MPS.input_size, infer_shape=False, clear_after_read=False)
-        self.C2s = self.C2s.write(self.MPS.input_size - 1, C2)
-        cond = lambda counter, *args: tf.greater(counter, 0)
-        wrapped = [self.MPS.input_size-1, self.acc_lr_reg, self.C2s, self.updated_nodes, n1, self.costs2]
+        self.C2s = self.C2s.write(from_index, C2)
+        cond = lambda counter, *args: tf.greater(counter, to_index)
+        wrapped = [from_index, self.acc_lr_reg, self.C2s, self.updated_nodes, n1, self.costs2]
         shape_invariants = [tf.TensorShape([]), tf.TensorShape([]),
                             tf.TensorShape(None), tf.TensorShape(None),
                             tf.TensorShape([None, None, None, None]),
@@ -273,7 +278,7 @@ class BaseOptimizer(object):
                                                             shape_invariants=shape_invariants,
                                                             parallel_iterations=10,
                                                             name="leftSweep")
-        self.updated_nodes = self.updated_nodes.write(0, n1)
+        self.updated_nodes = self.updated_nodes.write(to_index, n1)
         return self.updated_nodes
 
     def _sweep_right(self, from_index, to_index):
@@ -309,7 +314,7 @@ class BaseOptimizer(object):
             target = cost - self.armijo_coeff * learning_rate * _gradient_dot_change
             if self.verbosity != 0:
                 target = tf.Print(target, [updated_cost, target, cost, f], first_n=self.verbosity,
-                                  message="updated_cost, target, current cost, and f")
+                                  message="updated_cost, target, current cost, and f", summarize=10)
             return tf.greater(updated_cost, target)
 
         def _armijo_step(counter, armijo_cond, learning_rate, updated_bond):
