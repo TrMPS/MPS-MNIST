@@ -7,10 +7,7 @@ from trmps import *
 
 # Data parameters
 sequence_length = 30
-num_bracket_types = 5
-num_noise_types = num_bracket_types
-max_unmatched = 10
-num_samples = 1500
+num_samples = 10000
 normalised = False
 encoding = rs.inputEncoding.linear
 
@@ -25,7 +22,7 @@ special_node_loc = None
 
 # Optimizer parameters
 batch_size = num_samples
-max_size = 5
+max_size = 30
 min_singular_value = 0.001
 reg = 0.01
 armijo_coeff = 10**(-1)
@@ -34,6 +31,7 @@ verbose_save = True
 
 rate_of_change = 10**(-2)
 lr_reg = 0.0
+path = "RandomSequenceMPSConfig"
 
 logging_enabled = False
 verbosity = -0
@@ -47,7 +45,8 @@ data_source = rs.RandomSequenceDatasource(sequence_length, encoding, num_samples
 weights = None
 
 optimizer_parameters = MPSOptimizerParameters(cutoff=cutoff, reg=reg, lr_reg=lr_reg,
-                                              verbosity=verbosity, armijo_coeff=armijo_coeff, updates_per_step=updates_per_step)
+                                              verbosity=verbosity, armijo_coeff=armijo_coeff, updates_per_step=updates_per_step,
+                                              path=path)
 training_parameters = MPSTrainingParameters(rate_of_change=rate_of_change, initial_weights=weights,
                                             _logging_enabled=logging_enabled, verbose_save=True)
 # Create network from scratch
