@@ -117,14 +117,15 @@ def into_image(snaked_image):
     image = np.reshape(snaked_image, [dim, dim])
     return image
 
-def show(snaked_image, normalise=False):
+def show(snaked_image, normalise=False, colorbar=True):
     norm = Normalize(vmin=0.0, vmax=1.0)
     if normalise:
         imgplot = plt.imshow(into_image(snaked_image), interpolation='none', cmap='binary',
                             norm=norm)
     else:
         imgplot = plt.imshow(into_image(snaked_image), interpolation='none', cmap='binary')
-    plt.colorbar()
+    if colorbar:
+        plt.colorbar()
 
 
 
