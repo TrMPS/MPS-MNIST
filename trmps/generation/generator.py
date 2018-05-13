@@ -160,8 +160,8 @@ class MPSGenerator(object):
         return self._new_sample_from_matrices(matrices)
 
     def _new_sample_from_matrices(self, matrices):
-        # samples = quad_sample(matrices, n=10)
-        samples = higher_order_sample(matrices, n=10)
+        samples = quad_sample(matrices, n=10)
+        # samples = higher_order_sample(matrices, n=10)
         return samples
 
     def _sample_from_vectors(self, vectors):
@@ -261,14 +261,14 @@ if __name__ == '__main__':
     tol = 1e-3
 
     # weights = None
-    data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
+    # data_source = MNISTpreprocessing.MNISTDatasource(shrink, permuted=permuted)
 
     # Initialise the model
     network = shortMPS.from_file()
 
     generator = MPSGenerator(network)
 
-    digit = 5
+    digit = 3
     n_samples = 500
     samples, pdfs = generator.generate(n_samples, digit, tol)
 
@@ -305,8 +305,12 @@ if __name__ == '__main__':
     utils.show(samples[:, 0])
     plt.figure()
     plt.hist(avg_samples)
+    plt.xlim(0, 1)
+    plt.xlabel('Pixel Value')
+    plt.ylabel('Number of Occurences')
     plt.figure()
     plt.hist(samples[:, np.argmax(pdfs)])
+    plt.xlim(0, 1)
 
     plt.show()
 
