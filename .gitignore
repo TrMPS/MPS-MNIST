@@ -151,3 +151,9 @@ trmps/training/DataSet/Readme.txt
 trmps/training/MPSconfig
 
 *.sublime-workspace
+
+trmps/training/MNISTMPSConfig
+
+*MPSConfig*
+
+*MPSconfig*
